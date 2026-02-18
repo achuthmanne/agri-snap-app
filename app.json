@@ -19,7 +19,9 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.achuth.agrisnap",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -43,6 +45,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3a4c40e8-8a05-4e80-8f28-97d2c7414ac3"
+      }
+    },
+    "owner": "achuthmanne"
   }
 }
