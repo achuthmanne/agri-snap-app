@@ -1,171 +1,556 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Tabs } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+// app/farmer/(tabs)/_layout.tsx
+
+import { getDrawer, setDrawer } from "@/assets/stores/drawerStore";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import firestore from "@react-native-firebase/firestore";
+import { LinearGradient } from "expo-linear-gradient";
+import { Tabs, useFocusEffect, useRouter, useSegments } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
+} from "react-native";
+import Svg, { Path } from "react-native-svg";
+
+import AppText from "../../../components/AppText";
+import CustomTabBar from "../../../components/CustomTabBar";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function FarmerLayout() {
-    const [language, setLanguage] = useState<'te' | 'en'>('en');
-const [tabLoading, setTabLoading] = useState(false);
+
+  const router = useRouter();
+  const segments = useSegments();
+
+  const [drawerOpen, setDrawerOpenState] = useState(false);
+  const { language, changeLanguage } = useLanguage();
+  const [isProfileComplete, setIsProfileComplete] = useState(true);
+ const [name, setName] = useState("...");
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const drawerAnim = useRef(new Animated.Value(-300)).current;
+  const toggleAnim = useRef(new Animated.Value(language === "te" ? 1 : 0)).current;
+const overlayOpacity = useRef(new Animated.Value(0)).current;
+  /* ---------------- LANGUAGE ---------------- */
+
 
 useEffect(() => {
-  const loadLang = async () => {
-    const lang = await AsyncStorage.getItem('APP_LANG');
-    if (lang === 'te' || lang === 'en') {
-      setLanguage(lang);
+ Animated.spring(toggleAnim, {
+  toValue: language === "te" ? 1 : 0,
+  useNativeDriver: true,
+  damping: 12,     // 🔥 smooth stop
+  stiffness: 120,  // 🔥 speed
+  mass: 0.8        // 🔥 natural feel
+}).start();
+}, [language]);
+  /* ---------------- DRAWER ---------------- */
+
+useEffect(() => {
+  Animated.parallel([
+    Animated.spring(drawerAnim, {
+      toValue: drawerOpen ? 0 : -300,
+      useNativeDriver: true,
+      damping: 20,
+      stiffness: 140
+    }),
+    Animated.timing(overlayOpacity, {
+      toValue: drawerOpen ? 1 : 0,
+      duration: 220,
+      useNativeDriver: true
+    })
+  ]).start();
+}, [drawerOpen]);
+  /* ---------------- USER ---------------- */
+
+ useEffect(() => {
+  const checkUserStatus = async () => {
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+
+    if (phone) {
+      const doc = await firestore().collection("users").doc(phone).get();
+      const data = doc.data();
+setName(data?.name || "");
+      const hasName = !!data?.name && data.name.trim().length >= 3;
+      setIsProfileComplete(hasName);
+
+      if (!hasName && segments[segments.length - 1] !== "profile") {
+        router.replace("/farmer/(tabs)/profile");
+      }
     }
   };
-  loadLang();
+
+  checkUserStatus();
+}, [segments]);
+
+useEffect(() => {
+  const check = () => {
+    const state = getDrawer();
+    setDrawerOpenState(state);
+  };
+
+  const interval = setInterval(check, 100); // 🔥 smooth enough
+
+  return () => clearInterval(interval);
 }, []);
-const T = {
-  dashboard: language === 'te' ? 'డాష్‌బోర్డ్' : 'Dashboard',
-  calculator: language === 'te' ? 'క్యాలిక్యులేటర్' : 'Calculator',
-  attendance: language === 'te' ? 'హాజరు చరిత్ర' : 'History',
-  payments: language === 'te' ? 'చెల్లింపుల చరిత్ర' : 'History',
-  loading: language === 'te' ? 'లోడ్ అవుతోంది...' : 'Loading...',
+
+  /* ---------------- FUNCTIONS ---------------- */
+const toggleLanguage = async () => {
+  const newLang = language === "te" ? "en" : "te";
+  await changeLanguage(newLang);
 };
 
+ const closeDrawer = () => {
+  setDrawer(false);
+  setDrawerOpenState(false); // 🔥 direct state update
+};
+  const confirmLogout = async () => {
+    setShowLogoutModal(false);
 
- return (
-  <View style={{ flex: 1 }}>
-    <Tabs
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: '#1b5e20',
-        tabBarInactiveTintColor: '#888',
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.label,
+    const lang = await AsyncStorage.getItem("APP_LANG");
+    await AsyncStorage.clear();
 
-        tabBarIcon: ({ color, focused }) => {
-          let iconName: any;
+    if (lang) {
+      await AsyncStorage.setItem("APP_LANG", lang);
+    }
 
-          if (route.name === 'index') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'attendance-history') {
-            iconName = focused ? 'calendar' : 'calendar-outline';
-          } else if (route.name === 'history') {
-            iconName = focused ? 'cash' : 'cash-outline';
-          } else if (route.name === 'calculator') {
-            iconName = focused ? 'calculator' : 'calculator-outline';
-          }
+    router.replace("/login");
+  };
 
-          return (
-            <View style={styles.iconContainer}>
-              {focused && <View style={styles.activeIndicator} />}
-              <Ionicons name={iconName} size={24} color={color} />
-            </View>
-          );
-        },
-      })}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{ title: T.dashboard }}
-        listeners={{
-          tabPress: () => {
-            setTabLoading(true);
-            setTimeout(() => setTabLoading(false), 800);
-          },
-        }}
-      />
+  /* ---------------- LOADER ---------------- */
 
-      <Tabs.Screen
-        name="calculator"
-        options={{ title: T.calculator }}
-        listeners={{
-          tabPress: () => {
-            setTabLoading(true);
-            setTimeout(() => setTabLoading(false), 800);
-          },
-        }}
-      />
+  return (
+    <>
+      <Tabs
+        screenOptions={{ headerShown:false }}
+        tabBar={(props:any)=>
+  isProfileComplete
+    ? <CustomTabBar {...props} language={language}/>
+    : null
+}
+      >
+        <Tabs.Screen name="index" />
+        <Tabs.Screen name="attendance-history" />
+        <Tabs.Screen name="history" />
+        <Tabs.Screen name="profile" />
+        <Tabs.Screen name="calculator" options={{ href:null }}/>
+      </Tabs>
 
-      <Tabs.Screen
-        name="attendance-history"
-        options={{ title: T.attendance }}
-        listeners={{
-          tabPress: () => {
-            setTabLoading(true);
-            setTimeout(() => setTabLoading(false), 800);
-          },
-        }}
-      />
-
-      <Tabs.Screen
-        name="history"
-        options={{ title: T.payments }}
-        listeners={{
-          tabPress: () => {
-            setTabLoading(true);
-            setTimeout(() => setTabLoading(false), 800);
-          },
-        }}
-      />
-
-      <Tabs.Screen
-  name="profile"
-  options={{ title: language === 'te' ? 'ప్రొఫైల్' : 'Profile' }}
-  listeners={{
-    tabPress: () => {
-      setTabLoading(true);
-      setTimeout(() => setTabLoading(false), 800);
-    },
+      {/* 🔥 DRAWER */}
+        <Animated.View
+  pointerEvents={drawerOpen ? "auto" : "none"}
+  style={{
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+   backgroundColor: "rgba(0,0,0,0.25)",
+    opacity: overlayOpacity,
+    zIndex: 999
+  }}
+>
+       <TouchableOpacity
+         activeOpacity={1}
+         onPress={closeDrawer}
+         style={{
+           position: "absolute",
+           width: "100%",
+           height: "100%",
+           backgroundColor: "rgba(0,0,0,0.25)",
+           opacity: overlayOpacity,
+           justifyContent: "flex-start",
+           zIndex: 999
+         }}
+       >
+     
+         <Animated.View
+           style={{
+             width: 300,
+             height:"100%",
+             backgroundColor: "#fff",
+             transform: [{ translateX: drawerAnim }],
+             elevation: 5,
+             shadowColor: "#000",
+             shadowOpacity: 0.2,
+             shadowRadius: 15
+           }}
+         >
+     
+           {/* 🔥 ARC CUT (SVG) */}
+          <Svg width={"100%"} height={80}
+             style={{ position: "absolute", bottom: -1 }}
+           >
+             <Path
+               d={`M0 0 H280 V40 Q140 100 0 40 Z`}
+               fill="#fff"
+             />
+           </Svg>
+     
+          <SafeAreaView style={{ flex: 1 }}>
+     
+       {/* 🔥 TOP FIXED SECTION */}
+       <View>
+     
+         {/* PROFILE */}
+       <LinearGradient
+       colors={["#16A34A", "#166534"]}
+       style={{
+         width: "100%",
+         paddingVertical: 50,
+         alignItems: "center",
+         marginBottom: 20, 
+         borderBottomWidth: 1, 
+         borderBottomColor: "#F1F5F9",
+         // కొంచెం షాడో ఇస్తే ప్రీమియం గా ఉంటుంది
+         elevation: 5,
+         shadowColor: "#000",
+         shadowOffset: { width: 0, height: 2 },
+         shadowOpacity: 0.05,
+         shadowRadius: 10,
+       }}
+     >
+       <View style={{ paddingHorizontal: 20, alignItems: "center" }}>
+     
+         <View
+           style={{
+             width: 70,
+             height: 70,
+             borderRadius: 35,
+             backgroundColor: "rgba(255,255,255,0.2)",
+             justifyContent: "center",
+             alignItems: "center"
+           }}
+         >
+           <AppText style={{ color: "#fff", fontSize: 28, fontWeight: "bold" }}>
+             {name?.charAt(0).toUpperCase()}
+           </AppText>
+         </View>
+     
+         <AppText style={{ fontSize: 18, marginTop: 10, color: "#fff", fontWeight: "600" }}>
+       {name || "Farmer"}
+     </AppText>
+     
+     <View
+       style={{
+         marginTop: 6,
+         paddingHorizontal: 10,
+         paddingVertical: 4,
+         borderRadius: 10,
+         backgroundColor: "rgba(255,255,255,0.2)"
+       }}
+     >
+       <AppText style={{ fontSize: 12, color: "#fff" }}>
+         {language === "te" ? "రైతు" : "Farmer"}
+       </AppText>
+     </View>
+     
+       </View>
+     </LinearGradient>
+       {/* 🔥 ADD THIS WRAPPER */}
+       <View style={{ paddingHorizontal: 20 }}>
+     
+         {/* LANGUAGE TOGGLE */}
+         <TouchableOpacity
+           activeOpacity={0.8}
+           onPress={toggleLanguage}
+           style={{
+             flexDirection: "row",
+             alignItems: "center",
+             justifyContent: "space-between",
+             paddingVertical: 14
+           }}
+         >
+           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+             <Ionicons
+               name={language === "te" ? "earth-outline" : "language-outline"}
+               size={20}
+               color="#16A34A"
+             />
+     
+             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+               <AppText style={{ fontWeight: "600", fontSize: 20 }}>
+                 {language === "te" ? "తెలుగు" : "English"}
+               </AppText>
+     
+               <AppText style={{ fontSize: 12, color: "#9CA3AF" }}>
+                 → {language === "te" ? "English" : "తెలుగు"}
+               </AppText>
+             </View>
+           </View>
+     
+         {/* TOGGLE */}
+<View
+  style={{
+    width: 50,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#E5E7EB",
+    justifyContent: "center",
+    padding: 3,
+    borderWidth: 1.5,
+    borderColor: "#D1D5DB",
+  }}
+>
+  <Animated.View
+  style={{
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#16A34A",
+    transform: [
+      {
+        translateX: toggleAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 22],
+        }),
+      },
+      {
+        scale: toggleAnim.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [1, 1.2, 1],
+        }),
+      }
+    ],
   }}
 />
-
-
-      {/* Hidden */}
+</View>
+         </TouchableOpacity>
+     </View>
+       </View>
      
-      <Tabs.Screen name="calculators/wage" options={{ href: null }} />
-<Tabs.Screen name="calculators/fertilizer" options={{ href: null }} />
-<Tabs.Screen name="calculators/profit" options={{ href: null }} />
-<Tabs.Screen name="calculators/emi" options={{ href: null }} />
-<Tabs.Screen name="calculators/SeedCalculator" options={{ href: null }} />
-<Tabs.Screen name="calculators/pesticide" options={{ href: null }} />
-<Tabs.Screen name="calculators/bhoomi" options={{ href: null }} />
-<Tabs.Screen name="calculators/machine" options={{ href: null }} />
-<Tabs.Screen name="calculators/diesel" options={{ href: null }} />
-    </Tabs>
+        {/* ✅ SCROLLVIEW (WITH FLEX + PADDING) */}
+       <ScrollView
+         style={{ flex: 1 }}
+         contentContainerStyle={{
+           paddingHorizontal: 20,
+           paddingTop: 10,
+           paddingBottom: 20,
+           gap: 10
+         }}
+         showsVerticalScrollIndicator={false}
+       >
+     
+         {/* My Profile */}
+         <TouchableOpacity style={styles.drawerItem}>
+           <Ionicons name="person-outline" size={20} color="#16A34A" />
+           <AppText style={styles.drawerText}>
+             {language === "te" ? "నా ప్రొఫైల్" : "My Profile"}
+           </AppText>
+         </TouchableOpacity>
+     
+     
+         {/* About */}
+         <TouchableOpacity style={styles.drawerItem}>
+           <Ionicons name="information-circle-outline" size={20} color="#16A34A" />
+           <AppText style={styles.drawerText}>
+             {language === "te" ? "మా గురించి" : "About Us"}
+           </AppText>
+         </TouchableOpacity>
+     
+     
+         {/* Help */}
+         <TouchableOpacity style={styles.drawerItem}>
+           <Ionicons name="help-circle-outline" size={20} color="#16A34A" />
+           <AppText style={styles.drawerText}>
+             {language === "te" ? "సహాయం" : "Help"}
+           </AppText>
+         </TouchableOpacity>
+     
+     
+         {/* Contact */}
+         <TouchableOpacity style={styles.drawerItem}>
+           <Ionicons name="call-outline" size={20} color="#16A34A" />
+           <AppText style={styles.drawerText}>
+             {language === "te" ? "సంప్రదించండి" : "Contact Us"}
+           </AppText>
+         </TouchableOpacity>
+     
+     <TouchableOpacity style={styles.drawerItem}>
+       <Ionicons name="shield-checkmark-outline" size={20} color="#16A34A" />
+       <AppText style={styles.drawerText}>
+         {language === "te" ? "గోప్యత విధానం" : "Privacy Policy"}
+       </AppText>
+     </TouchableOpacity>
+     
+         {/* Rate Us */}
+         <TouchableOpacity style={styles.drawerItem}>
+           <Ionicons name="star-outline" size={20} color="#16A34A" />
+           <AppText style={styles.drawerText}>
+             {language === "te" ? "మాకు రేటింగ్ ఇవ్వండి" : "Rate Us"}
+           </AppText>
+         </TouchableOpacity>
+     
+     <TouchableOpacity
+       onPress={() => setShowLogoutModal(true)}
+       activeOpacity={0.85}
+       style={{
+         marginTop: 20,
+         borderRadius: 16,
+         borderWidth: 1,
+         borderColor: "#FCA5A5",
+         backgroundColor: "#FEF2F2",
+         paddingVertical: 14,
+         flexDirection: "row",
+         alignItems: "center",
+         justifyContent: "center",
+         gap: 10
+       }}
+     >
+       <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+     
+       <AppText style={{ color: "#DC2626", fontWeight: "600" }}>
+         {language === "te" ? "లాగౌట్" : "Logout"}
+       </AppText>
+     </TouchableOpacity>
+       </ScrollView>
+     </SafeAreaView>
+     
+         </Animated.View>
+       </TouchableOpacity>
+     </Animated.View>
 
-  </View>
-);
+      {/* 🔥 LOGOUT MODAL */}
+      <Modal visible={showLogoutModal} transparent animationType="fade">
 
+        <View style={styles.modalOverlay}>
+
+          <View style={styles.modalContent}>
+
+            <View style={styles.iconBg}>
+              <Ionicons name="log-out" size={36} color="#e44830" />
+            </View>
+
+            <AppText style={styles.modalTitle} language={language}>
+              {language === "te" ? "లాగౌట్" : "Logout"}
+            </AppText>
+
+            <AppText style={styles.modalSub} language={language}>
+              {language === "te"
+                ? "మీరు నిజంగా నిష్క్రమించాలనుకుంటున్నారా?"
+                : "Are you sure you want to sign out?"}
+            </AppText>
+
+            <View style={styles.modalButtons}>
+
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                style={styles.cancelBtn}
+              >
+                <AppText style={styles.cancelText} language={language}>
+                  {language === "te" ? "వద్దు" : "No"}
+                </AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={confirmLogout}
+                style={styles.confirmBtn}
+              >
+                <AppText style={styles.confirmText} language={language}>
+                  {language === "te" ? "అవును" : "Yes"}
+                </AppText>
+              </TouchableOpacity>
+
+            </View>
+
+          </View>
+
+        </View>
+
+      </Modal>
+    </>
+  );
 }
 
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
-  tabBar: {
-    height: 85,
-    borderTopWidth: 0,
-    elevation: 12,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 5,
-   
-  },
-  activeIconBox: {
-    backgroundColor: '#e8f5e9',
-    padding: 6,
-    borderRadius: 12,
-  },
-  iconContainer: {
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 40,
-},
 
-activeIndicator: {
-  position: 'absolute',
-  top: -8,
-  width: 24,
-  height: 3,
-  borderRadius: 10,
-  backgroundColor: '#1b5e20',
-},
+  drawerItem:{
+    flexDirection:"row",
+    alignItems:"center",
+    paddingVertical:14,
+    borderBottomWidth:0.5,
+    borderColor:"#E5E7EB",
+    gap:12
+  },
 
+  drawerText:{
+    fontSize:15,
+    fontWeight:"600",
+    color:"#1F2937"
+  },
+
+  modalOverlay:{
+    flex:1,
+    backgroundColor:"rgba(0,0,0,0.7)",
+    justifyContent:"center",
+    alignItems:"center"
+  },
+
+  modalContent:{
+    width:"80%",
+    backgroundColor:"white",
+    borderRadius:25,
+    padding:25,
+    alignItems:"center"
+  },
+
+  modalTitle:{
+    fontSize:20,
+    fontWeight:"500",
+    color:"#e2431f",
+    marginVertical:10
+  },
+
+  modalSub:{
+    textAlign:"center",
+    color:"#64748B",
+    marginBottom:25
+  },
+
+  modalButtons:{
+    flexDirection:"row",
+    gap:10
+  },
+
+  cancelBtn:{
+    flex:1,
+    padding:12,
+    borderRadius:12,
+    backgroundColor:"#F1F5F9",
+    alignItems:"center"
+  },
+
+  confirmBtn:{
+    flex:1,
+    padding:12,
+    borderRadius:12,
+    backgroundColor:"#EF4444",
+    alignItems:"center"
+  },
+
+  cancelText:{
+    color:"#64748B",
+    fontWeight:"500"
+  },
+
+  confirmText:{
+    color:"white",
+    fontWeight:"500"
+  },
+
+  iconBg:{
+    width:60,
+    height:60,
+    borderRadius:30,
+    backgroundColor:"#f5e8e8",
+    justifyContent:"center",
+    alignItems:"center",
+    marginBottom:10
+  }
 
 });

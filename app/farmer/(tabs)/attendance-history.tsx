@@ -1,631 +1,454 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Print from 'expo-print';
-import { router } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { useEffect, useMemo, useRef, useState } from 'react';
+// app/farmer/attendance-history.tsx
 
+import AppHeader from "@/components/AppHeader";
+import AppText from "@/components/AppText";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import firestore from "@react-native-firebase/firestore";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { useIsFocused } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Pressable,
-  ScrollView,
+  FlatList,
+  SafeAreaView,
+  StatusBar,
   StyleSheet,
-  Text,
   TextInput,
-  View,
-} from 'react-native';
+  TouchableOpacity,
+  View
+} from "react-native";
+import Animated, {
+  useAnimatedProps,
+  useSharedValue,
+  withTiming
+} from "react-native-reanimated";
+import ShimmerPlaceholder from "react-native-shimmer-placeholder";
+import Svg, { Circle } from "react-native-svg";
 
-export default function AttendanceHistoryScreen() {
-  /* ---------------- STATES ---------------- */
-  const [loading, setLoading] = useState(true);
-  const [language, setLanguage] = useState<'te' | 'en'>('en');
-  const [userId, setUserId] = useState<string | null>(null);
+/* ---------------- CIRCLE ---------------- */
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [displaySessions, setDisplaySessions] = useState<any[]>([]);
-const [farmerName, setFarmerName] = useState('');
+const ProgressCircle = ({ percent }: { percent: number }) => {
+  const radius = 24;
+  const strokeWidth = 5;
+  const circumference = 2 * Math.PI * radius;
+  const size = 60;
+  const center = size / 2;
 
-  const [searchText, setSearchText] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<'ALL' | string>('ALL');
+  const animatedValue = useSharedValue(0);
 
-  /* ---------------- TEXT ---------------- */
-  const T = {
-    title: language === 'te' ? 'హాజరు చరిత్ర' : 'Attendance History',
-    mestri: language === 'te' ? 'మేస్త్రీ' : 'Mestri',
-    crop: language === 'te' ? 'పంట' : 'Crop',
-    present: language === 'te' ? 'హాజరు' : 'Present',
-    absent: language === 'te' ? 'గైర్హాజరు' : 'Absent',
-    amount: language === 'te' ? 'మొత్తం కూలి' : 'Total Wage',
-    full: language === 'te' ? 'పూర్తి హాజరు' : 'Full Present',
-    morning: language === 'te' ? 'ఉదయం' : 'Morning Only',
-evening: language === 'te' ? 'సాయంత్రం' : 'Evening Only',
-
-    total: language === 'te' ? 'మొత్తం హాజరు' : 'Total Present',
-    noData:
-      language === 'te'
-        ? 'హాజరు చరిత్ర లేదు'
-        : 'No attendance history',
-    search:
-      language === 'te' ? '🔍︎ రైతు పేరు వెతకండి' : '🔍︎ Search farmer',
-  };
-
-  /* ---------------- LOAD LANGUAGE ---------------- */
   useEffect(() => {
-    AsyncStorage.getItem('APP_LANG').then(lang => {
-      if (lang === 'te' || lang === 'en') setLanguage(lang);
+    animatedValue.value = withTiming(percent, {
+      duration: 1800
     });
-  }, []);
+  }, [percent]);
 
-  /* ---------------- LOAD ATTENDANCE ---------------- */
- const loadAttendance = async () => {
-  setLoading(true);
-
-  const userRaw = await AsyncStorage.getItem('CURRENT_USER');
-  if (!userRaw) {
-    setLoading(false);
-    return;
-  }
-
-  const user = JSON.parse(userRaw);
-  setFarmerName(user.name || user.username || '');
-
-  setUserId(user.id);
-
-  const raw = await AsyncStorage.getItem(
-    `FARMER_ATT_SNAPSHOT_${user.id}`
-  );
-
-  const data = raw ? JSON.parse(raw) : [];
-
-  setSessions(data);
-  setDisplaySessions(data);
-
-  setTimeout(() => setLoading(false), 9000);
-};
-
-
-  useEffect(() => {
-    setLoading(true);        // 👈 RESET LOADING ON FOCUS
-    loadAttendance();
-  }, [])
-
-
-  /* ---------------- MONTH LIST ---------------- */
-  const months = useMemo(() => {
-  return Array.from(
-    new Set(
-      sessions.map(s =>
-        new Date(s.date).toLocaleString('en-IN', {
-          month: 'long',
-          year: 'numeric',
-        })
-      )
-    )
-  );
-}, [sessions]);
-
-  /* ---------------- SEARCH + FILTER (SORT LOGIC) ---------------- */
-  useEffect(() => {
-    setLoading(true);
-
-    const timer = setTimeout(() => {
-      let data = [...sessions];
-
-      /* 🔍 SEARCH = MOVE MATCHES TO TOP */
-      if (searchText.trim()) {
-        const q = searchText.toLowerCase();
-        data.sort((a, b) => {
-          const aMatch = a.farmer?.toLowerCase().includes(q);
-          const bMatch = b.farmer?.toLowerCase().includes(q);
-          if (aMatch && !bMatch) return -1;
-          if (!aMatch && bMatch) return 1;
-          return 0;
-        });
-      }
-
-      /* 📅 MONTH FILTER */
-      if (selectedMonth !== 'ALL') {
-        data = data.filter(
-          s =>
-            new Date(s.dateISO).toLocaleString('en-IN', {
-              month: 'long',
-              year: 'numeric',
-            }) === selectedMonth
-        );
-      }
-
-      setDisplaySessions(data);
-      setLoading(false);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchText, selectedMonth, sessions]);
-
-  /* ---------------- DELETE ---------------- */
-  const deleteSession = (id: string) => {
-  if (!userId) return;
-
-  Alert.alert(
-    language === 'te' ? 'హాజరు తొలగించాలా' : 'Delete Attendance',
-    language === 'te'
-      ? 'ఈ హాజరు రికార్డును తొలగించాలా?'
-      : 'Are you sure?',
-    [
-      { text: language === 'te' ? 'రద్దు చేయండి' : 'Cancel', style: 'cancel' },
-      {
-        text: language === 'te' ? 'తొలగించండి' : 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const updated = sessions.filter(s => s.id !== id);
-          setSessions(updated);
-          setDisplaySessions(updated);
-
-          await AsyncStorage.setItem(
-            `FARMER_ATT_SNAPSHOT_${userId}`,
-            JSON.stringify(updated)
-          );
-        },
-      },
-    ]
-  );
-};
-const confirmClearAll = () => {
-  Alert.alert(
-    language === 'te' ? 'నిర్ధారణ 1' : 'Confirmation 1',
-    language === 'te'
-      ? 'అన్ని హాజరు రికార్డులు తొలగించాలా?'
-      : 'Do you want to delete all attendance records?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Next', onPress: confirmClearAll2 },
-    ]
-  );
-};
-const confirmClearAll2 = () => {
-  Alert.alert(
-    language === 'te' ? 'నిర్ధారణ 2' : 'Confirmation 2',
-    language === 'te'
-      ? 'ఇది తిరిగి పొందలేరు. ఖచ్చితమా?'
-      : 'This action cannot be undone. Sure?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Next', onPress: confirmClearAll3 },
-    ]
-  );
-};
-const confirmClearAll3 = () => {
-  Alert.alert(
-    language === 'te' ? 'చివరి నిర్ధారణ' : 'Final Confirmation',
-    language === 'te'
-      ? 'కొన్ని నెలలుగా డబ్బు ఇవ్వకపోయినా మీరు క్లియర్ చేయాలనుకుంటున్నారా?'
-      : 'Even if payments are pending, do you want to clear?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: language === 'te' ? 'తొలగించండి' : 'Delete',
-        style: 'destructive',
-        onPress: clearAllAttendance,
-      },
-    ]
-  );
-};
-const clearAllAttendance = async () => {
-  if (!userId) return;
-
-  setLoading(true);
-
-  await AsyncStorage.setItem(
-    `FARMER_ATT_SNAPSHOT_${userId}`,
-    JSON.stringify([])
-  );
-
-  setSessions([]);
-  setDisplaySessions([]);
-
-  setLoading(false);
-};
-
-const canClearAll = sessions.length >= 10;
-const exportToPDF = async () => {
-  if (!sessions.length) {
-    Alert.alert(
-      language === 'te' ? 'డేటా లేదు' : 'No Data',
-      language === 'te'
-        ? 'ఎగుమతి చేయడానికి హాజరు రికార్డులు లేవు'
-        : 'No attendance records to export'
-    );
-    return;
-  }
-
-  const year = new Date().getFullYear();
-  const fileName = `Attendance_Report_${year}.pdf`;
-
-  const rows = sessions.map((s, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>${new Date(s.dateISO).toLocaleDateString(
-        language === 'te' ? 'te-IN' : 'en-IN'
-      )}</td>
-      <td>${s.mestriName}</td>
-      <td>${s.crop}</td>
-      <td>${s.work}</td>
-      <td>${s.summary.full}</td>
-      <td>${s.summary.morning}</td>
-      <td>${s.summary.evening}</td>
-      <td>${s.summary.total}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-  <html>
-    <head>
-      <meta charset="UTF-8" />
-      <style>
-        body {
-          font-family: 'Noto Sans Telugu', sans-serif;
-          padding: 20px;
-        }
-        h1 {
-          text-align: center;
-          color: #1b5e20;
-        }
-        .sub {
-          text-align: center;
-          margin-bottom: 20px;
-          color: #555;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 12px;
-        }
-        th {
-          background-color: #1b5e20;
-          color: white;
-          padding: 8px;
-          border: 1px solid #ddd;
-        }
-        td {
-          padding: 6px;
-          border: 1px solid #ddd;
-          text-align: center;
-        }
-        tr:nth-child(even) {
-          background-color: #f2f2f2;
-        }
-      </style>
-
-      <!-- Telugu Font -->
-      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu&display=swap" rel="stylesheet">
-    </head>
-
-    <body>
-      <h1>
-        ${language === 'te' ? 'హాజరు నివేదిక' : 'Attendance Report'}
-      </h1>
-
-<div class="date">
-  ${language === 'te' ? 'రైతు పేరు' : 'Farmer Name'} :
-  <strong>${farmerName}</strong>
-</div>
-
-      <div class="sub">
-        ${language === 'te'
-          ? `సంవత్సరం: ${year}`
-          : `Year: ${year}`}
-      </div>
-
-      <table>
-        <tr>
-          <th>#</th>
-          <th>${language === 'te' ? 'తేదీ' : 'Date'}</th>
-          <th>${language === 'te' ? 'మెస్త్రీ' : 'Mestri'}</th>
-          <th>${language === 'te' ? 'పంట' : 'Crop'}</th>
-          <th>${language === 'te' ? 'పని' : 'Work'}</th>
-          <th>${language === 'te' ? 'పూర్తి' : 'Full'}</th>
-          <th>${language === 'te' ? 'ఉదయం' : 'Morning'}</th>
-          <th>${language === 'te' ? 'సాయంత్రం' : 'Evening'}</th>
-          <th>${language === 'te' ? 'మొత్తం' : 'Total'}</th>
-        </tr>
-        ${rows}
-      </table>
-    </body>
-  </html>
-  `;
-
-  const { uri } = await Print.printToFileAsync({
-    html,
-    base64: false,
+  const animatedProps = useAnimatedProps(() => {
+    const progress = (animatedValue.value / 100) * circumference;
+    return {
+      strokeDashoffset: circumference - progress
+    };
   });
 
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
-    dialogTitle:
-      language === 'te'
-        ? 'PDF పంచుకోండి'
-        : 'Share PDF',
-    UTI: 'com.adobe.pdf',
+  const color =
+    percent < 40 ? "#EF4444" :
+    percent < 70 ? "#F59E0B" :
+    "#22C55E";
+
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
+      <Svg width={size} height={size}>
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke="#E5E7EB"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <AnimatedCircle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          animatedProps={animatedProps}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${center},${center}`}
+        />
+      </Svg>
+      <AppText style={styles.percentText}>
+        {Math.round(percent)}%
+      </AppText>
+    </View>
+  );
+};
+
+/* ---------------- SCREEN ---------------- */
+export default function AttendanceHistory() {
+  const router = useRouter();
+  const [mestris, setMestris] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const [language, setLanguage] = useState<"te" | "en">("te");
+  const [isFocused, setIsFocused] = useState(false);
+  const [loading, setLoading] = useState(false);
+ const [isListening, setIsListening] = useState(false);
+const isScreenFocused = useIsFocused();
+
+useSpeechRecognitionEvent("result", (event) => {
+
+  // 🔥 FIX: only current screen lo unna appude work avvali
+  if (!isScreenFocused || !isListening) return;
+
+  if (event.results && event.results.length > 0) {
+    setSearch(event.results[0].transcript);
+  }
+});
+
+useSpeechRecognitionEvent("end", () => setIsListening(false));
+
+const handleVoiceSearch = async () => {
+  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+  if (!result.granted) return;
+
+  setIsListening(true);
+  ExpoSpeechRecognitionModule.start({
+    lang: language === "te" ? "te-IN" : "en-US",
+    interimResults: true,
   });
 };
 
 
-  /* ---------------- CARD ANIMATION ---------------- */
-  const AnimatedCard = ({ item, index }: any) => {
-    const slide = useRef(new Animated.Value(20)).current;
-    const fade = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-      Animated.sequence([
-        Animated.delay(index * 80),
-        Animated.parallel([
-          Animated.timing(slide, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-          Animated.timing(fade, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }, []);
+useEffect(() => {
+  if (!isScreenFocused) {
+    ExpoSpeechRecognitionModule.stop();
+    setIsListening(false);
+  }
+}, [isScreenFocused]);
 
-   const dateText = new Date(item.date).toLocaleDateString(
-  language === 'te' ? 'te-IN' : 'en-IN',
-  { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+
+  const filteredMestris = mestris.filter((item) =>
+  item.name?.toLowerCase().includes(search.toLowerCase())
 );
 
-return (
-  <Animated.View style={styles.card}>
-    <View style={{ flexDirection: 'row' }}>
-      <Text style={styles.date}>
-        <Ionicons name="calendar-outline" /> {dateText} • {item.time}
-      </Text>
 
-      <Pressable
-        onPress={() => deleteSession(item.id)}
-        style={styles.deleteBtn}
-      >
-        <Ionicons name="trash" size={20} color="#d32f2f" />
-      </Pressable>
+  useFocusEffect(
+    useCallback(() => {
+      const loadLang = async () => {
+        const lang = await AsyncStorage.getItem("APP_LANG");
+        if (lang) setLanguage(lang as "te" | "en");
+      };
+      loadLang();
+    }, [])
+  );
+
+ 
+
+  const avatarColors = [
+    "#22C55E", "#3B82F6", "#F59E0B", "#EF4444",
+    "#8B5CF6", "#14B8A6", "#F97316", "#6366F1",
+    "#10B981", "#E11D48"
+  ];
+
+  const getColor = (id: string) => {
+    const index = id.charCodeAt(0) % avatarColors.length;
+    return avatarColors[index];
+  };
+
+
+
+  const ShimmerRow = () => (
+    <View style={styles.row}>
+      <ShimmerPlaceholder
+        LinearGradient={LinearGradient}
+        style={{ width: 42, height: 42, borderRadius: 21 }}
+      />
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <ShimmerPlaceholder
+          LinearGradient={LinearGradient}
+          style={{ width: "60%", height: 14, borderRadius: 6 }}
+        />
+        <ShimmerPlaceholder
+          LinearGradient={LinearGradient}
+          style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 6 }}
+        />
+      </View>
+      <ShimmerPlaceholder
+        LinearGradient={LinearGradient}
+        style={{ width: 45, height: 45, borderRadius: 25 }}
+      />
     </View>
+  );
+const getUsageColor = (percent: number) => {
+  if (percent >= 70) return "#16A34A"; // green
+  if (percent >= 40) return "#F59E0B"; // yellow
+  return "#EF4444"; // red
+};
+  const loadData = async () => {
+    const userPhone = await AsyncStorage.getItem("USER_PHONE");
+    if (!userPhone) return;
+    setLoading(true);
+    try {
+      const mestriSnap = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("mestris")
+        .get();
 
-    <Text style={styles.row}>
-    👷  <Text style={styles.label}>{T.mestri}:</Text> {item.mestriName}
-    </Text>
+      const counts: any[] = [];
+      for (const doc of mestriSnap.docs) {
+        const mestri = doc.data();
+        const attendanceSnap = await firestore()
+          .collection("users")
+          .doc(userPhone)
+          .collection("mestris")
+          .doc(doc.id)
+          .collection("attendance")
+          .get();
 
-    <Text style={styles.row}>
-      🌾<Text style={styles.label}>{T.crop}:</Text> {item.crop}
-    </Text>
-<Text style={styles.row}>
-  🛠 <Text style={styles.label}>
-    {language === 'te' ? 'పని:' : 'Work:'}
-  </Text> {item.work}
-</Text>
+        const list = attendanceSnap.docs.map(d => d.data());
+        let total = 0;
+        list.forEach(a => {
+         total += 1; // 🔥 each record = 1 day
+        });
+        if (total > 0) {
+          counts.push({ id: doc.id, ...mestri, total });
+        }
+      }
 
-   <View style={styles.line}>
+      const grandTotal = counts.reduce((sum, item) => sum + item.total, 0);
+      const result = counts.map(item => ({
+        ...item,
+        percent: grandTotal > 0 ? Math.round((item.total / grandTotal) * 100) : 0
+      }));
+      result.sort((a, b) => b.percent - a.percent);
+      setMestris(result);
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  <View style={styles.summaryRow}>
-    <Text style={styles.green}>
-      {T.full}: {item.summary.full}
-    </Text>
-    <Text style={styles.yellow}>
-      {T.morning}: {item.summary.morning}
-    </Text>
-  </View>
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
-  <View style={styles.summaryRow}>
-    <Text style={styles.red}>
-      {T.evening}: {item.summary.evening}
-    </Text>
-    <Text style={styles.bold}>
-      {T.total}: {item.summary.total}
-    </Text>
-  </View>
+  const filtered = mestris.filter(item =>
+    item.name?.toLowerCase().includes(search.toLowerCase())
+  );
 
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" />
+
+      <AppHeader
+        title={language === "te" ? "హాజరు చరిత్ర" : "Attendance History"}
+        subtitle={language === "te" ? "పూర్వపు వివరాలు" : "Previous Details"}
+        language={language}
+      />
+
+    {/* SEARCH */}
+<View style={[
+  styles.searchContainer,
+  { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }
+]}>
+  <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+
+  <TextInput
+    value={search}
+    onChangeText={setSearch}
+    placeholder={
+    language === "te"
+      ? "మేస్త్రీని వెతకండి..."
+      : "Search mestri..."
+  }
+    placeholderTextColor="#9CA3AF"
+    cursorColor={'green'}
+    selectionColor={'green'}
+    onFocus={() => setIsFocused(true)}
+    onBlur={() => setIsFocused(false)}
+    style={[styles.searchInput, { fontFamily: 'Mandali' }]}
+  />
+
+  {search.length > 0 ? (
+    <TouchableOpacity onPress={() => setSearch("")} >
+      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+    </TouchableOpacity>
+  ) : (
+    <TouchableOpacity 
+      onPress={handleVoiceSearch}   style={{
+      marginLeft: 10,
+      padding: 5,
+      borderRadius: 50,
+      backgroundColor: "#f0f9f3"
+    }}>
+      <MaterialCommunityIcons 
+        name={isListening ? "microphone" : "microphone-outline"} 
+        size={20} 
+        color={isListening ? "#EF4444" : "#16A34A"} 
+      />
+    </TouchableOpacity>
+  )}
 </View>
 
-  </Animated.View>
-);
-  };
-  /* ---------------- UI ---------------- */
- 
-  return (
-    
-    <View style={styles.screen}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Pressable
-  onPress={() => {
-    setLoading(true);
-    setTimeout(() => {
-      router.back();
-    }, 1000);
+      {loading ? (
+        <View>
+          <ShimmerRow />
+          <ShimmerRow />
+          <ShimmerRow />
+          <ShimmerRow />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <Ionicons
+                name={search.length > 0 ? "search-outline" : "people-outline"}
+                size={60}
+                color="#9CA3AF"
+              />
+              <AppText style={styles.emptyTitle} language={language}>
+                {search.length > 0
+                  ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
+                  : (language === "te" ? "మేస్త్రీలు లేరు" : "No Mestris")}
+              </AppText>
+              <AppText style={styles.emptySub} language={language}>
+                {search.length > 0
+                  ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
+                  : (language === "te" ? "ముందుగా హాజరు నమోదు చేయండి." : "Please record the attendance first.")}
+              </AppText>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.8}
+              onPress={() => {
+                router.push({
+                  pathname: "/farmer/mestri-history",
+                  params: {
+                    id: item.id,
+                    name: item.name,
+                    village: item.village
+                  }
+                });
+              }}
+            >
+              <View style={styles.left}>
+                <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
+                  <AppText style={styles.avatarText} language={language}>
+                    {item.name?.charAt(0)?.toUpperCase()}
+                  </AppText>
+                </View>
+                <View style={styles.details}>
+                  <AppText style={styles.name} language={language}>{item.name}</AppText>
+                  <AppText style={styles.sub} language={language}>{item.village || "----"}</AppText>
+                </View>
+              </View>
+
+              <View style={styles.right}>
+                <View style={styles.circleWrapper}>
+                  <ProgressCircle percent={item.percent || 0} />
+                </View>
+                <View
+  style={{
+    backgroundColor: getUsageColor(item.percent) + "15", // light bg
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4
   }}
 >
-</Pressable>
-        <Text style={styles.headerTitle}>{T.title}</Text>
-      
-  <Pressable onPress={exportToPDF}>
-    <Ionicons name="download-outline" size={22} color="#1b5e20" />
-  </Pressable>
+
+  <AppText
+    style={{
+      fontSize: 11,
+      color: getUsageColor(item.percent),
+      fontWeight: "600"
+    }}
+    language={language}
+  >
+    {language === "te" ? "పని వాటా" : "Work Share"}
+  </AppText>
+
 </View>
-
-     
-
-      {/* SEARCH + FILTER */}
-      <View style={styles.searchRow}>
-        <TextInput
-          placeholder={T.search}
-          value={searchText}
-          onChangeText={setSearchText}
-          style={styles.searchInput}
-        />
-
-      </View>
-
-      {loading && (
-        <ActivityIndicator
-          size="large"
-          color="#1b5e20"
-          style={{ marginTop: 20 }}
+                
+              </View>
+            </TouchableOpacity>
+          )}
         />
       )}
-
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        {!loading && displaySessions.length === 0 && (
-          <Text style={styles.empty}>{T.noData}</Text>
-        )}
-
-       {displaySessions.map((item, i) => (
-  <AnimatedCard
-    key={item.id}     // ✅ ONLY THIS CHANGE
-    item={item}
-    index={i}
-  />
-))}
- {canClearAll && (
-  <View style={styles.clearBox}>
-     <Pressable onPress={confirmClearAll}>
-       <Text style={styles.clearText}>
-         {language === 'te'
-           ? 'ఈ సంవత్సరపు డేటా మొత్తం తొలగించండి'
-           : 'Clear all data for this year'}
-       </Text>
-     </Pressable>
- 
-     <Text style={styles.clearHint}>
-       {language === 'te'
-         ? '⚠ సంవత్సరం పూర్తయిన తర్వాత మాత్రమే ఉపయోగించండి'
-         : '⚠ Use only after year completion'}
-     </Text>
-   </View>
-)}
-      </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
-/* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#f4f6f5' },
-
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 50,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+  safe: { flex: 1, backgroundColor: "#F6F7F6" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginVertical: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
   },
-
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1b5e20',
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    height: 50, // కొంచెం హైట్ పెంచితే బాగుంటుంది
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    elevation: 1 // నీట్‌గా కనిపిస్తుంది
   },
-
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#fff',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
- clearText: {
-  color: '#d32f2f',
-  fontWeight: '700',
-  fontSize: 14,
-},
-clearBox: {
-  marginTop: 10,
-  padding: 16,
-  marginBottom: 60,
-  borderRadius: 14,
-  backgroundColor: '#fff3f3',
-  borderWidth: 1,
-  borderColor: '#f5c6cb',
-  alignItems: 'center',
-},
-
-
-clearHint: {
-  marginTop: 6,
-  fontSize: 12,
-  color: '#777',
-  textAlign: 'center',
-},
-
   searchInput: {
     flex: 1,
-    backgroundColor: '#f2f2f2',
-    borderRadius: 10,
-    padding: 10,
+    marginLeft: 8,
+    fontSize: 15,
+    color: "#111827",
+    paddingVertical: 0,
+    height: '100%'
   },
-
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 4,
-  },
- line: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderColor: '#ccc',
-    paddingTop: 6,
-  },
-  date: { fontWeight: '700', color: '#1b5e20', marginBottom: 6 },
-  row: { marginBottom: 4 },
-  label: { fontWeight: '700' },
-
-  summary: {
-  marginTop: 8,
-  gap: 6,
-},
-
-summaryRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-},
-
-
-  green: { color: '#2e7d32', fontWeight: '700' },
-  yellow: { color: '#ff780a', fontWeight: '800' },
-  red: { color: '#d32f2f', fontWeight: '700' },
-  bold: { fontWeight: '800' },
-
-  amount: {
-    marginTop: 8,
-    fontWeight: '900',
-    color: '#1b5e20',
-  },
-
-  deleteBtn: {
-    position: 'absolute',
-    right: 1,
-    bottom: 10,
-  },
-
-  empty: {
-    textAlign: 'center',
-    marginTop: 40,
-    color: '#777',
-  },
-  loader: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#f4f6f5',
-},
-
+  percentLabel: { fontSize: 12, color: "#6B7280", marginTop: 2, lineHeight: 18 },
+  left: { flexDirection: "row", alignItems: "center", flex: 1 },
+  avatar: { width: 50, height: 50, borderRadius: 25, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  avatarText: { color: "#fff", fontSize: 16, fontWeight: "600", lineHeight: 20 },
+  details: { flex: 1, gap: 4, marginLeft: 8 },
+  name: { fontSize: 16, fontWeight: "600", color: "#0F172A", lineHeight: 24 },
+  sub: { fontSize: 14, color: "#64748B", lineHeight: 20 },
+  right: { justifyContent: "center", alignItems: "center" },
+  percentText: { position: "absolute", fontSize: 10, fontWeight: "600" },
+  searchWrapper: { paddingHorizontal: 20, marginTop: 10, alignItems: "flex-end" },
+  emptyBox: { marginTop: 100, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
+  circleWrapper: { width: 60, height: 60, justifyContent: "center", alignItems: "center" },
+  emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: "600", color: "#1F2937" },
+  emptySub: { marginTop: 6, fontSize: 13, color: "#6B7280", textAlign: "center" },
+  searchBox: { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 12, height: 44, flexDirection: "row", alignItems: "center" },
+  inputWrap: { flex: 1, marginLeft: 8, justifyContent: "center" },
+  input: { fontSize: 14, color: "#111827", padding: 0 },
+  placeholder: { position: "absolute", left: 0, fontSize: 14, color: "#9CA3AF" },
 });

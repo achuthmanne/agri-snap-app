@@ -474,7 +474,7 @@ setTimeout(() => {
         keyboardShouldPersistTaps="handled"
       >
          <Text style={styles.dateText}>
-   • {formattedDate} • 
+   | {formattedDate} | 
 </Text>
 
  {dataReady && (

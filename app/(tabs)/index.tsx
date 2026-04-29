@@ -177,7 +177,7 @@ const NavCard = ({
         </Text>
 
         <Text style={styles.sub1}>
-  {formattedDate} • {formattedTime}
+  {formattedDate} | {formattedTime}
 </Text>
 
 
@@ -212,7 +212,7 @@ todaySessions.map((item, index) => (
       </View>
 
       <Text style={styles.savedTime}>
-      {formattedDate} • {new Date(item.dateISO).toLocaleTimeString(locale, {
+      {formattedDate} | {new Date(item.dateISO).toLocaleTimeString(locale, {
           hour: '2-digit',
           minute: '2-digit',
         })}

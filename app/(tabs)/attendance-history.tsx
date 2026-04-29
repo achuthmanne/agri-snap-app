@@ -244,7 +244,7 @@ const eveningCount =
       >
         <View style={{ flexDirection: 'row' }}>
         <Text style={styles.date}>
-          <Ionicons name="calendar-outline" /> {dateText} • {timeText}
+          <Ionicons name="calendar-outline" /> {dateText} | {timeText}
         </Text>
         <Pressable
           onPress={() => deleteSession(item.dateISO)}

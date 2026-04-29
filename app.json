@@ -7,21 +7,31 @@
     "icon": "./assets/images/icon.png",
     "scheme": "agrisnap",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.achuth.agrisnap",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "రైతులకు వాయిస్ సెర్చ్ కోసం మైక్రోఫోన్ అనుమతి అవసరం.",
+        "NSSpeechRecognitionUsageDescription": "వాయిస్ కమాండ్స్ ద్వారా యంత్రాలను వెతకడానికి అనుమతి ఇవ్వండి."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1B5E20",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
       "package": "com.achuth.agrisnap",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "INTERNET",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": []
     },
     "web": {
       "output": "static",
@@ -32,13 +42,18 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/icon.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#1B5E20"
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "రైతులకు వాయిస్ సెర్చ్ కోసం మైక్రోఫోన్ అనుమతి అవసరం."
         }
       ]
     ],

@@ -1,663 +1,620 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import { useEffect, useMemo, useState } from 'react';
-
+import AppHeader from "@/components/AppHeader";
+import AppText from "@/components/AppText";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import firestore from "@react-native-firebase/firestore";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useRouter } from "expo-router";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { useIsFocused } from "@react-navigation/native";
+import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
+  FlatList,
+  SafeAreaView,
+  StatusBar,
   StyleSheet,
-  Text,
   TextInput,
-  View,
-} from 'react-native';
+  TouchableOpacity,
+  View
+} from "react-native";
 
+import Animated, {
+  useAnimatedProps,
+  useSharedValue,
+  withTiming
+} from "react-native-reanimated";
 
-export default function FarmerPaymentHistory() {
-  const [language, setLanguage] = useState<'te' | 'en'>('en');
-  const [loading, setLoading] = useState(true);
+import ShimmerPlaceholder from "react-native-shimmer-placeholder";
+import Svg, { Circle } from "react-native-svg";
 
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [display, setDisplay] = useState<any[]>([]);
+/* ---------------- PROGRESS ---------------- */
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-  const [search, setSearch] = useState('');
-  const [month, setMonth] = useState<'ALL' | string>('ALL');
-const [farmerName, setFarmerName] = useState('');
+const ProgressCircle = ({ percent }: { percent: number }) => {
+  const radius = 24;
+  const strokeWidth = 5;
+  const circumference = 2 * Math.PI * radius;
+  const size = 60;
+  const center = size / 2;
 
-  const locale = language === 'te' ? 'te-IN' : 'en-IN';
-const [userId, setUserId] = useState('');
+  const animatedValue = useSharedValue(0);
 
-  const T = {
-    title: language === 'te' ? 'చెల్లింపు చరిత్ర' : 'Payment History',
-    search: language === 'te' ? '🔍 పంట / మెస్త్రి వెతకండి' : '🔍 Search crop / mestri',
-    noData:
-      language === 'te'
-        ? 'చెల్లింపు చరిత్ర లేదు'
-        : 'No payment history',
-    total: language === 'te' ? 'మొత్తం' : 'Total',
-    bank: language === 'te' ? 'చెల్లింపు విధానం' : 'Payment Mode',
-    cleared: language === 'te' ? 'క్లియర్ చేసిన సమయం' : 'Cleared At',
-  };
-
-  /* ---------- INIT ---------- */
   useEffect(() => {
-    load();
-  }, []);
+    animatedValue.value = withTiming(percent, { duration: 1200 });
+  }, [percent]);
 
-  const load = async () => {
-    setLoading(true);
+  const animatedProps = useAnimatedProps(() => {
+    const progress = (animatedValue.value / 100) * circumference;
+    return {
+      strokeDashoffset: circumference - progress
+    };
+  });
 
-    const lang = await AsyncStorage.getItem('APP_LANG');
-    if (lang === 'te' || lang === 'en') setLanguage(lang);
+  const color =
+    percent === 0 ? "#EF4444" :
+    percent < 100 ? "#F59E0B" :
+    "#22C55E";
 
-    const userRaw = await AsyncStorage.getItem('CURRENT_USER');
-    
-    if (!userRaw) return;
+  return (
+   <View style={{
+  width: size,
+  height: size,
+  alignItems: "center",
+  justifyContent: "center"
+}}>
+  <Svg width={size} height={size}>
+    <Circle
+      cx={center}
+      cy={center}
+      r={radius}
+      stroke="#E5E7EB"
+      strokeWidth={strokeWidth}
+      fill="none"
+    />
 
-   const user = JSON.parse(userRaw);
-setFarmerName(user.name || user.username || '');
+    <AnimatedCircle
+      cx={center}
+      cy={center}
+      r={radius}
+      stroke={color}
+      strokeWidth={strokeWidth}
+      fill="none"
+      strokeDasharray={circumference}
+      animatedProps={animatedProps}
+      strokeLinecap="round"
+      rotation="-90"
+      origin={`${center},${center}`}
+    />
+  </Svg>
 
-setUserId(user.id);
+  {/* 🔥 PERFECT CENTER */}
+  <AppText
+    style={{
+      position: "absolute",
+      fontSize: 11,
+      fontWeight: "600"
+    }}
+  >
+    {Math.round(percent)}%
+  </AppText>
+</View>
+  );
+};
 
-const raw = await AsyncStorage.getItem(
-  `FARMER_PAYMENT_HISTORY_${user.id}`
+/* ---------------- STATUS ---------------- */
+const getStatus = (paid: number, total: number) => {
+  if (paid === 0) return { label: "Not Paid", color: "#EF4444" };
+  if (paid < total) return { label: "Pending", color: "#F59E0B" };
+  return { label: "Cleared", color: "#22C55E" };
+};
+
+/* ---------------- SCREEN ---------------- */
+export default function PaymentHistory() {
+  const router = useRouter();
+const [isFocused, setIsFocused] = useState(false);
+  const [mestris, setMestris] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [language, setLanguage] = useState<"te" | "en">("te");
+   const [isListening, setIsListening] = useState(false);
+const isScreenFocused = useIsFocused();
+
+useSpeechRecognitionEvent("result", (event) => {
+
+  // 🔥 FIX: only current screen lo unna appude work avvali
+  if (!isScreenFocused || !isListening) return;
+
+  if (event.results && event.results.length > 0) {
+    setSearch(event.results[0].transcript);
+  }
+});
+
+useSpeechRecognitionEvent("end", () => setIsListening(false));
+
+const handleVoiceSearch = async () => {
+  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+  if (!result.granted) return;
+
+  setIsListening(true);
+  ExpoSpeechRecognitionModule.start({
+    lang: language === "te" ? "te-IN" : "en-US",
+    interimResults: true,
+  });
+};
+
+
+
+useEffect(() => {
+  if (!isScreenFocused) {
+    ExpoSpeechRecognitionModule.stop();
+    setIsListening(false);
+  }
+}, [isScreenFocused]);
+
+
+  const filteredMestris = mestris.filter((item) =>
+  item.name?.toLowerCase().includes(search.toLowerCase())
 );
 
-    const data = raw ? JSON.parse(raw) : [];
+  /* ---------- LANGUAGE ---------- */
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem("APP_LANG").then(l => {
+        if (l) setLanguage(l as any);
+      });
+    }, [])
+  );
 
-    setSessions(data);
-    setDisplay(data);
-    setLoading(false);
+ 
+  /* ---------- COLORS ---------- */
+  const avatarColors = ["#22C55E","#3B82F6","#F59E0B","#EF4444","#8B5CF6"];
+
+  const getColor = (id: string) => {
+    const index = id.charCodeAt(0) % avatarColors.length;
+    return avatarColors[index];
   };
 
-  /* ---------- MONTH LIST ---------- */
-  const months = useMemo(() => {
-    return Array.from(
-      new Set(
-        sessions.map(s =>
-          new Date(s.clearedAt).toLocaleString('en-IN', {
-            month: 'long',
-            year: 'numeric',
-          })
-        )
-      )
-    );
-  }, [sessions]);
-const deleteHistoryItem = async (historyId: string) => {
-  if (!userId) return;
-
-  Alert.alert(
-    language === 'te' ? 'పేమెంట్ తొలగించాలా?' : 'Delete Payment',
-    language === 'te'
-      ? 'ఈ పేమెంట్ తొలగిస్తే సంబంధిత హాజరు మళ్ళీ పేమెంట్‌కి అందుబాటులో ఉంటుంది.'
-      : 'Deleting this payment will unlock related attendance.',
-    [
-      { text: language === 'te' ? 'రద్దు' : 'Cancel', style: 'cancel' },
-      {
-        text: language === 'te' ? 'తొలగించు' : 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const historyKey = `FARMER_PAYMENT_HISTORY_${userId}`;
-          const snapKey = `FARMER_ATT_SNAPSHOT_${userId}`;
-
-          const raw = await AsyncStorage.getItem(historyKey);
-          const history = raw ? JSON.parse(raw) : [];
-
-          const item = history.find((h: any) => h.id === historyId);
-
-          if (!item) return;
-
-          // 1️⃣ remove history card
-          const updatedHistory = history.filter((h: any) => h.id !== historyId);
-
-          await AsyncStorage.setItem(
-            historyKey,
-            JSON.stringify(updatedHistory)
-          );
-
-          // 2️⃣ unlock attendance cards
-          const snapRaw = await AsyncStorage.getItem(snapKey);
-          const snaps = snapRaw ? JSON.parse(snapRaw) : [];
-
-          const updatedSnaps = snaps.map((s: any) =>
-  item.attendanceIds.includes(s.id)
-    ? { ...s, isPaid: false }
-    : s
-);
-
-
-          await AsyncStorage.setItem(
-            snapKey,
-            JSON.stringify(updatedSnaps)
-          );
-
-          setSessions(updatedHistory);
-          setDisplay(updatedHistory);
-          setMonth('ALL');
-
-        },
-      },
-    ]
-  );
-};
-const confirmClearAll = () => {
-  Alert.alert(
-    language === 'te' ? 'నిర్ధారణ 1' : 'Confirmation 1',
-    language === 'te'
-      ? 'అన్ని చెల్లింపులు తొలగించాలా?'
-      : 'Do you want to delete all payments?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Next', onPress: confirmClearAll2 },
-    ]
-  );
-};
-const confirmClearAll2 = () => {
-  Alert.alert(
-    language === 'te' ? 'నిర్ధారణ 2' : 'Confirmation 2',
-    language === 'te'
-      ? 'ఈ డేటా తిరిగి రాదు. ఖచ్చితమా?'
-      : 'This data cannot be recovered. Sure?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Next', onPress: confirmClearAll3 },
-    ]
-  );
-};
-const confirmClearAll3 = () => {
-  Alert.alert(
-    language === 'te' ? 'చివరి నిర్ధారణ' : 'Final Confirmation',
-    language === 'te'
-      ? 'ఈ సంవత్సరం పూర్తయ్యిందని నిర్ధారించుకుంటున్నారా?'
-      : 'Are you sure this year is completed?',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: language === 'te' ? 'తొలగించు' : 'Delete',
-        style: 'destructive',
-        onPress: clearAllPayments,
-      },
-    ]
-  );
-};
-const clearAllPayments = async () => {
-  if (!userId) return;
+  /* ---------- LOAD DATA ---------- */
+  const loadData = async () => {
+  const phone = await AsyncStorage.getItem("USER_PHONE");
+  if (!phone) return;
 
   setLoading(true);
 
-  const historyKey = `FARMER_PAYMENT_HISTORY_${userId}`;
-  const snapKey = `FARMER_ATT_SNAPSHOT_${userId}`;
+  try {
+    const db = firestore();
 
-  // 1️⃣ Clear payment history
-  await AsyncStorage.setItem(historyKey, JSON.stringify([]));
+    /* 🔥 1. GET PAYMENTS ONLY */
+    const paymentSnap = await db
+      .collection("users")
+      .doc(phone)
+      .collection("payments")
+      .get();
 
-  // 2️⃣ Unlock all attendance
-  const snapRaw = await AsyncStorage.getItem(snapKey);
-  const snaps = snapRaw ? JSON.parse(snapRaw) : [];
+    const payments = paymentSnap.docs.map(d => d.data());
 
-  const unlocked = snaps.map((s: any) => ({
-    ...s,
-    isPaid: false,
-  }));
+    /* 🔥 2. GROUP BY MESTRI */
+    const map: any = {};
 
-  await AsyncStorage.setItem(snapKey, JSON.stringify(unlocked));
+    payments.forEach(p => {
+      const id = p.mestriId;
+      if (!id) return;
 
-  setSessions([]);
-  setDisplay([]);
-  setMonth('ALL');
+      if (!map[id]) {
+        map[id] = {
+          id,
+          name: p.name,
+          village: p.village,
+          paid: 0
+        };
+      }
+
+      map[id].paid += (p.selectedAttendanceIds || []).length;
+    });
+
+    /* 🔥 3. FETCH TOTAL ATTENDANCE */
+    const result: any[] = [];
+
+    for (const key in map) {
+      const attendanceSnap = await db
+        .collection("users")
+        .doc(phone)
+        .collection("mestris")
+        .doc(key)
+        .collection("attendance")
+        .get();
+
+      const total = attendanceSnap.size;
+      const paid = map[key].paid;
+
+      const percent = total > 0 ? (paid / total) * 100 : 0;
+
+      result.push({
+        id: key,
+        name: map[key].name,
+        village: map[key].village,
+        total,
+        paid,
+        percent
+      });
+    }
+
+    setMestris(result);
+
+  } catch (e) {
+    console.log(e);
+  }
 
   setLoading(false);
 };
 
-const canClearAll = display.length >= 10;
-const exportToPDF = async () => {
-  if (!display.length) {
-    Alert.alert(
-      language === 'te' ? 'డేటా లేదు' : 'No Data',
-      language === 'te'
-        ? 'ఎగుమతి చేయడానికి చెల్లింపు రికార్డులు లేవు'
-        : 'No payment records to export'
-    );
-    return;
-  }
+  useFocusEffect(useCallback(() => { loadData(); }, []));
 
-  const year = new Date().getFullYear();
-  const fileName = `Payment_History_${year}.pdf`;
+  const filtered = mestris.filter(i =>
+    i.name?.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const rows = display.map((s, i) => `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${s.crop}</td>
-      <td>${s.work}</td>
-      <td>${s.mestriName}</td>
-      <td>${s.fullKulis}</td>
-      <td>${s.morningKulis}</td>
-      <td>${s.eveningKulis}</td>
-      <td>₹${s.grandTotal}</td>
-      <td>${s.clearedDateText}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-  <html>
-    <head>
-      <meta charset="UTF-8" />
-      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Telugu&display=swap" rel="stylesheet">
-      <style>
-        body {
-          font-family: 'Noto Sans Telugu', sans-serif;
-          padding: 20px;
-        }
-        .header {
-          text-align: center;
-          padding: 15px;
-          border-radius: 12px;
-          background: linear-gradient(90deg,#1b5e20,#2e7d32);
-          color: white;
-          margin-bottom: 20px;
-        }
-        .title {
-          font-size: 22px;
-          font-weight: bold;
-        }
-        .meta {
-          font-size: 12px;
-          margin-top: 4px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 12px;
-        }
-        th {
-          background-color: #1b5e20;
-          color: white;
-          padding: 8px;
-          border: 1px solid #ddd;
-        }
-        td {
-          padding: 6px;
-          border: 1px solid #ddd;
-          text-align: center;
-        }
-        tr:nth-child(even) {
-          background-color: #f2f2f2;
-        }
-      </style>
-    </head>
-
-    <body>
-      <div class="header">
-        <div class="title">
-          ${language === 'te' ? 'చెల్లింపు నివేదిక' : 'Payment Report'}
-        </div>s
-
-<div class="date">
-  ${language === 'te' ? 'రైతు పేరు' : 'Farmer Name'} :
-  <strong>${farmerName}</strong>
-</div>
-
-        <div class="meta">
-          ${language === 'te'
-            ? `సంవత్సరం: ${year}`
-            : `Year: ${year}`}
-        </div>
-      </div>
-
-      <table>
-        <tr>
-          <th>#</th>
-          <th>${language === 'te' ? 'పంట' : 'Crop'}</th>
-          <th>${language === 'te' ? 'పని' : 'Work'}</th>
-          <th>${language === 'te' ? 'మెస్త్రి' : 'Mestri'}</th>
-          <th>${language === 'te' ? 'పూర్తి' : 'Full'}</th>
-          <th>${language === 'te' ? 'ఉదయం' : 'Morning'}</th>
-          <th>${language === 'te' ? 'సాయంత్రం' : 'Evening'}</th>
-          <th>${language === 'te' ? 'మొత్తం' : 'Total'}</th>
-          <th>${language === 'te' ? 'తేదీ' : 'Date'}</th>
-        </tr>
-        ${rows}
-      </table>
-    </body>
-  </html>
-  `;
-
-  const { uri } = await Print.printToFileAsync({ html });
-
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
-    dialogTitle:
-      language === 'te'
-        ? 'PDF పంచుకోండి'
-        : 'Share PDF',
-  });
-};
-
-  /* ---------- SEARCH + FILTER ---------- */
-  useEffect(() => {
-    let data = [...sessions];
-
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      data = data.filter(
-        s =>
-          s.crop.toLowerCase().includes(q) ||
-          s.mestriName.toLowerCase().includes(q)
-      );
-    }
-
-    if (month !== 'ALL') {
-      data = data.filter(s => {
-        const m = new Date(s.clearedAt).toLocaleString('en-IN', {
-          month: 'long',
-          year: 'numeric',
-        });
-        return m === month;
-      });
-    }
-
-    setDisplay(data);
-  }, [search, month, sessions]);
-
-  /* ---------- UI ---------- */
-  return (
-    <View style={{ flex: 1, backgroundColor: '#f4f6f5' }}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        
-        <Text style={styles.headerTitle}>{T.title}</Text>
-          <Pressable onPress={exportToPDF}>
-    <Ionicons name="download-outline" size={22} color="#1b5e20" />
-  </Pressable>
-
+  /* ---------- SHIMMER ---------- */
+  const ShimmerRow = () => (
+    <View style={styles.row}>
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 42, height: 42, borderRadius: 21 }} />
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "60%", height: 14 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "40%", height: 12, marginTop: 6 }} />
       </View>
-
-      {/* SEARCH */}
-      <View style={styles.searchRow}>
-        <TextInput
-          placeholder={T.search}
-           placeholderTextColor="#333"
-          value={search}
-          onChangeText={setSearch}
-          style={styles.searchInput}
-        />
-
-      </View>
-
-      {loading && (
-        <ActivityIndicator
-          size="large"
-          color="#1b5e20"
-          style={{ marginTop: 30 }}
-        />
-      )}
-
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        {!loading && display.length === 0 && (
-          <Text style={styles.empty}>{T.noData}</Text>
-        )}
-
-        {display.map(item => {
-          const from = new Date(item.fromDate).toLocaleDateString(locale);
-          const to = new Date(item.toDate).toLocaleDateString(locale);
-
-          return (
-            <View key={item.id} style={styles.card}>
-              <Text style={styles.row}>
-                🌾 <Text style={styles.label}>{language === 'te' ? 'క్రాప్:' : 'Crop:'}</Text> {item.crop}
-              </Text>
-<Text style={styles.row}>
-  🛠 <Text style={styles.label}>{language === 'te' ? 'పని' : 'Work'}:</Text> {item.work}
-</Text>
-
-              <Text style={styles.row}>
-                👷 <Text style={styles.label}>{language === 'te' ? 'మెస్త్రి:' : 'Mestri:'}</Text> {item.mestriName}
-              </Text>
-
-              <Text style={styles.meta}>
-                📅 {from} – {to}
-              </Text>
-
-              <View style={styles.line} />
-
-            <View style={styles.summaryRow}>
-  <View style={styles.summaryBox}>
-    <Text style={styles.summaryNumber}>{item.fullKulis}</Text>
-    <Text style={styles.summaryLabel}>
-      {language === 'te' ? 'పూర్తి' : 'Full'}
-    </Text>
-  </View>
-
-  <View style={styles.summaryBox}>
-    <Text style={styles.summaryNumber}>{item.morningKulis}</Text>
-    <Text style={styles.summaryLabel}>
-      {language === 'te' ? 'ఉదయం' : 'Morning'}
-    </Text>
-  </View>
-
-  <View style={styles.summaryBox}>
-    <Text style={styles.summaryNumber}>{item.eveningKulis}</Text>
-    <Text style={styles.summaryLabel}>
-      {language === 'te' ? 'సాయంత్రం' : 'Evening'}
-    </Text>
-  </View>
-</View>
-
-<View style={styles.summaryRow}>
-  <View style={styles.summaryBox}>
-    <Text style={styles.summaryNumber}>₹{item.fullAmount}</Text>
-    <Text style={styles.summaryLabel}>
-      {language === 'te' ? 'పూర్తి మొత్తం' : 'Full Amt'}
-    </Text>
-  </View>
-
-  <View style={styles.summaryBox}>
-    <Text style={styles.summaryNumber}>₹{item.morningAmount}</Text>
-    <Text style={styles.summaryLabel}>
-      {language === 'te' ? 'ఉదయం మొత్తం' : 'Morning Amt'}
-    </Text>
-  </View>
-
-  <View style={styles.summaryBox}>
-    <Text style={styles.summaryNumber}>₹{item.eveningAmount}</Text>
-    <Text style={styles.summaryLabel}>
-      {language === 'te' ? 'సాయంత్రం మొత్తం' : 'Evening Amt'}
-    </Text>
-  </View>
-</View>
-
-
-
-              <View style={styles.totalLine}>
-               <View style={styles.grandTotalBox}>
-  <Ionicons name="cash-outline" size={18} color="#fff" />
-  <Text style={styles.grandTotalText}>
-    {T.total}: ₹{item.grandTotal}
-  </Text>
-</View>
-
-              </View>
-             
-                
-                <View style={styles.metaBox}>
-  <Text style={styles.meta}>
-    🏦 {T.bank}: {item.bankType}
-  </Text>
-  <Text style={styles.meta}>
-    ⏱ {T.cleared}: {item.clearedDateText}
-  </Text>
-</View>
-
-  <Pressable
-              onPress={() => deleteHistoryItem(item.id)}
-              style={styles.deleteBtn}
-            >
-              <Ionicons name="trash" size={20} color="#d32f2f" />
-            </Pressable>
-              </View>
-          
-          );
-        })}
-         {canClearAll && (
-          <View style={styles.clearBox}>
-             <Pressable onPress={confirmClearAll}>
-               <Text style={styles.clearText}>
-                 {language === 'te'
-                   ? 'ఈ సంవత్సరపు డేటా మొత్తం తొలగించండి'
-                   : 'Clear all data for this year'}
-               </Text>
-             </Pressable>
-         
-             <Text style={styles.clearHint}>
-               {language === 'te'
-                 ? '⚠ సంవత్సరం పూర్తయిన తర్వాత మాత్రమే ఉపయోగించండి'
-                 : '⚠ Use only after year completion'}
-             </Text>
-           </View>
-        )}
-      </ScrollView>
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 60, height: 60, borderRadius: 30 }} />
     </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" />
+
+      <AppHeader
+        title={language === "te" ? "చెల్లింపు చరిత్ర" : "Payment History"}
+        subtitle={language === "te" ? "స్థితి & పురోగతి" : "Status & Progress"}
+        language={language}
+      />
+
+    {/* SEARCH */}
+<View style={[
+  styles.searchContainer,
+  { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }
+]}>
+  <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+
+  <TextInput
+    value={search}
+    onChangeText={setSearch}
+    placeholder={
+    language === "te"
+      ? "మేస్త్రీని వెతకండి..."
+      : "Search mestri..."
+  }
+    placeholderTextColor="#9CA3AF"
+    cursorColor={'green'}
+    selectionColor={'green'}
+    onFocus={() => setIsFocused(true)}
+    onBlur={() => setIsFocused(false)}
+    style={[styles.searchInput, { fontFamily: 'Mandali' }]}
+  />
+
+  {search.length > 0 ? (
+    <TouchableOpacity onPress={() => setSearch("")} >
+      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+    </TouchableOpacity>
+  ) : (
+    <TouchableOpacity 
+      onPress={handleVoiceSearch}   style={{
+      marginLeft: 10,
+      padding: 5,
+      borderRadius: 50,
+      backgroundColor: "#f0f9f3"
+    }}>
+      <MaterialCommunityIcons 
+        name={isListening ? "microphone" : "microphone-outline"} 
+        size={20} 
+        color={isListening ? "#EF4444" : "#16A34A"} 
+      />
+    </TouchableOpacity>
+  )}
+</View>
+
+      {loading ? (
+  <>
+    <ShimmerRow />
+    <ShimmerRow />
+    <ShimmerRow />
+  </>
+) : (
+  <FlatList
+    data={filtered}
+    keyExtractor={(i) => i.id}
+    contentContainerStyle={{ paddingBottom: 100 }}
+
+    /* 🔥 EMPTY STATE ADD HERE */
+    ListEmptyComponent={
+      <View style={styles.emptyBox}>
+
+        <Ionicons
+          name={search.length > 0 ? "search-outline" : "wallet-outline"}
+          size={60}
+          color="#9CA3AF"
+        />
+
+        <AppText style={styles.emptyTitle} language={language}>
+          {search.length > 0
+            ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
+            : (language === "te" ? "చెల్లింపులు లేవు" : "No Payments Yet")}
+        </AppText>
+
+        <AppText style={styles.emptySub} language={language}>
+          {search.length > 0
+            ? (language === "te"
+                ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
+                : "No results match your search")
+            : (language === "te"
+                ? "మీరు చేసిన చెల్లింపులు ఇక్కడ కనిపిస్తాయి"
+                : "Your completed payments will appear here")}
+        </AppText>
+
+      </View>
+    }
+
+    renderItem={({ item }) => {
+      const status = getStatus(item.paid, item.total);
+
+      return (
+        <TouchableOpacity
+  style={styles.card}
+  activeOpacity={0.7}
+  onPress={() => {
+    router.push({
+      pathname: "/farmer/payment-detail-history",
+      params: {
+        mestriId: item.id,
+        name: item.name,
+        village: item.village
+      }
+    });
+  }}
+>
+
+          <View style={styles.mainRow}>
+
+            {/* LEFT */}
+            <View style={styles.leftSection}>
+
+              <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
+                <AppText style={styles.avatarText} language={language}>
+                  {item.name?.charAt(0)?.toUpperCase()}
+                </AppText>
+              </View>
+
+              <View style={styles.details}>
+                <AppText style={styles.name} language={language}>
+                  {item.name}
+                </AppText>
+
+                <AppText style={styles.sub} language={language}>
+                  {item.village || "----"}
+                </AppText>
+
+                <AppText style={styles.paidText} language={language}>
+                  {language === "te" ? "చెల్లించినది" : "Paid"}: {item.paid} / {item.total}
+                </AppText>
+              </View>
+
+            </View>
+
+            {/* RIGHT */}
+            <View style={styles.rightSection}>
+
+              <ProgressCircle percent={item.percent || 0} />
+
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: status.color + "20" }
+                ]}
+              >
+                <AppText
+                  style={[styles.statusText, { color: status.color }]}
+                  language={language}
+                >
+                  {language === "te"
+                    ? status.label === "Cleared"
+                      ? "చెల్లింపు పూర్తి"
+                      : status.label === "Pending"
+                      ? "చెల్లింపు పెండింగ్"
+                      : "చెల్లించలేదు"
+                    : status.label}
+                </AppText>
+              </View>
+
+            </View>
+
+          </View>
+
+        </TouchableOpacity>
+      );
+    }}
+  />
+)}
+    </SafeAreaView>
   );
 }
 
-/* ---------- STYLES ---------- */
+/* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 50,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+  safe: { flex: 1, backgroundColor: "#F6F7F6" },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 20,
+    marginVertical: 6,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E5E7EB"
   },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1b5e20',
+
+
+  searchWrapper: {
+    paddingHorizontal: 20,
+    marginTop: 10,
+    alignItems: "flex-end"
   },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#fff',
-    padding: 12,
+card: {
+  marginHorizontal: 20,
+  marginVertical: 8,
+  padding: 16,
+  borderRadius: 16,
+  backgroundColor: "#ffffff",
+  borderWidth: 1,
+  borderColor: "#E5E7EB"
+},
+searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    height: 50, // కొంచెం హైట్ పెంచితే బాగుంటుంది
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    elevation: 1 // నీట్‌గా కనిపిస్తుంది
   },
   searchInput: {
     flex: 1,
-    backgroundColor: '#f2f2f2',
-    borderRadius: 10,
-    padding: 10,
+    marginLeft: 8,
+    fontSize: 15,
+    color: "#111827",
+    paddingVertical: 0,
+    height: '100%'
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 4,
-  },
-  deleteBtn: {
-  position: 'absolute',
-  top: 12,
-  right: 12,
+topRow: {
+  flexDirection: "row",
+  alignItems: "center"
 },
 
-  summaryRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  marginTop: 10,
+avatar: {
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  justifyContent: "center",
+  alignItems: "center"
 },
 
-summaryBox: {
-  flex: 1,
-  backgroundColor: '#f4f6f5',
-  marginHorizontal: 4,
-  borderRadius: 10,
-  paddingVertical: 10,
-  alignItems: 'center',
-},
-
-summaryNumber: {
-  fontSize: 15,
-  fontWeight: '800',
-  color: '#1b5e20',
-},
-
-summaryLabel: {
-  fontSize: 10,
-  color: '#555',
-  marginTop: 2,
-  textAlign: 'center',
-},
-
-grandTotalBox: {
-  marginTop: 14,
-  backgroundColor: '#1b5e20',
-  borderRadius: 12,
-  padding: 12,
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-  gap: 6,
-},
-
-grandTotalText: {
-  color: '#fff',
-  fontWeight: '900',
+avatarText: {
+  color: "#fff",
   fontSize: 16,
+  fontWeight: "600"
 },
 
-metaBox: {
-  marginTop: 10,
-  borderTopWidth: 1,
-  borderColor: '#eee',
-  paddingTop: 8,
+details: {
+  marginLeft: 12,
+  flex: 1
 },
-
-  row: { marginBottom: 6 },
-  label: { fontWeight: '700' },
-  meta: { color: '#555', marginBottom: 6 },
-  line: {
-    borderTopWidth: 1,
-    borderColor: '#ddd',
-    marginVertical: 8,
-  },
-  totalLine: { marginTop: 8 },
-  totalText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1b5e20',
-  },
-  empty: {
-    textAlign: 'center',
-    marginTop: 40,
-    color: '#777',
-  },
-  clearText: {
-  color: '#d32f2f',
-  fontWeight: '700',
+mainRow: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center"
+},
+input: {
   fontSize: 14,
+  color: "#111827"
 },
-clearBox: {
-  marginTop: 10,
-  padding: 16,
-  marginBottom: 20,
-  borderRadius: 14,
-  backgroundColor: '#fff3f3',
-  borderWidth: 1,
-  borderColor: '#f5c6cb',
-  alignItems: 'center',
+leftSection: {
+  flexDirection: "row",
+  alignItems: "center",
+  flex: 1
 },
 
+rightSection: {
+  alignItems: "center",
+  justifyContent: "center",
+  marginLeft: 10
+},
 
-clearHint: {
+name: {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#111827"
+},
+emptyBox: {
+  marginTop: 120,
+  alignItems: "center",
+  justifyContent: "center",
+  paddingHorizontal: 30
+},
+
+emptyTitle: {
+  marginTop: 12,
+  fontSize: 17,
+  fontWeight: "600",
+  color: "#1F2937"
+},
+
+emptySub: {
   marginTop: 6,
-  fontSize: 12,
-  color: '#777',
-  textAlign: 'center',
+  fontSize: 13,
+  color: "#6B7280",
+  textAlign: "center",
+  lineHeight: 18
 },
+sub: {
+  fontSize: 13,
+  color: "#6B7280",
+  marginTop: 2
+},
+
+paidText: {
+  fontSize: 12,
+  color: "#374151",
+  marginTop: 4
+},
+
+centerCircle: {
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 14
+},
+
+statusBadge: {
+  marginTop: 12,
+  alignSelf: "center",
+  paddingHorizontal: 12,
+  paddingVertical: 5,
+  borderRadius: 12
+},
+
+statusText: {
+  fontSize: 12,
+  fontWeight: "600"
+},
+ placeholder: {
+  position: "absolute",
+  left: 4,
+  right: 0,
+  textAlignVertical: "center",
+  height: "100%",   // 🔥 important
+  fontSize: 14,
+  color: "#9CA3AF"
+},
+  searchBox: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 44,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+
+  inputWrap: { flex: 1, marginLeft: 8 },
+
 });
