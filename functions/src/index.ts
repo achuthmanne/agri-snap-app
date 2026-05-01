@@ -1,8 +1,8 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import fetch from "node-fetch";
-
 
 export const getWeather = functions.https.onRequest(async (req, res) => {
   try {
@@ -16,7 +16,7 @@ export const getWeather = functions.https.onRequest(async (req, res) => {
     );
 
     const text = await response.text();
-
+console.log("🔥 inactive function loaded");
     let data;
     try {
       data = JSON.parse(text);
@@ -163,6 +163,50 @@ console.log("👉 Tokens found:", tokens.length);
       // 🔥 DATA (for click handling)
       data: {
         screen: "notifications",
+      },
+    });
+  }
+);
+
+export const sendInactiveNotifications = onSchedule(
+  "every 24 hours",
+  async () => {
+
+    const now = new Date();
+
+    // 🔥 5 days inactive
+    const fiveDaysAgo = new Date(
+      now.getTime() - 5 * 24 * 60 * 60 * 1000
+    );
+
+    const usersSnap = await admin.firestore()
+      .collection("users")
+      .where("lastActiveAt", "<=", fiveDaysAgo)
+      .get();
+
+    let tokens: string[] = [];
+
+    usersSnap.forEach(doc => {
+      const token = doc.data()?.fcmToken;
+      if (token) tokens.push(token);
+    });
+
+    console.log("👤 Inactive users:", usersSnap.size);
+    console.log("📲 Tokens:", tokens.length);
+
+    if (tokens.length === 0) return;
+
+    await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: "🌾 AgriSnap Reminder",
+        body: "మీ వ్యవసాయ పనులను చెక్ చేయండి మరియు అప్డేట్ చేయండి.",
+      },
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+        },
       },
     });
   }

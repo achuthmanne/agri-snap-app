@@ -6,6 +6,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { PermissionsAndroid, Platform } from "react-native";
 import { MenuProvider } from 'react-native-popup-menu';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import firestore from "@react-native-firebase/firestore";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +36,19 @@ export default function RootLayout() {
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
         );
       }
+
+
+      // 🔥 3. USER ACTIVE TRACK
+const phone = await AsyncStorage.getItem("USER_PHONE");
+
+if (phone) {
+  await firestore()
+    .collection("users")
+    .doc(phone)
+    .update({
+      lastActiveAt: firestore.FieldValue.serverTimestamp()
+    });
+}
 
     }
 
