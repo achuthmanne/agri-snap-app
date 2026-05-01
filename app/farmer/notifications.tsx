@@ -58,7 +58,15 @@ const hiddenSnap = await firestore()
   .collection("hiddenNotifications")
   .get();
 
+  const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
+
+const userState = userDoc.data()?.state;
+
 const hiddenIds = hiddenSnap.docs.map(d => d.id);
+const normalize = (s:any) => (s || "").trim().toLowerCase();
 for (const doc of snap.docs) {
   const data = doc.data();
 
@@ -78,7 +86,21 @@ for (const doc of snap.docs) {
    continue;
   }
 
+if (data.userId === "all") {
+  // show
+}
+else if (data.state) {
+  if (!userState || normalize(data.state) !== normalize(userState)) {
+    continue;
+  }
+}
+else if (data.userId && data.userId !== phone) {
+  continue;
+}
+
   list.push({ id: doc.id, ...data });
+  console.log("📢 Notification state:", data.state);
+console.log("👤 User state:", userState);
 }
 
       // 🔥 SORT MANUALLY
@@ -269,7 +291,7 @@ const feedbackText = feedbackMap[item.id] || "";
                 </AppText>
 
                 <AppText
-                  numberOfLines={isOpen ? 20 : 2}
+                numberOfLines={isOpen ? undefined : 2}
                   ellipsizeMode="tail"
                   style={styles.message}
                 >
@@ -381,7 +403,7 @@ const feedbackText = feedbackMap[item.id] || "";
 
   <AppText style={styles.date}>
   {item.createdAt
-    ? item.createdAt.toDate().toDateString()
+    ? item.createdAt?.toDate?.()?.toDateString() || ""
     : ""}
 </AppText>
           </TouchableOpacity>

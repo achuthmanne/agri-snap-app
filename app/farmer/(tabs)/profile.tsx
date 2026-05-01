@@ -74,7 +74,13 @@ export default function ProfileScreen() {
         if (data) {
           setName(data.name || "");
           setRole(data.role || "");
-          setSelectedState(data.state || "AP");
+          const dbState = (data.state || "ap").toLowerCase();
+
+if (dbState === "telangana") {
+  setSelectedState("Telangana");
+} else {
+  setSelectedState("AP");
+}
           setCreated(data.createdAt?.toDate()?.toLocaleDateString() || "--/--/----");
 
           if (!data.name || data.name.trim().length < 3) {
@@ -131,7 +137,7 @@ export default function ProfileScreen() {
       await firestore().collection("users").doc(phone).update({
         name: name.trim(),
         language: language,
-        state: selectedState,
+       state: selectedState.toLowerCase().trim(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       });
       await AsyncStorage.setItem("APP_LANG", language);

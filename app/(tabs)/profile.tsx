@@ -129,7 +129,7 @@ export default function ProfileScreen() {
       await firestore().collection("users").doc(phone).update({
         name: name.trim(),
         language: language,
-        state: selectedState,
+        state: selectedState.toLowerCase().trim(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       });
       await AsyncStorage.setItem("APP_LANG", language);

@@ -5,12 +5,12 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import firestore from "@react-native-firebase/firestore";
+import messaging from "@react-native-firebase/messaging";
 import { useFocusEffect } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import messaging from "@react-native-firebase/messaging";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated, AppState, Dimensions,
@@ -268,26 +268,70 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
- const unsub = firestore()
-  .collection("notifications")
-  .onSnapshot(snap => {
+  const unsub = firestore()
+    .collection("notifications")
+    .onSnapshot(async snap => {
 
-    let count = 0;
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone) return;
 
-    snap.forEach(doc => {
-      const data = doc.data();
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(phone)
+        .get();
 
-      if (!data.seen) {
-        count++;   // 🔥 only unread
-      }
+      const userState = userDoc.data()?.state;
+
+      const hiddenSnap = await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("hiddenNotifications")
+        .get();
+
+      const hiddenIds = hiddenSnap.docs.map(d => d.id);
+
+      let count = 0;
+      const now = new Date();
+const normalize = (s:any) => (s || "").trim().toLowerCase();
+      snap.forEach(doc => {
+        const data = doc.data();
+
+        // ❌ hidden skip
+        if (hiddenIds.includes(doc.id)) return;
+
+        // ❌ deleteAt skip
+        let deleteTime = null;
+        if (data.deleteAt && typeof data.deleteAt.toDate === "function") {
+          deleteTime = data.deleteAt.toDate();
+        }
+        if (deleteTime && now > deleteTime) return;
+console.log("📢 Notif state:", data.state);
+console.log("👤 User state:", userState);
+
+       if (data.userId === "all") {
+  // ok
+}
+else if (data.state) {
+  if (normalize(data.state) !== normalize(userState)) return;
+}
+else if (data.userId) {
+  if (data.userId !== phone) return;
+}
+else {
+  return; // 🔥 IMPORTANT fallback
+}
+
+        // ✅ only unread count
+        if (!data.seen) {
+          count++;
+        }
+      });
+
+      setNotifCount(count);
     });
-
-    setNotifCount(count);
-  });
 
   return () => unsub();
 }, []);
-
 
 useEffect(() => {
   setDrawer(false);

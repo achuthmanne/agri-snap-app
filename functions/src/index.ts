@@ -78,46 +78,60 @@ export const pushNotification = onDocumentCreated(
 
     const data = snap.data();
 
-    let tokens: string[] = [];
+// helper
+const normalize = (s: any) => (s || "").trim().toLowerCase();
 
-   if (!data.userId) {
-  console.log("❌ userId missing");
-  return;
+const targetUserId = data.userId;
+const targetState = data.state;
+
+const isGlobal = targetUserId === "all" || (!targetUserId && !targetState);
+
+let tokens: string[] = [];
+
+// GLOBAL
+if (isGlobal) {
+  const users = await admin.firestore().collection("users").get();
+
+  users.forEach(doc => {
+    const t = doc.data()?.fcmToken;
+    if (t) tokens.push(t);
+  });
 }
 
-// 🌍 GLOBAL
-if (data.userId === "all") {
+// STATE
+else if (targetState) {
+  const state = normalize(targetState);
 
   const users = await admin.firestore()
     .collection("users")
+    .where("state", "==", state)
     .get();
 
   users.forEach(doc => {
     const t = doc.data()?.fcmToken;
     if (t) tokens.push(t);
   });
-
 }
 
-// 👤 PERSONAL
-else {
-
+// USER
+else if (targetUserId) {
   const userDoc = await admin.firestore()
     .collection("users")
-    .doc(data.userId)
+    .doc(targetUserId)
     .get();
 
   const token = userDoc.data()?.fcmToken;
-
   if (token) tokens.push(token);
 }
-
     if (tokens.length === 0) {
       console.log("❌ No tokens found");
       return;
     }
 
     console.log("✅ Sending to tokens:", tokens.length);
+    console.log("🔥 New notification triggered:", data.title);
+    console.log("👉 Incoming state:", data.state);
+console.log("👉 Tokens found:", tokens.length);
 
     await admin.messaging().sendEachForMulticast({
       tokens,
