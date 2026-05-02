@@ -114,13 +114,19 @@ setActiveSession(session);
 .where("session", "==", session)
 .orderBy("createdAt", "desc")
 .limit(100)
-                .onSnapshot((snap) => {
-                    const list: any[] = [];
-                    let total = 0;
-                    const cropMap: any = {};
-                    const catMap: any = {};
+              .onSnapshot((snap) => {
 
-                    snap.forEach(doc => {
+  if (!snap || !snap.docs) {
+    setLoading(false);
+    return;
+  }
+
+  const list: any[] = [];
+  let total = 0;
+  const cropMap: any = {};
+  const catMap: any = {};
+
+  snap.docs.forEach(doc => {
                         const d: any = doc.data();
                         const amt = Number(d.amount) || 0;
                         total += amt;

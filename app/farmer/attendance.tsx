@@ -90,9 +90,9 @@ useEffect(() => {
   const loadData = async () => {
     const userPhone = (await AsyncStorage.getItem("USER_PHONE")) ?? "";
     if (!userPhone) {
-  setLoading(false);
-  return;
-}
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
 
@@ -110,78 +110,90 @@ useEffect(() => {
 
     setActiveSession(session);
 
-    unsubscribe = firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("mestris")
-      .where("session", "==", session)
-      .orderBy("createdAt", "desc")
-     .onSnapshot((snapshot) => {
+   unsubscribe = firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+ .where("session", "==", session)
+.where("createdAt", "!=", null)
+.orderBy("createdAt", "desc")
+  .onSnapshot((snapshot) => {
 
-  const list: any[] = [];
+        if (!snapshot) {
+          setMestris([]);
+          setLoading(false);
+          return;
+        }
 
-  snapshot.forEach((doc) => {
-    list.push({
-      id: doc.id,
-      ...doc.data()
-    });
-  });
+        const list = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
 
-  setMestris(list);
-  setLoading(false); // ✅ direct
-});
+        setMestris(list);
+        setLoading(false);
+      });
   };
 
   loadData();
 
-  return () => unsubscribe && unsubscribe();
-}, []);
+  return () => {
+    if (unsubscribe) unsubscribe(); // 🔥 CLEANUP PROPER
+  };
 
-
+}, []); // 🔥 ONLY ONCE
 const handleDelete = (item: any) => {
   setDeleteItem(item);
   setShowDeleteModal(true);
 };
 const confirmDelete = async () => {
-  if (!deleteItem) return;
+  if (!deleteItem) {
+    setShowDeleteModal(false);
+    return;
+  }
 
   try {
+    setLoading(true);
+
     const userPhone = (await AsyncStorage.getItem("USER_PHONE")) ?? "";
 
-if (!userPhone || !activeSession) {
-  setShowDeleteModal(false);
-  return;
-}
+    if (!userPhone || !activeSession) {
+      setShowDeleteModal(false);
+      setLoading(false);
+      return;
+    }
+
     const mestriRef = firestore()
       .collection("users")
       .doc(userPhone)
       .collection("mestris")
       .doc(deleteItem.id);
 
-    // 🔥 STEP 1: get attendance
     const attendanceRef = mestriRef.collection("attendance");
+
     const attendanceSnap = await attendanceRef
-  .where("session", "==", activeSession)
-  .get();
+      .where("session", "==", activeSession)
+      .get();
 
-const batch = firestore().batch();
+    const batch = firestore().batch();
 
-attendanceSnap.docs.forEach(doc => {
-  batch.delete(doc.ref);
-});
+    if (attendanceSnap && attendanceSnap.docs) {
+      attendanceSnap.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
 
-await batch.commit();
+      await batch.commit();
+    }
 
-    // 🔥 STEP 3: delete mestri document itself
-    await mestriRef.delete();
-
-    console.log("FULL DELETE DONE ✅");
+    await mestriRef.delete(); // 🔥 ALWAYS RUN
 
     setShowDeleteModal(false);
     setDeleteItem(null);
 
   } catch (e) {
     console.log("Delete error:", e);
+  } finally {
+    setLoading(false);
   }
 };
 const avatarColors = [

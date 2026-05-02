@@ -41,8 +41,6 @@ const [selectedItem, setSelectedItem] = useState<any>(null);
 const [deleteVisible, setDeleteVisible] = useState(false);
 const [loading, setLoading] = useState(true); // Default loading true
 const [soilStats, setSoilStats] = useState<any[]>([]); // 🔥 Soil Stats కోసం
-// 1. సెషన్ ని ఖాళీగా ఉంచుదాం, డేటాబేస్ నుండి వచ్చే వరకు
-const [session, setSession] = useState<string>("");
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
@@ -53,42 +51,63 @@ const [session, setSession] = useState<string>("");
   const load = async () => {
     const phone = await AsyncStorage.getItem("USER_PHONE");
     if (!phone) return;
+const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
 
+const activeSession = userDoc.data()?.activeSession;
+
+if (!activeSession) {
+  setLoading(false);
+  return;
+}
     // 🔥 ఇక్కడ క్వెరీ నుండి .where("session") తీసేశా బ్రో 
     // ఎందుకంటే మనం డేటాబేస్ లో ఉన్న యాక్టివ్ సెషన్ ఏంటో ముందే తెలియదు కాబట్టి.
     unsubscribe = firestore()
       .collection("users").doc(phone).collection("fields")
-      .orderBy("createdAt", "desc") 
+.where("session", "==", activeSession)   // 🔥 ADD THIS LINE
+.orderBy("createdAt", "desc")
+      
       .onSnapshot((snap) => {
         if (snap && !snap.empty) {
-          // 1. డేటాబేస్ లో ఉన్న లేటెస్ట్ రికార్డ్ నుండి సెషన్ తీసుకో
-          const latestDoc: any = snap.docs[0].data();
-          const activeSession = latestDoc.session;
-          setSession(activeSession); // పైన కార్డ్ కోసం సెట్ చేస్తున్నాం
-
+          
           const list: any[] = [];
           let total = 0, own = 0, rent = 0;
           const cropsMap: any = {};
           const soilMap: any = {};
 
           // 2. ఇప్పుడు ఆ యాక్టివ్ సెషన్ కి సంబంధించిన డేటాని మాత్రమే లూప్ చెయ్
-          snap.forEach((doc) => {
-            const d: any = doc.data();
-            
-            if (d.session === activeSession) { // 🔥 ఇక్కడ ఫిల్టర్ చేస్తున్నాం
-              const ac = Number(d.acres) || 0;
-              total += ac;
-              if (d.type === "own") own += ac; else rent += ac;
-              
-              cropsMap[d.crop] = (cropsMap[d.crop] || 0) + ac;
-              
-              const sType = d.soilType || (language === "te" ? "తెలియదు" : "Unknown");
-              soilMap[sType] = (soilMap[sType] || 0) + ac;
-              
-              list.push({ id: doc.id, ...d });
-            }
-          });
+         snap.forEach((doc) => {
+  const d: any = doc.data();
 
+  list.push({
+    id: doc.id,
+    ...d
+  });
+
+  // 🔥 total acres
+  total += d.acres || 0;
+
+  // 🔥 own / rent split
+  if (d.type === "own") {
+    own += d.acres || 0;
+  } else {
+    rent += d.acres || 0;
+  }
+
+  // 🔥 crop stats
+  if (!cropsMap[d.crop]) {
+    cropsMap[d.crop] = 0;
+  }
+  cropsMap[d.crop] += d.acres || 0;
+
+  // 🔥 soil stats
+  if (!soilMap[d.soilType]) {
+    soilMap[d.soilType] = 0;
+  }
+  soilMap[d.soilType] += d.acres || 0;
+});
           // 3. స్టేట్స్ అన్నీ అప్‌డేట్ చెయ్
           setData(list);
           setTotalAcres(total);
@@ -111,7 +130,6 @@ const [session, setSession] = useState<string>("");
         } else {
           // డేటా అసలు లేకపోతే
           setData([]);
-          setSession(language === 'te' ? "డేటా లేదు" : "No Data");
         }
         setLoading(false);
       }, (err) => setLoading(false));
@@ -278,49 +296,7 @@ const EmptyState = ({ language }: { language: string }) => (
     <EmptyState language={language} /> // ఇప్పుడు ఇది కరెక్ట్ గా సెంటర్ లో ఉంటుంది
   ) : (
     <>
-  {/* 🗓️ ADVANCED NEAT SESSION CARD */}
-<Animated.View entering={FadeInDown.delay(200)} style={styles.sessionAdvancedWrapper}>
-  <View style={styles.sessionMainContainer}>
-    
-    {/* ఎడమ వైపున ఒక చిన్న వెర్టికల్ ప్రైమరీ బార్ - ఇది ఒక ప్రీమియం టచ్ ఇస్తుంది */}
-    <View style={styles.accentBar} />
 
-    <View style={styles.sessionContent}>
-      <View style={styles.sessionHeaderRow}>
-       
-        <AppText style={styles.sessionSmallTitle}>
-          {language === 'te' ? 'ప్రస్తుత సాగు సంవత్సరం' : 'ACTIVE CROP SESSION'}
-        </AppText>
-      </View>
-      
-      {/* డాష్‌బోర్డ్ పైన సెషన్ కార్డ్ - ఇది ఇప్పుడు డేటాబేస్ నుండి వస్తుంది */}
-{/* ఇక్కడ డేటాబేస్ నుండి వచ్చిన వాల్యూ మాత్రమే ఉంటుంది */}
-      <AppText style={styles.sessionMainYear}>{session || "---"}</AppText>
-    </View>
-
-    {/* కుడి వైపున సింపుల్ అండ్ నీట్ స్టేటస్ */}
-   {/* కుడి వైపున పవర్ బటన్ - Master Clear/Action కోసం */}
-<View style={styles.statusSide}>
-  <TouchableOpacity 
-    activeOpacity={0.7}
-    style={styles.powerButton} 
-    onPress={() => {
-      // బ్రో, ఇక్కడ ఏం జరగాలో నువ్వు తర్వాత చెబుతావు అన్నావుగా.. 
-      // ప్రస్తుతానికి ఒక చిన్న లాగ్ పెడుతున్నా.
-      console.log("Master Power Button Pressed!");
-    }}
-  >
-    <LinearGradient
-      colors={['#EF4444', '#B91C1C']} // Deep Red Gradient for Polish
-      style={styles.powerGradient}
-    >
-      <Ionicons name="power" size={22} color="#fff" />
-    </LinearGradient>
-  </TouchableOpacity>
-</View>
-
-  </View>
-</Animated.View>
 
        <LinearGradient colors={["#53143d", "#2e0513"]} style={styles.mainCard}>
   <AppText style={styles.cardLabel}>{language === "te" ? "మొత్తం సాగు భూమి" : "Total Cultivated Area"}</AppText>

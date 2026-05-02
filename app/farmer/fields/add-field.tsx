@@ -4,7 +4,7 @@ import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useLocalSearchParams } from "expo-router"; // 🔥 added params
 import React, { useEffect, useRef, useState } from "react";
-import Animated from "react-native-reanimated";
+import { Keyboard } from "react-native";
 import {
   FlatList, Modal, SafeAreaView, ScrollView, StatusBar,
   StyleSheet, TextInput, TouchableOpacity, View
@@ -152,24 +152,70 @@ if (doc.data()) {
     setLoading(false);
   };
 const handleSave = async () => {
-  if (!crop || !soilType || !acres || !type || (type === "rent" && !rent)) {
+  if (loading) return;
+
+  Keyboard.dismiss();
+
+  if (!crop.trim() || !soilType.trim() || !acres || !type || (type === "rent" && !rent)) {
     setErrorVisible(true);
     return;
   }
 
   setLoading(true);
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-  
+
   try {
-    // మిగతా సేవ్ లాజిక్ (If matches or no existing data)
-    proceedToSave(phone!);
-    
-  } catch (e) { 
-    console.log(e); 
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
+
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(phone)
+      .get();
+
+    const activeSession = userDoc.data()?.activeSession;
+
+    if (!activeSession) {
+      setLoading(false);
+      return;
+    }
+
+    const fieldData = {
+      session: activeSession,
+      crop: crop.trim(),
+      soilType: soilType.trim(),
+      acres: Number(acres),
+      type,
+      rent: type === "rent" ? Number(rent || 0) : 0,
+      updatedAt: firestore.FieldValue.serverTimestamp()
+    };
+
+    if (editId) {
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("fields")
+        .doc(editId as string)
+        .update(fieldData);
+    } else {
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("fields")
+        .add({
+          ...fieldData,
+          createdAt: firestore.FieldValue.serverTimestamp()
+        });
+    }
+
+    router.back();
+
+  } catch (e) {
+    console.log(e);
+    setErrorVisible(true);
+  } finally {
     setLoading(false);
   }
 };
-
 // సేవ్ చేసే ఫంక్షన్ ని విడిగా రాద్దాం
 const proceedToSave = async (phone: string) => {
   try {
@@ -179,15 +225,19 @@ const proceedToSave = async (phone: string) => {
       .doc(phone)
       .get();
 
-    const activeSession = userDoc.data()?.activeSession;
+   const activeSession = userDoc.data()?.activeSession;
 
+if (!activeSession) {
+  setLoading(false);
+  return; // or show alert
+}
     const fieldData = {
       session: activeSession,   // ✅ FIXED
       crop,
       soilType,
-      acres: Number(acres),
+      acres: acres ? Number(acres) : null,
+rent: type === "rent" ? Number(rent || 0) : 0,
       type,
-      rent: Number(rent) || 0,
       updatedAt: firestore.FieldValue.serverTimestamp()
     };
 
@@ -212,8 +262,9 @@ const proceedToSave = async (phone: string) => {
     router.back();
 
   } catch (error) {
-    console.log("Save error:", error);
-  } finally {
+  console.log("Save error:", error);
+  setErrorVisible(true); // 🔥 show user
+}finally {
     setLoading(false);
   }
 };
@@ -230,6 +281,12 @@ const proceedToSave = async (phone: string) => {
     if (text) setSearchText(text);
   });
   useSpeechRecognitionEvent("end", () => setIsListening(false));
+
+useEffect(() => {
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
+  };
+}, []);
 
 // filteredData ని ఇలా డిక్లేర్ చెయ్
 const filteredData = modalType === "crop" 

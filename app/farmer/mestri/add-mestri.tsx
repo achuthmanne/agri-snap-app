@@ -95,59 +95,65 @@ useEffect(() => {
 }, []);
 
   /* ---------------- SAVE ---------------- */
-
-  const handleSave = async () => {
+const handleSave = async () => {
   if (!name.trim() || !village.trim()) {
     setShowAlert(true);
     return;
   }
 
   try {
-   setLoading(true);
+    setLoading(true);
 
-const userPhone = await AsyncStorage.getItem("USER_PHONE");
-const cleanPhone = phone.replace(/\D/g, "");
+    const userPhone = await AsyncStorage.getItem("USER_PHONE");
+    const cleanPhone = phone.replace(/\D/g, "");
 
-if (!userPhone) {
-  setLoading(false);
-  Alert.alert("Error", "User not found");
-  return;
-}
+    if (!userPhone) {
+      setLoading(false);
+      Alert.alert("Error", "User not found");
+      return;
+    }
 
-if (!activeSession) {
-  setLoading(false);
-  Alert.alert("Error", "Session not found");
-  return;
-}
+    if (cleanPhone && cleanPhone.length !== 10) {
+      setLoading(false);
+      Alert.alert("Error", "Enter valid phone number");
+      return;
+    }
 
-if (cleanPhone && cleanPhone.length !== 10) {
-  setLoading(false);
-  Alert.alert("Error", "Enter valid phone number");
-  return;
-}
+    // 🔥 PRODUCTION FIX: ALWAYS GET FRESH SESSION
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
 
-await firestore()
-  .collection("users")
-  .doc(userPhone)
-  .collection("mestris")
-  .add({
-    name: name.trim(),
-    phone: cleanPhone,
-    village: village.trim(),
-    session: activeSession,
-    createdAt: firestore.FieldValue.serverTimestamp()
-  });
+    const session = userDoc.data()?.activeSession;
 
-router.back();
+    if (!session) {
+      setLoading(false);
+      Alert.alert("Error", "Session not found");
+      return;
+    }
 
-  }catch (e) {
-  console.log("Save error:", e); // 🔥 ADD
-  Alert.alert("Error", "Failed to save");
-}finally {
+    await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .collection("mestris")
+      .add({
+        name: name.trim(),
+        phone: cleanPhone,
+        village: village.trim(),
+        session: session, // ✅ always correct
+        createdAt: firestore.FieldValue.serverTimestamp()
+      });
+
+    router.back();
+
+  } catch (e) {
+    console.log("Save error:", e);
+    Alert.alert("Error", "Failed to save");
+  } finally {
     setLoading(false);
   }
 };
-
 useEffect(() => {
   return () => {
     ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
