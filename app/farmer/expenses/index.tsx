@@ -22,6 +22,7 @@ export default function ExpensesScreen() {
     const [cropTotals, setCropTotals] = useState<any>({});
     const [categoryTotals, setCategoryTotals] = useState<any>({});
 const [deleteVisible, setDeleteVisible] = useState(false);
+const [activeSession, setActiveSession] = useState("");
     // 🔥 Menu State
     const [menuVisible, setMenuVisible] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any>(null);
@@ -90,24 +91,44 @@ const ExpenseShimmerCard = () => (
             const phone = await AsyncStorage.getItem("USER_PHONE");
             const lang = await AsyncStorage.getItem("APP_LANG");
             if (lang) setLanguage(lang as any);
-            if (!phone) return;
-
+            if (!phone) {
+  setLoading(false);
+  return;
+}
             setLoading(true);
+            const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
+
+const session = userDoc.data()?.activeSession;
+
+if (!session) {
+  setLoading(false);
+  return;
+}
+
+setActiveSession(session);
             unsubscribe = firestore()
                 .collection("users").doc(phone).collection("expenses")
-                .orderBy("createdAt", "desc")
+.where("session", "==", session)
+.orderBy("createdAt", "desc")
+.limit(100)
                 .onSnapshot((snap) => {
                     const list: any[] = [];
                     let total = 0;
                     const cropMap: any = {};
                     const catMap: any = {};
 
-                    snap?.forEach(doc => {
+                    snap.forEach(doc => {
                         const d: any = doc.data();
                         const amt = Number(d.amount) || 0;
                         total += amt;
-                        cropMap[d.crop] = (cropMap[d.crop] || 0) + amt;
-                        catMap[d.category] = (catMap[d.category] || 0) + amt;
+                        const crop = d.crop || "Other";
+const category = d.category || "Other";
+
+cropMap[crop] = (cropMap[crop] || 0) + amt;
+catMap[category] = (catMap[category] || 0) + amt;
                         list.push({ id: doc.id, ...d });
                     });
 
@@ -178,7 +199,7 @@ const ExpenseShimmerCard = () => (
                                 <AppText style={styles.statValue}>₹ {totalExpense.toLocaleString('en-IN')}</AppText>
                                 <View style={styles.divider} />
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} >
-                                    {Object.keys(cropTotals).map((crop) => (
+                                    {Object.keys(cropTotals || {}).map((crop) => (
                                         <View key={crop} style={styles.cropChip}>
                                             <View style={[styles.dot, { backgroundColor: getColor(crop) }]} />
                                             <AppText style={styles.chipText}>{crop}: ₹{cropTotals[crop].toLocaleString('en-IN')}</AppText>
@@ -193,7 +214,7 @@ const ExpenseShimmerCard = () => (
 </AppText>
 
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
-                                    {Object.keys(categoryTotals).map((cat) => {
+                                    {Object.keys(categoryTotals || {}).map((cat) => {
                                         const color = getColor(cat.trim());
                                         return (
                                             <View key={cat} style={[styles.catBox, { borderColor: color + "40" }]}>
@@ -218,7 +239,7 @@ const ExpenseShimmerCard = () => (
     return <ExpenseShimmerCard />;
   }
 
-                    const color = getColor(item.crop);
+                    const color = getColor(item.crop || "default");
                     const date = item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : "---";
 
                     return (
@@ -337,17 +358,19 @@ const ExpenseShimmerCard = () => (
     activeOpacity={0.85}
     style={styles.deleteBtn}
     onPress={async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (phone && selectedItem) {
-        await firestore()
-          .collection("users")
-          .doc(phone)
-          .collection("expenses")
-          .doc(selectedItem.id)
-          .delete();
-      }
-      setDeleteVisible(false);
-      setSelectedItem(null);
+     const phone = await AsyncStorage.getItem("USER_PHONE");
+
+if (phone && selectedItem?.id) {
+  await firestore()
+    .collection("users")
+    .doc(phone)
+    .collection("expenses")
+    .doc(selectedItem.id)
+    .delete();
+}
+
+setDeleteVisible(false);
+setSelectedItem(null);
     }}
   >
     <Ionicons name="trash-outline" size={16} color="#fff" />

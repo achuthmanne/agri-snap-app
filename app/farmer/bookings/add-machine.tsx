@@ -404,7 +404,7 @@ const filteredEquipment = equipmentOptions.filter(item => {
     .toLowerCase()
     .trim();
 
-  return value.includes(searchText.toLowerCase().trim());
+  return (value || "").includes(searchText.toLowerCase().trim());
 });
 
 const filteredOperations = operationsOptions.filter(item => {
@@ -412,7 +412,7 @@ const filteredOperations = operationsOptions.filter(item => {
     .toLowerCase()
     .trim();
 
-  return value.includes(searchText.toLowerCase().trim());
+  return (value || "").includes(searchText.toLowerCase().trim());
 });
 
   /* ---------------- UI ---------------- */

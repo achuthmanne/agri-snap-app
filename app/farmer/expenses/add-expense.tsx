@@ -34,9 +34,27 @@ const [showLabourInfo, setShowLabourInfo] = useState(false);
     const [showValidationModal, setShowValidationModal] = useState(false);
 const [isListening, setIsListening] = useState(false);
 const [voiceTarget, setVoiceTarget] = useState<"modal" | null>(null);
+const [activeSession, setActiveSession] = useState("");
 // 2. Rent Info చూపించడానికి స్టేట్
 const [showRentInfo, setShowRentInfo] = useState(false)
     const amtRef = useRef<TextInput>(null);
+
+useEffect(() => {
+  const loadSession = async () => {
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
+
+    const doc = await firestore()
+      .collection("users")
+      .doc(phone)
+      .get();
+
+    setActiveSession(doc.data()?.activeSession || "");
+  };
+
+  loadSession();
+}, []);
+
 useEffect(() => {
   const loadUserCrops = async () => {
     const phone = await AsyncStorage.getItem("USER_PHONE");
@@ -45,8 +63,9 @@ useEffect(() => {
     const snap = await firestore()
       .collection("users")
       .doc(phone)
-      .collection("fields")
-      .get();
+     .collection("fields")
+.where("session", "==", activeSession)
+.get();
 
     const set = new Set<string>();
 
@@ -58,8 +77,10 @@ useEffect(() => {
     setUserCrops(Array.from(set));
   };
 
-  loadUserCrops();
-}, []);
+ if (activeSession) {
+    loadUserCrops();
+  }
+}, [activeSession]);
 
 const analyzeExpenseAndNotify = async ({
   phone,
@@ -71,7 +92,8 @@ const analyzeExpenseAndNotify = async ({
       .collection("users")
       .doc(phone)
       .collection("expenses")
-      .get();
+.where("session", "==", activeSession)
+.get();
 
     let total = 0;
     let categoryTotal = 0;
@@ -130,7 +152,6 @@ const analyzeExpenseAndNotify = async ({
     { en: "Water(Irrigation)", te: "నీటి ఖర్చులు" },
     { en: "Storage", te: "కోల్డ్ స్టోరేజ్ / నిల్వ" },
     { en: "Packaging", te: "ప్యాకింగ్ ఖర్చులు" },
-    { en: "Market Commission", te: "మార్కెట్ కమిషన్" },
      { en: "Labour", te: "రోజువారీ కూలీలు" },
     { en: "Loan Interest", te: "అప్పుల వడ్డీ" },
     { en: "Market Commission", te: "మార్కెట్ కమిషన్" },
@@ -231,7 +252,7 @@ const filteredData = options.filter(item => {
     .toLowerCase()
     .trim();
 
-  return value.includes(searchText.toLowerCase().trim());
+  return (value || "").includes(searchText.toLowerCase().trim());
 });
 
     const handleSave = async () => {
@@ -239,16 +260,27 @@ const filteredData = options.filter(item => {
             setShowValidationModal(true);
             return;
         }
-        const phone = await AsyncStorage.getItem("USER_PHONE");
-        if (!phone) return;
+       const phone = await AsyncStorage.getItem("USER_PHONE");
+
+if (!phone) {
+  setLoading(false);
+  return;
+}
+
+if (!activeSession) {
+  setLoading(false);
+  return;
+}
+
 
         setLoading(true);
-        const data = {
-            crop: crop.trim(),
-            category: category.trim(),
-            amount: Number(amount),
-            createdAt: firestore.FieldValue.serverTimestamp()
-        };
+       const data = {
+  crop: crop.trim(),
+  category: category.trim(),
+  amount: Number(amount),
+  session: activeSession, // 🔥 MUST
+  createdAt: firestore.FieldValue.serverTimestamp()
+};
 
         try {
             const ref = firestore().collection("users").doc(phone).collection("expenses");
@@ -262,7 +294,9 @@ await analyzeExpenseAndNotify({
 });
 
 router.back();
-        } catch (e) { console.log(e); }
+        } catch (e) {
+  console.log("Expense save error:", e);
+}
         setLoading(false);
     };
 
@@ -388,7 +422,7 @@ useEffect(() => {
   </View>
 )}
                 {/* SAVE BUTTON */}
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
                     <LinearGradient colors={["#DC2626", "#991B1B"]} style={styles.saveGradient}>
                         <AppText style={styles.saveText}>
                             {editId ? (language === "te" ? "ఖర్చు సవరించండి" : "Update Expense") : (language === "te" ? "ఖర్చు భద్రపరచండి" : "Save Expense")}
