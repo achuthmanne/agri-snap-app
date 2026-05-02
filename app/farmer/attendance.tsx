@@ -33,6 +33,7 @@ const [deleteItem, setDeleteItem] = useState<any>(null);
 const [showDeleteModal, setShowDeleteModal] = useState(false);
 const [isListening, setIsListening] = useState(false);
 const isScreenFocused = useIsFocused();
+const [activeSession, setActiveSession] = useState("");
 
 useSpeechRecognitionEvent("result", (event) => {
 
@@ -64,11 +65,14 @@ useEffect(() => {
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
   }
+
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+  };
 }, [isScreenFocused]);
 
-
   const filteredMestris = mestris.filter((item) =>
-  item.name?.toLowerCase().includes(search.toLowerCase())
+(item.name || "").toLowerCase().includes(search.trim().toLowerCase())
 );
 
 useEffect(() => {
@@ -80,44 +84,58 @@ useEffect(() => {
   loadLang();
 }, []);
 
- useEffect(() => {
+useEffect(() => {
   let unsubscribe: any;
 
   const loadData = async () => {
     const userPhone = (await AsyncStorage.getItem("USER_PHONE")) ?? "";
-    if (!userPhone) return;
+    if (!userPhone) {
+  setLoading(false);
+  return;
+}
 
-    setLoading(true); // 👈 START loading
+    setLoading(true);
+
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
+
+    const session = userDoc.data()?.activeSession;
+
+    if (!session) {
+      setLoading(false);
+      return;
+    }
+
+    setActiveSession(session);
 
     unsubscribe = firestore()
       .collection("users")
       .doc(userPhone)
       .collection("mestris")
+      .where("session", "==", session)
       .orderBy("createdAt", "desc")
-      .onSnapshot((snapshot) => {
+     .onSnapshot((snapshot) => {
 
-        const list: any[] = [];
+  const list: any[] = [];
 
-        snapshot.forEach((doc) => {
-          list.push({
-            id: doc.id,
-            ...doc.data()
-          });
-        });
+  snapshot.forEach((doc) => {
+    list.push({
+      id: doc.id,
+      ...doc.data()
+    });
+  });
 
-        setMestris(list);
-
-        setTimeout(() => {
-  setLoading(false);
-}, 300);// 👈 STOP loading
-      });
+  setMestris(list);
+  setLoading(false); // ✅ direct
+});
   };
 
   loadData();
 
   return () => unsubscribe && unsubscribe();
 }, []);
-
 
 
 const handleDelete = (item: any) => {
@@ -130,6 +148,10 @@ const confirmDelete = async () => {
   try {
     const userPhone = (await AsyncStorage.getItem("USER_PHONE")) ?? "";
 
+if (!userPhone || !activeSession) {
+  setShowDeleteModal(false);
+  return;
+}
     const mestriRef = firestore()
       .collection("users")
       .doc(userPhone)
@@ -138,16 +160,17 @@ const confirmDelete = async () => {
 
     // 🔥 STEP 1: get attendance
     const attendanceRef = mestriRef.collection("attendance");
-    const attendanceSnap = await attendanceRef.get();
+    const attendanceSnap = await attendanceRef
+  .where("session", "==", activeSession)
+  .get();
 
-    // 🔥 STEP 2: delete all attendance
-    const batch = firestore().batch();
+const batch = firestore().batch();
 
-    attendanceSnap.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
+attendanceSnap.docs.forEach(doc => {
+  batch.delete(doc.ref);
+});
 
-    await batch.commit();
+await batch.commit();
 
     // 🔥 STEP 3: delete mestri document itself
     await mestriRef.delete();
@@ -308,19 +331,19 @@ const optionsStyles = {
   <View style={styles.emptyBox}>
 
     <Ionicons
-      name={search.length > 0 ? "search-outline" : "people-outline"}
+      name={search.trim().length > 0 ? "search-outline" : "people-outline"}
       size={60}
       color="#9CA3AF"
     />
 
     <AppText style={styles.emptyTitle} language={language}>
-      {search.length > 0
+      {search.trim().length > 0
         ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
         : (language === "te" ? "మేస్త్రీలు లేరు" : "No Mestris")}
     </AppText>
 
     <AppText style={styles.emptySub} language={language}>
-      {search.length > 0
+      {search.trim().length > 0
         ? (language === "te"
             ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
             : "No results match your search")

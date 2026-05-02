@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import {
+  Alert,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -25,7 +26,7 @@ import AppText from "@/components/AppText";
 export default function EditMestri() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-
+const [activeSession, setActiveSession] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [village, setVillage] = useState("");
@@ -67,6 +68,23 @@ const [isListening, setIsListening] = useState(false);
       interimResults: true,
     });
   };
+
+  useEffect(() => {
+  const loadSession = async () => {
+    const userPhone = await AsyncStorage.getItem("USER_PHONE");
+    if (!userPhone) return;
+
+    const doc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
+
+    setActiveSession(doc.data()?.activeSession || "");
+  };
+
+  loadSession();
+}, []);
+
 
 useEffect(() => {
   const loadLang = async () => {
@@ -111,6 +129,13 @@ useEffect(() => {
   loadData();
 }, []);
 
+
+useEffect(() => {
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
+  };
+}, []);
+
   /* ---------------- UPDATE ---------------- */
 
 const handleUpdate = async () => {
@@ -123,25 +148,35 @@ const handleUpdate = async () => {
     setLoading(true);
 
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone || !id) return;
+   if (!userPhone || !id) {
+  setLoading(false); // 🔥 ADD
+  return;
+}
 
+if (!activeSession) {
+  setLoading(false); // 🔥 ADD
+  Alert.alert("Error", "Session missing");
+  return;
+}
     await firestore()
       .collection("users")
       .doc(userPhone)
       .collection("mestris")
       .doc(id as string)
-      .update({
-        name,
-        phone,
-        village
-      });
+     .update({
+  name,
+  phone,
+  village,
+  session: activeSession // 🔥 ensure correct session
+});
 
     setLoading(false);
     router.back();
 
-  } catch (e) {
-    setLoading(false);
-  }
+ } catch (e) {
+  setLoading(false);
+  console.log("Update error:", e); // 🔥 ADD
+}
 };
   /* ---------------- UI ---------------- */
 
@@ -279,11 +314,10 @@ const handleUpdate = async () => {
         </TouchableOpacity>
 
         {/* UPDATE BUTTON */}
-        <TouchableOpacity
-          style={styles.saveBtn}
-          onPress={handleUpdate}
-          activeOpacity={0.9}
-        >
+       <TouchableOpacity
+  style={styles.saveBtn}
+  onPress={handleUpdate}
+  disabled={loading} >
           <LinearGradient
             colors={["#2E7D32", "#1B5E20"]}
             style={styles.saveGradient}

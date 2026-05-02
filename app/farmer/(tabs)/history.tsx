@@ -143,17 +143,20 @@ const handleVoiceSearch = async () => {
 };
 
 
-
 useEffect(() => {
   if (!isScreenFocused) {
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
   }
+
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+  };
 }, [isScreenFocused]);
 
 
   const filteredMestris = mestris.filter((item) =>
-  item.name?.toLowerCase().includes(search.toLowerCase())
+(item.name || "").toLowerCase().includes(search.trim().toLowerCase())
 );
 
   /* ---------- LANGUAGE ---------- */

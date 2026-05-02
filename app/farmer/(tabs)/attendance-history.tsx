@@ -100,6 +100,7 @@ export default function AttendanceHistory() {
   const [loading, setLoading] = useState(false);
  const [isListening, setIsListening] = useState(false);
 const isScreenFocused = useIsFocused();
+const [activeSession, setActiveSession] = useState("");
 
 useSpeechRecognitionEvent("result", (event) => {
 
@@ -125,18 +126,16 @@ const handleVoiceSearch = async () => {
 };
 
 
-
 useEffect(() => {
   if (!isScreenFocused) {
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
   }
+
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+  };
 }, [isScreenFocused]);
-
-
-  const filteredMestris = mestris.filter((item) =>
-  item.name?.toLowerCase().includes(search.toLowerCase())
-);
 
 
   useFocusEffect(
@@ -191,10 +190,31 @@ const getUsageColor = (percent: number) => {
   if (percent >= 40) return "#F59E0B"; // yellow
   return "#EF4444"; // red
 };
+
+
   const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
-    setLoading(true);
+   const userPhone = await AsyncStorage.getItem("USER_PHONE");
+
+if (!userPhone) {
+  setLoading(false);
+  return;
+}
+
+setLoading(true);
+const userDoc = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .get();
+
+const session = userDoc.data()?.activeSession;
+
+if (!session) {
+  setLoading(false);
+  return;
+}
+
+setActiveSession(session);
+
     try {
       const mestriSnap = await firestore()
         .collection("users")
@@ -206,12 +226,13 @@ const getUsageColor = (percent: number) => {
       for (const doc of mestriSnap.docs) {
         const mestri = doc.data();
         const attendanceSnap = await firestore()
-          .collection("users")
-          .doc(userPhone)
-          .collection("mestris")
-          .doc(doc.id)
-          .collection("attendance")
-          .get();
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .doc(doc.id)
+  .collection("attendance")
+  .where("session", "==", session) // 🔥 FIX
+  .get();
 
         const list = attendanceSnap.docs.map(d => d.data());
         let total = 0;
@@ -244,7 +265,7 @@ const getUsageColor = (percent: number) => {
   );
 
   const filtered = mestris.filter(item =>
-    item.name?.toLowerCase().includes(search.toLowerCase())
+  (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
   );
 
   return (
@@ -280,7 +301,7 @@ const getUsageColor = (percent: number) => {
     style={[styles.searchInput, { fontFamily: 'Mandali' }]}
   />
 
-  {search.length > 0 ? (
+  {search.trim().length > 0 ? (
     <TouchableOpacity onPress={() => setSearch("")} >
       <Ionicons name="close-circle" size={20} color="#9CA3AF" />
     </TouchableOpacity>
@@ -316,17 +337,17 @@ const getUsageColor = (percent: number) => {
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Ionicons
-                name={search.length > 0 ? "search-outline" : "people-outline"}
+                name={search.trim().length > 0 ? "search-outline" : "people-outline"}
                 size={60}
                 color="#9CA3AF"
               />
               <AppText style={styles.emptyTitle} language={language}>
-                {search.length > 0
+                {search.trim().length > 0
                   ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
                   : (language === "te" ? "మేస్త్రీలు లేరు" : "No Mestris")}
               </AppText>
               <AppText style={styles.emptySub} language={language}>
-                {search.length > 0
+                {search.trim().length > 0
                   ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
                   : (language === "te" ? "ముందుగా హాజరు నమోదు చేయండి." : "Please record the attendance first.")}
               </AppText>

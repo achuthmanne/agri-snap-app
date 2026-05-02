@@ -29,6 +29,7 @@ const [openCrops, setOpenCrops] = useState<any>({});
 const [openWorks, setOpenWorks] = useState<any>({});
   const [deleteId, setDeleteId] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
+  const [activeSession, setActiveSession] = useState("");
 
   /* ---------------- LOAD LANG ---------------- */
   useFocusEffect(
@@ -45,17 +46,31 @@ const [openWorks, setOpenWorks] = useState<any>({});
   const loadData = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone) return;
-
+if (!activeSession) return;
     setLoading(true);
+const userDoc = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .get();
 
+const session = userDoc.data()?.activeSession;
+
+setActiveSession(session);
+
+if (!session) {
+  setLoading(false);
+  return;
+}
     const snap = await firestore()
       .collection("users")
       .doc(userPhone)
       .collection("mestris")
       .doc(id as string)
       .collection("attendance")
-      .orderBy("createdAt", "desc")
-      .get();
+.where("session", "==", session) // 🔥 FIX
+.orderBy("createdAt", "desc")
+.get();
+    
 
     const list = snap.docs.map(d => ({
   id: d.id,

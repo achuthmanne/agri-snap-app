@@ -63,6 +63,10 @@ useEffect(() => {
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
   }
+
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+  };
 }, [isScreenFocused]);
   /* ---------------- LOAD LANG ---------------- */
   useFocusEffect(
@@ -135,7 +139,7 @@ useEffect(() => {
 
   /* ---------------- SEARCH FILTER ---------------- */
   const filtered = mestris.filter(item =>
-    item.name?.toLowerCase().includes(search.toLowerCase())
+     (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
   );
 
   /* ---------------- AVATAR COLOR ---------------- */

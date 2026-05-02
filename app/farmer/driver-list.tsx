@@ -68,13 +68,15 @@ const handleVoiceSearch = async () => {
   });
 };
 
-
-
 useEffect(() => {
   if (!isScreenFocused) {
     ExpoSpeechRecognitionModule.stop();
     setIsListening(false);
   }
+
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+  };
 }, [isScreenFocused]);
   /* ---------------- LOAD ---------------- */
 

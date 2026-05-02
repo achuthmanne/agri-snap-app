@@ -35,6 +35,7 @@ const [language, setLanguage] = useState<"te" | "en">("te");
 const nameRef = useRef<TextInput>(null);
 const phoneRef = useRef<TextInput>(null);
 const villageRef = useRef<TextInput>(null);
+const [activeSession, setActiveSession] = useState("");
 const t = {
   name: language === "te" ? "పేరు నమోదు చేయండి*" : "Enter name*",
   phone: language === "te" ? "ఫోన్ నంబర్ నమోదు చేయండి" : "Enter phone number",
@@ -64,6 +65,24 @@ const [isListening, setIsListening] = useState(false);
     });
   };
 
+  useEffect(() => {
+  const loadSession = async () => {
+    const userPhone = await AsyncStorage.getItem("USER_PHONE");
+    if (!userPhone) {
+  console.log("User not found");
+  return;
+}
+
+    const doc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
+
+    setActiveSession(doc.data()?.activeSession || "");
+  };
+
+  loadSession();
+}, []);
 
 useEffect(() => {
   const loadLang = async () => {
@@ -84,34 +103,57 @@ useEffect(() => {
   }
 
   try {
-    setLoading(true);
+   setLoading(true);
 
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
+const userPhone = await AsyncStorage.getItem("USER_PHONE");
+const cleanPhone = phone.replace(/\D/g, "");
 
-    if (!userPhone) {
-      Alert.alert("Error", "User not found");
-      return;
-    }
+if (!userPhone) {
+  setLoading(false);
+  Alert.alert("Error", "User not found");
+  return;
+}
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("mestris")
-      .add({
-        name: name.trim(),
-        phone: phone.trim(),
-        village: village.trim(),
-        createdAt: firestore.FieldValue.serverTimestamp()
-      });
+if (!activeSession) {
+  setLoading(false);
+  Alert.alert("Error", "Session not found");
+  return;
+}
 
-    router.back();
+if (cleanPhone && cleanPhone.length !== 10) {
+  setLoading(false);
+  Alert.alert("Error", "Enter valid phone number");
+  return;
+}
 
-  } catch (e) {
-    Alert.alert("Error", "Failed to save");
-  } finally {
+await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .add({
+    name: name.trim(),
+    phone: cleanPhone,
+    village: village.trim(),
+    session: activeSession,
+    createdAt: firestore.FieldValue.serverTimestamp()
+  });
+
+router.back();
+
+  }catch (e) {
+  console.log("Save error:", e); // 🔥 ADD
+  Alert.alert("Error", "Failed to save");
+}finally {
     setLoading(false);
   }
 };
+
+useEffect(() => {
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
+  };
+}, []);
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -250,7 +292,7 @@ maxLength={10}
         </TouchableOpacity>
 
         {/* SAVE BUTTON */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
           <LinearGradient
             colors={["#2E7D32", "#1B5E20"]}
             style={styles.saveGradient}

@@ -34,7 +34,6 @@ const translateY = useSharedValue(20);
 
 const [mestriName, setMestriName] = useState("");
 const [village, setVillage] = useState("");
-  const [date, setDate] = useState("");
   const [crop, setCrop] = useState("");
   const [work, setWork] = useState("");
 const [language, setLanguage] = useState<"te" | "en">("te");
@@ -49,20 +48,15 @@ const [warningType, setWarningType] = useState<"empty" | "duplicate" | null>(nul
   const [loading, setLoading] = useState(false);
   const [loaderType, setLoaderType] = useState("saving");
 const [showSuccess, setShowSuccess] = useState(false);
-const [focusedField, setFocusedField] = useState<string | null>(null);
-const cropRef = useRef<TextInput>(null);
-const workRef = useRef<TextInput>(null);
-const [showCrop, setShowCrop] = useState(false);
-const [showWork, setShowWork] = useState(false);
-const formattedDate = selectedDate.toDateString(); 
+const formattedDate = selectedDate.toLocaleDateString("en-GB");
 const normalizedCrop = crop.trim().toLowerCase();
 const normalizedWork = work.trim().toLowerCase();
 const [modalType, setModalType] = useState<"crop" | "work" | null>(null);
 const [searchText, setSearchText] = useState("");
+const [activeSession, setActiveSession] = useState("");
 const [isListening, setIsListening] = useState(false);
 const [userCrops, setUserCrops] = useState<string[]>([]);
-const uniqueKey = `${formattedDate}_${normalizedCrop}_${normalizedWork}`;
-
+const uniqueKey = `${id}_${formattedDate}_${normalizedCrop}_${normalizedWork}`;
 const WORKS = [
   { en: "Ploughing", te: "దున్నడం" },
   { en: "Sowing", te: "విత్తడం" },
@@ -76,6 +70,23 @@ const WORKS = [
   { en: "General Work", te: "సాధారణ పని" }
 ];
 
+
+useEffect(() => {
+  const loadSession = async () => {
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
+
+    const doc = await firestore()
+      .collection("users")
+      .doc(phone)
+      .get();
+
+    setActiveSession(doc.data()?.activeSession || "");
+  };
+
+  loadSession();
+}, []);
+
 useEffect(() => {
   const loadUserCrops = async () => {
     const phone = await AsyncStorage.getItem("USER_PHONE");
@@ -84,8 +95,9 @@ useEffect(() => {
     const snap = await firestore()
       .collection("users")
       .doc(phone)
-      .collection("fields")
-      .get();
+     .collection("fields")
+.where("session", "==", activeSession)
+.get();
 
     const set = new Set<string>();
 
@@ -97,8 +109,8 @@ useEffect(() => {
     setUserCrops(Array.from(set));
   };
 
-  loadUserCrops();
-}, []);
+  if (activeSession) loadUserCrops();
+}, [activeSession]);
 const handleVoiceSearch = async () => {
   try {
     // 🔥 stop previous session
@@ -176,9 +188,6 @@ useEffect(() => {
   }
 }, [showSuccess]);
 
-const tickStyle = useAnimatedStyle(() => ({
-  transform: [{ scale: tickScale.value }]
-}));
 /* ---------------- COUNT ---------------- */
 
   const inc = (type: string) => {
@@ -201,7 +210,11 @@ const tickStyle = useAnimatedStyle(() => ({
     setShowWarning(true);
     return false;
   }
-
+if (morning === 0 && evening === 0 && full === 0) {
+  setWarningType("empty");
+  setShowWarning(true);
+  return false;
+}
   return true; // 🔥 IMPORTANT
 };
 
@@ -215,15 +228,22 @@ const tickStyle = useAnimatedStyle(() => ({
     setLoading(true);
 
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone || !id) return;
-
+   if (!userPhone || !id) {
+  setLoading(false); // 🔥 ADD THIS
+  return;
+}
+if (!activeSession) {
+  setLoading(false);
+  return;
+}
     const snap = await firestore()
       .collection("users")
       .doc(userPhone)
       .collection("mestris")
       .doc(id as string)
       .collection("attendance")
-      .where("uniqueKey", "==", uniqueKey)
+     .where("uniqueKey", "==", uniqueKey)
+.where("session", "==", activeSession)
       .get();
 
     if (!snap.empty) {
@@ -239,17 +259,17 @@ const tickStyle = useAnimatedStyle(() => ({
       .collection("mestris")
       .doc(id as string)
       .collection("attendance")
-      .add({
-        date: formattedDate,
-        crop: normalizedCrop,
-        work: normalizedWork,
-        uniqueKey,
-        morning,
-        evening,
-        full,
-        createdAt: firestore.FieldValue.serverTimestamp()
-      });
-
+     .add({
+  date: formattedDate,
+  crop: normalizedCrop,
+  work: normalizedWork,
+  uniqueKey,
+  session: activeSession, // 🔥 MUST
+  morning,
+  evening,
+  full,
+  createdAt: firestore.FieldValue.serverTimestamp()
+});
     // ✅ STOP LOADER
     setLoading(false);
 
@@ -262,13 +282,20 @@ const tickStyle = useAnimatedStyle(() => ({
       router.back();
     }, 1600);
 
-  } catch (e) {
-    setLoading(false);
-  }
+  }  catch (e) {
+  setLoading(false);
+  console.log("Attendance save error:", e); // 🔥 ADD
+}
 };
 const formatDate = (date: Date) => {
   return date.toLocaleDateString("en-GB"); // current date in dd/mm/yyyy format
 };
+
+useEffect(() => {
+  return () => {
+    ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
+  };
+}, []);
 
 useEffect(() => {
   const loadMestri = async () => {
@@ -302,7 +329,7 @@ const filteredData = options.filter(item => {
     .toLowerCase()
     .trim();
 
-  return value.includes(searchText.toLowerCase().trim());
+  return (value || "").includes(searchText.toLowerCase().trim());
 });
 
   /* ---------------- UI ---------------- */
@@ -415,7 +442,7 @@ const filteredData = options.filter(item => {
         ))}
 
         {/* SAVE */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}  disabled={loading}  activeOpacity={0.9}>
                  <LinearGradient
                    colors={["#2E7D32", "#1B5E20"]}
                    style={styles.saveGradient}
