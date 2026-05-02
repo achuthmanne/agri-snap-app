@@ -16,6 +16,7 @@ import {
   Animated, AppState, Dimensions,
   FlatList,
   Image,
+  Modal,
   RefreshControl, SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -111,8 +112,11 @@ const [notifCount, setNotifCount] = useState(0);
 const headerCardRef = useRef<any>(null);
 const [isOnline, setIsOnline] = useState(true);
 const [weatherType, setWeatherType] = useState("");
+const [activeSession, setActiveSession] = useState("");
+const [sessionModal, setSessionModal] = useState(false);
+const [oldSessionModal, setOldSessionModal] = useState(false);
+const [allSessions, setAllSessions] = useState<string[]>([]);
   const t = translations[language as "te" | "en"];
-
   const CACHE_KEY = "WEATHER_CACHE";
 const CACHE_TIME = 5 * 60 * 1000; // 5 mins
 
@@ -159,7 +163,6 @@ const getServices = () => [
   // 2. Field & Crop Management (ప్రధానమైన వ్యవసాయ పనులు)
   { service: "fields", title: t.fields, icon: icons.fields, screen: "/farmer/fields" },
   { service: "crops", title: t.crops, icon: icons.crops, screen: "/farmer/summary" },
-  { service: "land", title: t.land, icon: icons.land, screen: "/farmer/(tabs)/land" },
 
   // 3. Money & Business (ఆదాయం మరియు పేమెంట్స్)
   { service: "sales", title: t.sales, icon: icons.sales, screen: "/farmer/sales" },
@@ -171,7 +174,6 @@ const getServices = () => [
   { service: "booking", title: t.booking, icon: icons.booking, screen: "/farmer/bookings" },
 
   // 5. Intelligence & Knowledge (నాలెడ్జ్ కోసం)
-  { service: "ai", title: t.ai, icon: icons.ai, screen: "/farmer/ai" },
   { service: "schemes", title: t.schemes, icon: icons.schemes, screen: "/farmer/schemes" },
   { service: "calculator", title: t.calculator, icon: icons.calculator, screen: "/farmer/(tabs)/calculator" },
   { service: "news", title: t.news, icon: icons.news, screen: "/farmer/(tabs)/news" },
@@ -582,12 +584,23 @@ setRefreshing(false);
         setLoading(false);
         return;
       }
-
+await fetchAllSessions(phone);
       const doc = await firestore().collection("users").doc(phone).get();
       const data = doc.data();
 
       if (data?.name) setName(data.name);
+const current = getCurrentSession();
 
+if (!data?.activeSession) {
+  await firestore()
+    .collection("users")
+    .doc(phone)
+    .set({ activeSession: current }, { merge: true });
+
+  setActiveSession(current);
+} else {
+  setActiveSession(data.activeSession);
+}
     } catch (e) {
       console.log(e);
     }
@@ -595,7 +608,6 @@ setRefreshing(false);
     setLoading(false);
   };
 
-const CITY_CACHE_KEY = "CITY_TRANSLATIONS";
 
 const translateToTelugu = async (text: string) => {
 
@@ -619,7 +631,54 @@ const translateToTelugu = async (text: string) => {
 };
 
 
+// 🌾 CURRENT SESSION (June based)
+const getCurrentSession = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const startYear = now.getMonth() >= 5 ? year : year - 1;
 
+  return `${startYear}-${(startYear + 1).toString().slice(-2)}`;
+};
+
+// 📅 LAST 3 SESSIONS
+const getSessionList = () => {
+  const current = getCurrentSession();
+  const startYear = parseInt(current.split("-")[0]);
+
+  return [
+    `${startYear - 2}-${(startYear - 1).toString().slice(-2)}`,
+    `${startYear - 1}-${(startYear).toString().slice(-2)}`,
+    current
+  ];
+};
+const sessions = getSessionList();
+
+const oldestSession = sessions[0]; // 2023-24
+
+const oldSessions = allSessions.filter(s => {
+  return parseInt(s.split("-")[0]) < parseInt(oldestSession.split("-")[0]);
+});
+const fetchAllSessions = async (phone:string) => {
+  const snap = await firestore()
+    .collection("users")
+    .doc(phone)
+    .collection("fields")
+    .get();
+
+  const sessionsSet = new Set<string>();
+
+  snap.forEach(doc => {
+    const data = doc.data();
+    if (data.session) {
+      sessionsSet.add(data.session);
+    }
+  });
+
+  const sorted = Array.from(sessionsSet).sort(
+  (a, b) => parseInt(b.split("-")[0]) - parseInt(a.split("-")[0])
+);
+  setAllSessions(sorted);
+};
   /* ---------------- WEATHER ---------------- */
 
 const formatWeather = (raw: string, language: string) => {
@@ -1502,6 +1561,48 @@ activeHeaderCard===1 && styles.headerDotActive
 </Animated.View>
 
 
+{/* 🔥 ACTIVE SESSION CARD */}
+<TouchableOpacity 
+  style={styles.sessionMainContainer}
+  onPress={() => setSessionModal(true)}
+  activeOpacity={0.9}
+>
+
+  {/* LEFT CONTENT */}
+  <View style={styles.sessionContent}>
+
+    <View style={styles.sessionIcon}>
+      <Ionicons name="calendar-outline" size={20} color="#16A34A" />
+    </View>
+
+    <View>
+      <AppText style={styles.sessionLabel}>
+        {language === "te" 
+          ? "ప్రస్తుత సాగు సంవత్సరం" 
+          : "Active Season"}
+      </AppText>
+
+      <AppText style={styles.sessionValue}>
+        {activeSession || "Set Season"}
+      </AppText>
+    </View>
+
+  </View>
+
+  {/* RIGHT SIDE POWER BUTTON */}
+ <TouchableOpacity 
+  style={styles.powerButton}
+  onPress={() => setSessionModal(true)}
+>
+    <LinearGradient
+      colors={["#ff4d4d", "#b30000"]}
+      style={styles.powerGradient}
+    >
+      <Ionicons name="power" size={20} color="#fff" />
+    </LinearGradient>
+  </TouchableOpacity>
+
+</TouchableOpacity>
         {/* QUICK SERVICES */}
 
        <View style={styles.sectionHeader}>
@@ -1618,6 +1719,140 @@ activeOpacity={0.75}
 
   ))}
 </View>
+
+
+<Modal visible={sessionModal} transparent animationType="slide">
+  <View style={{
+    flex:1,
+    backgroundColor:"rgba(0,0,0,0.4)",
+    justifyContent:"flex-end"
+  }}>
+
+    <View style={{
+      backgroundColor:"#fff",
+      padding:20,
+      borderTopLeftRadius:20,
+      borderTopRightRadius:20
+    }}>
+<View style={styles.modalHeader}>
+  <AppText style={styles.sectionTitle}>
+    {language === "te" ? "సంవత్సరం ఎంచుకోండి" : "Select Season"}
+  </AppText>
+
+  <TouchableOpacity
+    style={styles.closeBtn}
+    onPress={() => setSessionModal(false)}
+  >
+    <Ionicons name="close" size={16} color="#1F2937" />
+  </TouchableOpacity>
+</View>
+
+      {sessions.map((s)=>(
+        <TouchableOpacity
+          key={s}
+          style={{
+            padding:14,
+            borderRadius:12,
+            backgroundColor: activeSession === s ? "#DCFCE7" : "#F3F4F6",
+            marginBottom:10
+          }}
+          onPress={async ()=>{
+            const phone = await AsyncStorage.getItem("USER_PHONE");
+
+            await firestore()
+              .collection("users")
+              .doc(phone!)
+              .update({ activeSession: s });
+
+            setActiveSession(s);
+            setSessionModal(false);
+          }}
+        >
+          <AppText style={{fontSize:16,fontWeight:"600"}}>
+            {s}
+          </AppText>
+        </TouchableOpacity>
+      ))}
+{/* 🔥 VIEW OLD DATA BUTTON */}
+{oldSessions.length > 0 && (
+  <TouchableOpacity
+    style={{
+      padding:14,
+      borderRadius:12,
+      backgroundColor:"#E0F2FE",
+      marginTop:10
+    }}
+    onPress={() => {
+      setSessionModal(false);
+      setOldSessionModal(true);
+    }}
+  >
+    <AppText style={{textAlign:"center",fontWeight:"600"}}>
+      {language === "te" ? "పాత డేటా చూడండి" : "View Old Data"}
+    </AppText>
+  </TouchableOpacity>
+)}
+
+    </View>
+  </View>
+</Modal>
+
+<Modal visible={oldSessionModal} transparent animationType="slide">
+  <View style={{
+    flex:1,
+    backgroundColor:"rgba(0,0,0,0.4)",
+    justifyContent:"flex-end"
+  }}>
+    <View style={{
+      backgroundColor:"#fff",
+      padding:20,
+      borderTopLeftRadius:20,
+      borderTopRightRadius:20
+    }}>
+<View style={styles.modalHeader}>
+  <AppText style={styles.sectionTitle}>
+    {language === "te" ? "పాత సీజన్లు" : "Old Sessions"}
+  </AppText>
+
+  <TouchableOpacity
+    style={styles.closeBtn}
+    onPress={() => setOldSessionModal(false)}
+  >
+    <Ionicons name="close" size={16} color="#1F2937" />
+  </TouchableOpacity>
+</View>
+
+      {oldSessions.map((s)=>(
+        <TouchableOpacity
+          key={s}
+          style={{
+            padding:14,
+            borderRadius:12,
+            backgroundColor:"#F3F4F6",
+            marginBottom:10
+          }}
+          onPress={async ()=>{
+            const phone = await AsyncStorage.getItem("USER_PHONE");
+
+            await firestore()
+              .collection("users")
+              .doc(phone!)
+              .update({ activeSession: s });
+
+            setActiveSession(s);
+            setOldSessionModal(false);
+          }}
+        >
+          <AppText style={{fontSize:16,fontWeight:"600"}}>
+            {s}
+          </AppText>
+        </TouchableOpacity>
+      ))}
+
+
+    </View>
+  </View>
+</Modal>
 
       </Animated.ScrollView>
 
@@ -1930,6 +2165,81 @@ fontSize:16,
 fontWeight:"bold",
 marginRight:6
 },
+modalHeader: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 15,
+},
+
+closeBtn: {
+  width: 32,
+  height: 32,
+  borderRadius: 10,
+
+  backgroundColor: "#E5E7EB",
+  justifyContent: "center",
+  alignItems: "center",
+},
+sessionMainContainer: {
+  marginHorizontal: 20,
+  marginTop: 10,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+
+  padding: 14,
+  borderRadius: 20,
+
+  backgroundColor: '#ffffff',
+
+  borderWidth: 1,
+  borderColor: '#dfe1e3',
+
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+},
+
+sessionContent: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+
+sessionIcon: {
+  width: 40,
+  height: 40,
+  borderRadius: 12,
+  backgroundColor: '#F8FAF9',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 10,
+},
+
+sessionLabel: {
+  fontSize: 12,
+  color: '#6B7280',
+},
+
+sessionValue: {
+  fontSize: 20,
+  fontWeight: '600',
+  color: '#1F2937',
+},
+
+powerButton: {
+  width: 44,
+  height: 44,
+  borderRadius: 14,
+  overflow: "hidden",
+},
+
+powerGradient: {
+  flex: 1,
+  justifyContent: "center",
+  alignItems: "center",
+},
 
   sectionHeader:{
     flexDirection:"row",
@@ -1939,6 +2249,22 @@ marginRight:6
     marginTop:25,
     marginBottom: 8
   },
+
+sessionBox: {
+  marginHorizontal: 20,
+  marginTop: 10,
+  marginBottom: 10,
+  backgroundColor: "#ffffff",
+  padding: 14,
+  borderRadius: 16,
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: "#E5E7EB"
+},
+
+
 
   sectionTitle:{
     fontSize:20,
