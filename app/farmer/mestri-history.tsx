@@ -43,35 +43,36 @@ const [openWorks, setOpenWorks] = useState<any>({});
   );
 
   /* ---------------- LOAD DATA ---------------- */
-  const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
-if (!activeSession) return;
-    setLoading(true);
-const userDoc = await firestore()
-  .collection("users")
-  .doc(userPhone)
-  .get();
+const loadData = async () => {
+  const userPhone = await AsyncStorage.getItem("USER_PHONE");
+  if (!userPhone) return;
 
-const session = userDoc.data()?.activeSession;
+  setLoading(true);
 
-setActiveSession(session);
+  const userDoc = await firestore()
+    .collection("users")
+    .doc(userPhone)
+    .get();
 
-if (!session) {
-  setLoading(false);
-  return;
-}
-    const snap = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("mestris")
-      .doc(id as string)
-      .collection("attendance")
-.where("session", "==", session) // 🔥 FIX
-.orderBy("createdAt", "desc")
-.get();
-    
+  const session = userDoc.data()?.activeSession;
 
+  if (!session) {
+    setLoading(false);
+    return;
+  }
+
+  setActiveSession(session);
+
+  const snap = await firestore()
+    .collection("users")
+    .doc(userPhone)
+    .collection("mestris")
+    .doc(id as string)
+    .collection("attendance")
+    .where("session", "==", session)
+    .where("createdAt", "!=", null)
+    .orderBy("createdAt", "desc")
+    .get();
     const list = snap.docs.map(d => ({
   id: d.id,
   ...(d.data() as any)
@@ -169,10 +170,20 @@ const getWorkColor = (work: string) =>
       <StatusBar barStyle="light-content" />
 
     <AppHeader
-  title={name}
-  subtitle={village ? `${village}` : ""}
+  title={language === "te" ? "హాజరు వివరాలు" : "Attendance Details"}
+  subtitle={language === "te"
+  ? `సీజన్: ${activeSession}`
+  : `Season: ${activeSession}`}
   language={language}
 />
+
+<View style={styles.mestriBox}>
+
+  <AppText style={styles.mestriName}>
+    {name} {village ? ` | ${village}` : ""}
+  </AppText>
+
+</View>
       {/* SUMMARY */}
     <View style={styles.summaryBox}>
 
@@ -775,6 +786,7 @@ mestriName: {
   fontSize: 16,
   fontWeight: "600",
   color: "#111827",
+  textAlign: "center"
 },
 
 mestriSub: {

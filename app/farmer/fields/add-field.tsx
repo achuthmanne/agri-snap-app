@@ -141,7 +141,9 @@ const soilOptions = [
 // ఒకవేళ .exists పని చేయకపోతే .exists() అని లేదా ఇలా చెక్ చెయ్
 if (doc.data()) { 
   const data = doc.data();
+
   setCrop(data?.crop || "");
+  setSoilType(data?.soilType || ""); // 🔥 ADD THIS
   setAcres(String(data?.acres || ""));
   setType(data?.type || null);
   setRent(String(data?.rent || ""));

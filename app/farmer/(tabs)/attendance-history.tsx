@@ -274,9 +274,11 @@ setActiveSession(session);
 
       <AppHeader
         title={language === "te" ? "హాజరు చరిత్ర" : "Attendance History"}
-        subtitle={language === "te" ? "పూర్వపు వివరాలు" : "Previous Details"}
-        language={language}
-      />
+         subtitle={language === "te"
+  ? `సీజన్: ${activeSession}`
+  : `Season: ${activeSession}`}
+  language={language}
+/>
 
     {/* SEARCH */}
 <View style={[

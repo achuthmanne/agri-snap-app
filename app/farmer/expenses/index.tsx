@@ -112,6 +112,7 @@ setActiveSession(session);
             unsubscribe = firestore()
                 .collection("users").doc(phone).collection("expenses")
 .where("session", "==", session)
+.where("createdAt", "!=", null)   // 🔥 ADD THIS
 .orderBy("createdAt", "desc")
 .limit(100)
               .onSnapshot((snap) => {

@@ -66,7 +66,8 @@ if (!activeSession) {
     // ఎందుకంటే మనం డేటాబేస్ లో ఉన్న యాక్టివ్ సెషన్ ఏంటో ముందే తెలియదు కాబట్టి.
     unsubscribe = firestore()
       .collection("users").doc(phone).collection("fields")
-.where("session", "==", activeSession)   // 🔥 ADD THIS LINE
+.where("session", "==", activeSession)
+.where("createdAt", "!=", null)   // 🔥 IMPORTANT
 .orderBy("createdAt", "desc")
       
       .onSnapshot((snap) => {
