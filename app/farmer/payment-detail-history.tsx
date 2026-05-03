@@ -5,7 +5,10 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import ShimmerPlaceHolder from "react-native-shimmer-placeholder";
+import LinearGradient from "react-native-linear-gradient";
+import { LayoutAnimation, Platform, UIManager } from "react-native";
 import {
   FlatList,
   Modal,
@@ -34,29 +37,47 @@ const [dateMap, setDateMap] = useState<any>({});
 
   const getCropColor = (crop: string) => cropColors[crop.charCodeAt(0) % cropColors.length];
   const getWorkColor = (work: string) => workColors[work.charCodeAt(0) % workColors.length];
-
+useEffect(() => {
+  if (Platform.OS === "android") {
+    UIManager.setLayoutAnimationEnabledExperimental?.(true);
+  }
+}, []);
   const loadData = async () => {
     const phone = await AsyncStorage.getItem("USER_PHONE");
     if (!phone) return;
     setLoading(true);
 
     try {
+      const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
+
+const activeSession = userDoc.data()?.activeSession;
+if (!activeSession) return;
       const snap = await firestore()
         .collection("users")
         .doc(phone)
         .collection("payments")
-        .where("mestriId", "==", mestriId)
-        .get();
+.where("mestriId", "==", mestriId)
+.where("session", "==", activeSession) // 🔥 MUST ADD
+.get();
 
       const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-
+if (!list.length) {
+  setGrouped({});
+  setSummary({ payments: 0, days: 0, paidDays: 0 }); // 🔥 add
+  setStatus({ label: "Not Paid", color: "#EF4444" }); // 🔥 add
+  return;
+}
       const attendanceSnap = await firestore()
         .collection("users")
         .doc(phone)
         .collection("mestris")
         .doc(mestriId as string)
         .collection("attendance")
-        .get();
+.where("session", "==", activeSession) // 🔥 ADD
+.get();
 
       const totalDays = attendanceSnap.size;
       let totalPayments = 0;
@@ -74,38 +95,39 @@ const [dateMap, setDateMap] = useState<any>({});
 
       setSummary({ payments: totalPayments, days: totalDays, paidDays: paidDays });
       setStatus(newStatus);
-const map: any = {};
-
-for (const item of list) {
-
+const promises = list.map(async (item) => {
   const ids = item.selectedAttendanceIds || [];
-  if (ids.length === 0) continue;
+  if (ids.length === 0) return null;
 
-  const dates: string[] = [];
-
-  for (const attId of ids) {
-    const doc = await firestore()
+  const docPromises = ids.map((attId: string) =>
+    firestore()
       .collection("users")
       .doc(phone)
       .collection("mestris")
       .doc(mestriId as string)
       .collection("attendance")
       .doc(attId)
-      .get();
+      .get()
+  );
 
-    const data = doc.data();
-    if (data?.date) {
-      dates.push(data.date);
-    }
-  }
+  const docs = await Promise.all(docPromises);
 
-  // 🔥 sort dates
-  dates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  const dates = docs
+    .map((d) => d.data()?.date)
+    .filter(Boolean)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-  map[item.id] = dates;
-}
+  return { id: item.id, dates };
+});
 
-setDateMap(map);
+const results = (await Promise.all(promises)).filter(Boolean);
+
+const finalMap: any = {};
+results.forEach((r: any) => {
+  finalMap[r.id] = r.dates;
+});
+
+setDateMap(finalMap);
       const group: any = {};
       list.forEach((item) => {
         const crop = item.crop || "Others";
@@ -117,8 +139,9 @@ setDateMap(map);
       setGrouped(group);
     } catch (e) {
       console.log(e);
-    }
-    setLoading(false);
+   } finally {
+  setLoading(false); // 🔥 MUST
+}
   };
 
   useFocusEffect(
@@ -133,14 +156,73 @@ setDateMap(map);
   const toggleCrop = (crop: string) => setOpenCrops((p: any) => ({ ...p, [crop]: !p[crop] }));
   const toggleWork = (key: string) => setOpenWorks((p: any) => ({ ...p, [key]: !p[key] }));
 
-  const handleDelete = async () => {
-    const phone = await AsyncStorage.getItem("USER_PHONE");
-    if (!phone) return;
-    await firestore().collection("users").doc(phone).collection("payments").doc(deleteId).delete();
-    setModalVisible(false);
-    loadData();
-  };
+const handleDelete = async () => {
+  const phone = await AsyncStorage.getItem("USER_PHONE");
+  if (!phone) return;
 
+  try {
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(phone)
+      .get();
+
+    const activeSession = userDoc.data()?.activeSession;
+    if (!activeSession) return;
+
+    const docRef = firestore()
+      .collection("users")
+      .doc(phone)
+      .collection("payments")
+      .doc(deleteId);
+
+    const doc = await docRef.get();
+
+    const data = doc.data();
+
+    if (data?.session !== activeSession) return;
+
+    // 🔥 INSTANT SUMMARY UPDATE
+    setSummary((prev) => ({
+      payments: prev.payments - 1,
+      days: prev.days,
+      paidDays: prev.paidDays - (data?.details?.totalDays || 0),
+    }));
+
+    // 🔥 REMOVE FROM UI (GROUPED)
+    setGrouped((prev: any) => {
+      const newGroup = { ...prev };
+
+      Object.keys(newGroup).forEach((crop) => {
+        Object.keys(newGroup[crop]).forEach((work) => {
+          newGroup[crop][work] = newGroup[crop][work].filter(
+            (item: any) => item.id !== deleteId
+          );
+
+          // empty cleanup
+          if (newGroup[crop][work].length === 0) {
+            delete newGroup[crop][work];
+          }
+        });
+
+        if (Object.keys(newGroup[crop]).length === 0) {
+          delete newGroup[crop];
+        }
+      });
+
+      return newGroup;
+    });
+
+    await docRef.delete();
+
+    setModalVisible(false);
+
+    // 🔥 OPTIONAL: background refresh
+    loadData();
+
+  } catch (e) {
+    console.log(e);
+  }
+};
   const getStatusText = (label: string) => {
     if (language === "te") {
       if (label === "Cleared") return "చెల్లింపు పూర్తి";
@@ -150,23 +232,68 @@ setDateMap(map);
     return label;
   };
 
+const Shimmer = (props: any) => (
+  <ShimmerPlaceHolder
+    LinearGradient={LinearGradient}
+    shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
+    style={{ borderRadius: 6, ...props.style }}
+  />
+);
+if (loading) {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
-      <AppHeader title={name as string} subtitle={village as string} language={language} />
+
+      <AppHeader
+        title={language === "te" ? "చెల్లింపు చరిత్ర" : "Payment Details"}
+        subtitle={language === "te" ? "పని వివరాలు" : "Work History"}
+        language={language}
+      />
+
+      <View style={styles.dashboard}>
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={styles.box}>
+            <Shimmer style={{ width: 60, height: 12, marginBottom: 6 }} />
+            <Shimmer style={{ width: 40, height: 16 }} />
+          </View>
+        ))}
+      </View>
+
+      {[1, 2, 3, 4].map((i) => (
+        <View key={i} style={styles.shimmerCard}>
+          <Shimmer style={{ width: "40%", height: 16, marginBottom: 10 }} />
+          <Shimmer style={{ width: "80%", height: 12, marginBottom: 6 }} />
+          <Shimmer style={{ width: "60%", height: 12 }} />
+        </View>
+      ))}
+    </SafeAreaView>
+  );
+}
+
+
+  return (
+    
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" />
+     <AppHeader
+  title={language === "te" ? "చెల్లింపు చరిత్ర" : "Payment Details"}
+  subtitle={language === "te" ? "పని వివరాలు" : "Work History"}
+  language={language}
+/>
+
 
       <View style={styles.dashboard}>
         <View style={styles.box}>
           <AppText style={styles.label} language={language}>{language === "te" ? "చెల్లింపులు" : "Payments"}</AppText>
           <AppText style={styles.value}>
-  {loading ? "----" : summary.payments}
+   {summary.payments}
 </AppText>
         </View>
         <View style={styles.dividerVertical} />
         <View style={styles.box}>
           <AppText style={styles.label} language={language}>{language === "te" ? "రోజులు" : "Days"}</AppText>
          <AppText style={styles.value}>
-  {loading ? "----" : `${summary.paidDays} / ${summary.days}`}
+  {`${summary.paidDays} / ${summary.days}`}
 </AppText>
         </View>
         <View style={styles.dividerVertical} />
@@ -179,9 +306,7 @@ setDateMap(map);
   ]}
   language={language}
 >
-  {loading
-    ? "----"
-    : getStatusText(status.label)}
+  {getStatusText(status.label)}
 </AppText>
         </View>
       </View>
@@ -190,12 +315,16 @@ setDateMap(map);
         data={Object.keys(grouped)}
         keyExtractor={(item) => item}
         contentContainerStyle={{ paddingBottom: 100 }}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="wallet-outline" size={60} color="#9CA3AF" />
-            <AppText style={styles.emptyTitle} language={language}>{language === "te" ? "చెల్లింపులు లేవు" : "No Payments"}</AppText>
-          </View>
-        }
+      ListEmptyComponent={
+  loading ? null : (
+    <View style={styles.empty}>
+      <Ionicons name="wallet-outline" size={60} color="#9CA3AF" />
+      <AppText style={styles.emptyTitle} language={language}>
+        {language === "te" ? "చెల్లింపులు లేవు" : "No Payments"}
+      </AppText>
+    </View>
+  )
+}
         renderItem={({ item: crop }) => {
           const cropData = grouped[crop];
           const isCropOpen = openCrops[crop];
@@ -538,6 +667,14 @@ overlay: {
     borderRadius: 12,
     backgroundColor: "#DC2626"
   },
+  shimmerCard: {
+  marginHorizontal: 20,
+  marginTop: 12,
+  padding: 14,
+  borderRadius: 12,
+  backgroundColor: "#fff",
+  overflow: "hidden",
+},
   cancelText: {
     fontSize: 14,
     color: "#4B5563",

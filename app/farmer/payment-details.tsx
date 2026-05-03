@@ -112,11 +112,19 @@ export default function PaymentDetails() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      <AppHeader
-        title={name as string}
-        subtitle={village as string}
-        language={language}
-      />
+     <AppHeader
+  title={language === "te" ? "చెల్లింపు వివరాలు" : "Payment Details"}
+  subtitle={language === "te" ? "పని వివరాలు" : "Work Summary"}
+  language={language}
+/>
+
+<View style={styles.topInfoBox}>
+
+  <AppText style={styles.mainTitle} language={language}>
+    {name} | {village}
+  </AppText>
+
+</View>
 
        {/* LIST */}
       {loading ? (
@@ -146,8 +154,7 @@ export default function PaymentDetails() {
             const isCropOpen = openCrops[item];
             const works = grouped[item];
 // 🔥 crop total days
-const cropDays = Object.values(works)
-  .reduce((sum: number, arr: any) => sum + arr.length, 0);
+const workCount = Object.keys(works).length; // 🔥 number of works
             return (
               <View>
 
@@ -164,8 +171,8 @@ const cropDays = Object.values(works)
     </AppText>
 
     <AppText style={styles.cropDays} language={language}>
-      {cropDays} {language === "te" ? "రోజులు" : "days"}
-    </AppText>
+  {workCount} {language === "te" ? "పనులు" : "works"}
+</AppText>
   </View>
 
   <Ionicons
@@ -322,6 +329,18 @@ workDays: {
     marginHorizontal: 40,
     padding: 8
   },
+topInfoBox: {
+  marginHorizontal: 20,
+  marginTop: 12,
+  padding: 14,
+},
+
+mainTitle: {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#111827",
+  textAlign: "center"
+},
 
   cropText: {
     fontWeight: "600"

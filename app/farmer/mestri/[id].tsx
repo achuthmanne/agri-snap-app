@@ -253,23 +253,38 @@ if (!activeSession) {
       return;
     }
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("mestris")
-      .doc(id as string)
-      .collection("attendance")
-     .add({
-  date: formattedDate,
-  crop: normalizedCrop,
-  work: normalizedWork,
-  uniqueKey,
-  session: activeSession, // 🔥 MUST
-  morning,
-  evening,
-  full,
-  createdAt: firestore.FieldValue.serverTimestamp()
-});
+await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .doc(id as string)
+  .collection("attendance")
+  .add({
+    date: formattedDate,
+    crop: normalizedCrop,
+    work: normalizedWork,
+    uniqueKey,
+    session: activeSession,
+    morning,
+    evening,
+    full,
+    createdAt: firestore.FieldValue.serverTimestamp()
+  });
+
+// 🔥 ADD THIS (FIX 4)
+await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .doc(id as string)
+  .set(
+    {
+      attendanceSessions: {
+        [activeSession]: true
+      }
+    },
+    { merge: true }
+  );
     // ✅ STOP LOADER
     setLoading(false);
 

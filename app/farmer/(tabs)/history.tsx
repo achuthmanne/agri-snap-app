@@ -7,7 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { useIsFocused } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   SafeAreaView,
@@ -155,10 +155,6 @@ useEffect(() => {
 }, [isScreenFocused]);
 
 
-  const filteredMestris = mestris.filter((item) =>
-(item.name || "").toLowerCase().includes(search.trim().toLowerCase())
-);
-
   /* ---------- LANGUAGE ---------- */
   useFocusEffect(
     useCallback(() => {
@@ -186,76 +182,93 @@ useEffect(() => {
 
   try {
     const db = firestore();
+const userDoc = await db.collection("users").doc(phone).get();
+const activeSession = userDoc.data()?.activeSession;
 
+if (!activeSession) return;
     /* 🔥 1. GET PAYMENTS ONLY */
     const paymentSnap = await db
       .collection("users")
       .doc(phone)
       .collection("payments")
-      .get();
+.where("session", "==", activeSession) // 🔥 KEY FIX
+.get();
 
     const payments = paymentSnap.docs.map(d => d.data());
 
     /* 🔥 2. GROUP BY MESTRI */
     const map: any = {};
 
-    payments.forEach(p => {
-      const id = p.mestriId;
-      if (!id) return;
+   payments.forEach(p => {
+  const id = p.mestriId;
+  if (!id) return;
 
-      if (!map[id]) {
-        map[id] = {
-          id,
-          name: p.name,
-          village: p.village,
-          paid: 0
-        };
-      }
+  const ids = Array.isArray(p.selectedAttendanceIds)
+    ? p.selectedAttendanceIds
+    : [];
 
-      map[id].paid += (p.selectedAttendanceIds || []).length;
-    });
+  if (!map[id]) {
+    map[id] = {
+      id,
+      name: p.name,
+      village: p.village,
+      paid: 0
+    };
+  }
+
+  map[id].paid += ids.length; // ✅ safe
+});
 
     /* 🔥 3. FETCH TOTAL ATTENDANCE */
-    const result: any[] = [];
 
-    for (const key in map) {
-      const attendanceSnap = await db
-        .collection("users")
-        .doc(phone)
-        .collection("mestris")
-        .doc(key)
-        .collection("attendance")
-        .get();
+ const promises = Object.keys(map).map(async (key) => {
 
-      const total = attendanceSnap.size;
-      const paid = map[key].paid;
+  const attendanceSnap = await db
+    .collection("users")
+    .doc(phone)
+    .collection("mestris")
+    .doc(key)
+    .collection("attendance")
+    .where("session", "==", activeSession)
+    .get();
 
-      const percent = total > 0 ? (paid / total) * 100 : 0;
+  const total = attendanceSnap.size;
+  const paid = map[key].paid;
 
-      result.push({
-        id: key,
-        name: map[key].name,
-        village: map[key].village,
-        total,
-        paid,
-        percent
-      });
-    }
+  // 🔥 KEY FIX
+  if (total === 0) return null;
 
-    setMestris(result);
+  const percent = (paid / total) * 100;
+
+  return {
+    id: key,
+    name: map[key].name,
+    village: map[key].village,
+    total,
+    paid,
+    percent
+  };
+});
+
+const result = (await Promise.all(promises)).filter(Boolean);
+setMestris(result);
 
   } catch (e) {
     console.log(e);
-  }
-
-  setLoading(false);
+  }finally {
+  setLoading(false); // 🔥 MUST
+}
 };
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
-  const filtered = mestris.filter(i =>
-    i.name?.toLowerCase().includes(search.toLowerCase())
+const filtered = useMemo(() => {
+  return mestris.filter(item =>
+    (item.name || "")
+      .toLowerCase()
+      .includes(search.trim().toLowerCase())
   );
+}, [mestris, search]);
 
   /* ---------- SHIMMER ---------- */
   const ShimmerRow = () => (
@@ -332,7 +345,7 @@ useEffect(() => {
 ) : (
   <FlatList
     data={filtered}
-    keyExtractor={(i) => i.id}
+keyExtractor={(i, index) => i.id || index.toString()}
     contentContainerStyle={{ paddingBottom: 100 }}
 
     /* 🔥 EMPTY STATE ADD HERE */
@@ -348,7 +361,7 @@ useEffect(() => {
         <AppText style={styles.emptyTitle} language={language}>
           {search.length > 0
             ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-            : (language === "te" ? "చెల్లింపులు లేవు" : "No Payments Yet")}
+            : (language === "te" ? "చెల్లింపు చరిత్ర లేవు" : "No Payments History Yet")}
         </AppText>
 
         <AppText style={styles.emptySub} language={language}>
@@ -404,7 +417,7 @@ useEffect(() => {
                 </AppText>
 
                 <AppText style={styles.paidText} language={language}>
-                  {language === "te" ? "చెల్లించినది" : "Paid"}: {item.paid} / {item.total}
+                 {item.paid} / {item.total} {language === "te" ? "చెల్లించినది" : "Paid"}
                 </AppText>
               </View>
 

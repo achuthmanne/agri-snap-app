@@ -6,6 +6,9 @@ import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import NetInfo from "@react-native-community/netinfo";
+import { BackHandler } from "react-native";
+
 import {
   Animated,
   Dimensions,
@@ -16,13 +19,14 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+export const unstable_settings = {
+  gestureEnabled: false, // 🔥 FULL BLOCK
+};
 
 export default function PaymentSuccess() {
   const router = useRouter();
   const params = useLocalSearchParams();
-
+const hasSaved = useRef(false);
   const {
     id, ids, crop, work, name, village,
     totalDays, totalWorkers,
@@ -30,7 +34,7 @@ export default function PaymentSuccess() {
     morningRate, eveningRate, fullRate,
     amount, paymentMode
   } = params;
-
+const [navigating, setNavigating] = useState(false);
   const [status, setStatus] = useState<"loading" | "success" | "failed">("loading");
   const [language, setLanguage] = useState<"en" | "te">("en");
   const [helpModal, setHelpModal] = useState(false);
@@ -39,8 +43,18 @@ export default function PaymentSuccess() {
   // Real Green Color
   const SUCCESS_GREEN = "#16A34A"; 
 
-  const selectedIds = typeof ids === "string" ? JSON.parse(ids) : Array.isArray(ids) ? ids : [];
+ let selectedIds: string[] = [];
 
+try {
+  selectedIds =
+    typeof ids === "string"
+      ? JSON.parse(ids)
+      : Array.isArray(ids)
+      ? ids
+      : [];
+} catch {
+  selectedIds = [];
+}
   /* ---------- LOAD LANGUAGE ---------- */
   useFocusEffect(
     useCallback(() => {
@@ -52,54 +66,96 @@ export default function PaymentSuccess() {
     }, [])
   );
 
+useEffect(() => {
+  const backAction = () => {
+    return true; // 🔥 block back
+  };
+
+  const subscription = BackHandler.addEventListener(
+    "hardwareBackPress",
+    backAction
+  );
+
+  return () => subscription.remove();
+}, []);
+
+
+
+
   const saveData = async () => {
-    setStatus("loading");
-    try {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) { setStatus("failed"); return; }
-      
-      const db = firestore();
-      const paymentData = {
-        mestriId: id,
-        selectedAttendanceIds: selectedIds,
-        crop, work, name, village, paymentMode,
-        totalAmount: Number(amount),
-        details: {
-          totalDays: Number(totalDays),
-          totalWorkers: Number(totalWorkers),
-          morning: Number(totalMorning),
-          evening: Number(totalEvening),
-          full: Number(totalFull),
-          mRate: Number(morningRate),
-          eRate: Number(eveningRate),
-          fRate: Number(fullRate),
-        },
-        createdAt: firestore.FieldValue.serverTimestamp()
-      };
+  setStatus("loading");
 
-      await db.collection("users").doc(phone).collection("payments").add(paymentData);
+  try {
+    const net = await NetInfo.fetch();
 
-      setTimeout(() => {
-        setStatus("success");
-        Animated.spring(scale, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 45,
-          friction: 8
-        }).start();
-      }, 1500);
-    } catch (e) {
-      setStatus("success"); 
+    if (!net.isConnected) {
+      setStatus("failed"); // 🔥 DIRECT FAIL
+      return;
     }
-  };
 
-  useEffect(() => { saveData(); }, []);
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) {
+      setStatus("failed");
+      return;
+    }
 
+    const db = firestore();
+
+    const userDoc = await db.collection("users").doc(phone).get();
+    const activeSession = userDoc.data()?.activeSession;
+
+    const paymentData = {
+      mestriId: id,
+      session: activeSession, // 🔥 IMPORTANT
+      selectedAttendanceIds: selectedIds,
+      crop, work, name, village, paymentMode,
+      totalAmount: Number(amount),
+      details: {
+        totalDays: Number(totalDays),
+        totalWorkers: Number(totalWorkers),
+        morning: Number(totalMorning),
+        evening: Number(totalEvening),
+        full: Number(totalFull),
+        mRate: Number(morningRate),
+        eRate: Number(eveningRate),
+        fRate: Number(fullRate),
+      },
+      createdAt: firestore.FieldValue.serverTimestamp()
+    };
+
+    await db
+      .collection("users")
+      .doc(phone)
+      .collection("payments")
+      .add(paymentData);
+
+    setStatus("success");
+
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+
+  } catch (e) {
+    console.log(e);
+    setStatus("failed"); // 🔥 CLEAR FAIL
+  }
+};
+
+useEffect(() => {
+  if (!hasSaved.current) {
+    hasSaved.current = true;
+    saveData();
+  }
+}, []);
   // Home ki velle function
-  const handleGoHome = () => {
-    setHelpModal(false);
-    router.replace("/farmer/(tabs)");
-  };
+const handleGoHome = () => {
+  if (navigating) return;
+  setNavigating(true);
+
+  setHelpModal(false);
+  router.replace("/farmer/(tabs)");
+};
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: status === "success" ? "#F0FDF4" : "#fff" }]}>
@@ -108,10 +164,11 @@ export default function PaymentSuccess() {
 
       {status === "success" && (
         <View style={{ flex: 1 }}>
-          <ScrollView 
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
+        <ScrollView 
+  contentContainerStyle={[styles.scrollContent, { flexGrow: 1 }]}
+  scrollEnabled={false} // 🔥 LOCK SCREEN
+  showsVerticalScrollIndicator={false}
+>
             <View style={styles.centerContainer}>
               <Animated.View style={[styles.tickWrap, { backgroundColor: SUCCESS_GREEN + "15", borderColor: SUCCESS_GREEN, transform: [{ scale }] }]}>
                 <Ionicons name="checkmark-done-circle" size={80} color={SUCCESS_GREEN} />
@@ -132,25 +189,8 @@ export default function PaymentSuccess() {
                    </View>
                    <View style={[styles.modeBadge, { backgroundColor: SUCCESS_GREEN + "10", borderColor: SUCCESS_GREEN }]}>
                       <AppText style={[styles.modeText, { color: SUCCESS_GREEN }]} language={language}>
-                          {paymentMode === "upi"
-
-
-
-        ? "UPI"
-
-
-
-        : language === "te"
-
-
-
-        ? "నగదు"
-
-
-
-        : "Cash"}
-
-
+                          {paymentMode === "upi"? "UPI"
+                            : language === "te"? "నగదు" : "Cash"}
                       </AppText>
                    </View>
                 </View>
@@ -214,6 +254,32 @@ export default function PaymentSuccess() {
         </View>
       )}
 
+{status === "failed" && (
+  <View style={styles.fullCenter}>
+    <Ionicons name="close-circle" size={80} color="#DC2626" />
+
+    <AppText style={{ fontSize: 18, fontWeight: "600", marginTop: 10 }}>
+      {language === "te" ? "చెల్లింపు విఫలమైంది" : "Payment Failed"}
+    </AppText>
+
+    <AppText style={{ fontSize: 13, color: "#6B7280", marginTop: 6 }}>
+      {language === "te"
+        ? "ఇంటర్నెట్ కనెక్షన్ చెక్ చేసి మళ్ళీ ప్రయత్నించండి"
+        : "Check your internet and try again"}
+    </AppText>
+
+    <TouchableOpacity
+      style={styles.retryBtn}
+      onPress={saveData}
+    >
+      <AppText style={{ color: "#fff" }}>
+        {language === "te" ? "మళ్ళీ ప్రయత్నించండి" : "Retry"}
+      </AppText>
+    </TouchableOpacity>
+
+  </View>
+)}
+
       {/* HELP MODAL */}
       {helpModal && (
         <View style={styles.overlay}>
@@ -244,6 +310,12 @@ export default function PaymentSuccess() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scrollContent: { paddingBottom: 200 },
+  fullCenter: {
+  flex: 1,
+  justifyContent: "center", // 🔥 vertical center
+  alignItems: "center",     // 🔥 horizontal center
+  paddingHorizontal: 20
+},
   centerContainer: { alignItems: "center", paddingHorizontal: 20, paddingTop: 50 },
   tickWrap: { width: 100, height: 100, borderRadius: 50, justifyContent: "center", alignItems: "center", marginBottom: 10 },
   title: { fontSize: 18, fontWeight: "600", textAlign: 'center', paddingHorizontal: 20 },
@@ -251,7 +323,7 @@ const styles = StyleSheet.create({
   
   card: { width: "100%", marginTop: 25, padding: 20, borderRadius: 24, backgroundColor: "#fff", borderWidth: 1, elevation: 1, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
   receiptHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  mestriName: { fontSize: 18, fontWeight: "700", color: "#111827" },
+  mestriName: { fontSize: 18, fontWeight: "600", color: "#111827" },
   villageName: { fontSize: 14, color: "#6B7280" },
   modeBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
   modeText: { fontSize: 11, fontWeight: "600" },
@@ -266,7 +338,13 @@ const styles = StyleSheet.create({
   
   footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dateText: { fontSize: 11, color: "#9CA3AF" },
-
+retryBtn: {
+  marginTop: 16,
+  backgroundColor: "#DC2626",
+  paddingVertical: 10,
+  paddingHorizontal: 20,
+  borderRadius: 10
+},
   bottomBtns: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 20, backgroundColor: 'rgba(255,255,255,0.9)' },
   rowBtns: { flexDirection: "row", gap: 10, marginBottom: 12 },
   subBtn: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: "center", borderWidth: 1, flexDirection: "row", justifyContent: "center", gap: 6 },

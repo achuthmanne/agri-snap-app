@@ -94,42 +94,41 @@ useEffect(() => {
   );
 
   /* ---------------- LOAD DATA ---------------- */
-  const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
+const loadData = async () => {
+  const userPhone = await AsyncStorage.getItem("USER_PHONE");
+  if (!userPhone) return;
 
-    setLoading(true);
+  setLoading(true);
 
-    const snap = await firestore()
+  try {
+    const userDoc = await firestore()
       .collection("users")
       .doc(userPhone)
-      .collection("mestris")
       .get();
 
-    const result: any[] = [];
+    const activeSession = userDoc.data()?.activeSession;
+    if (!activeSession) return;
 
-    for (const doc of snap.docs) {
-      const mestri = doc.data();
+  const snap = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .where(`attendanceSessions.${activeSession}`, "==", true) // 🔥 KEY
+  .get();
 
-      const attendanceSnap = await firestore()
-        .collection("users")
-        .doc(userPhone)
-        .collection("mestris")
-        .doc(doc.id)
-        .collection("attendance")
-        .get();
+const result = snap.docs.map(doc => ({
+  id: doc.id,
+  ...doc.data()
+}));
 
-      if (attendanceSnap.size > 0) {
-        result.push({
-          id: doc.id,
-          ...mestri
-        });
-      }
-    }
+setMestris(result);
 
-    setMestris(result);
+  } catch (e) {
+    console.log(e);
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
   useFocusEffect(
     useCallback(() => {

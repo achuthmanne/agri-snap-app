@@ -42,17 +42,24 @@ const [allClearedVisible, setAllClearedVisible] = useState(false);
  const loadData = async () => {
   const userPhone = await AsyncStorage.getItem("USER_PHONE");
   if (!userPhone) return;
+const userDoc = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .get();
 
+const activeSession = userDoc.data()?.activeSession;
+if (!activeSession) return;
   setLoading(true);
-
+try{
   // 🔥 STEP 1: GET ALL ATTENDANCE
-  const snap = await firestore()
-    .collection("users")
-    .doc(userPhone)
-    .collection("mestris")
-    .doc(id as string)
-    .collection("attendance")
-    .get();
+ const snap = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .doc(id as string)
+  .collection("attendance")
+  .where("session", "==", activeSession) // 🔥 ADD THIS
+  .get();
 
   // 🔥 STEP 2: GET PAID IDS
   const paymentSnap = await firestore()
@@ -87,15 +94,19 @@ const [allClearedVisible, setAllClearedVisible] = useState(false);
 } else {
   setAllClearedVisible(false);
 }
+}catch(e){
+  console.log("Error loading data:", e);
+}finally{
   setLoading(false);
+}
 };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [])
-  );
-
+useFocusEffect(
+  useCallback(() => {
+    setSelected([]); // 🔥 RESET
+    loadData();
+  }, [])
+);
   /* ---------------- SELECT LOGIC ---------------- */
   const toggleSelect = (itemId: string) => {
     setSelected(prev =>
@@ -161,11 +172,23 @@ const ShimmerCard = () => (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      <AppHeader
-        title={`${crop} | ${work}`}
-        subtitle={language === "te" ? "హాజరు ఎంపిక" : "Select Attendance"}
-        language={language}
-      />
+     <AppHeader
+  title={language === "te" ? "చెల్లింపు ఎంపిక" : "Select Payment"}
+  subtitle={language === "te" ? "పని హాజరు" : "Work Attendance"}
+  language={language}
+/>
+
+<View style={styles.topInfoBox}>
+
+ <AppText style={styles.mainTitle} language={language}>
+    {name}
+  </AppText>
+
+  <AppText style={styles.subTitle} language={language}>
+    {crop} | {work}
+  </AppText>
+
+</View>
 
       {/* LIST */}
       {loading ? (
@@ -176,8 +199,13 @@ const ShimmerCard = () => (
   </>
 ) : (
         <FlatList
-          data={data}
-          keyExtractor={(item) => item.id}
+         data={data}
+  keyExtractor={(item, index) => item.id || index.toString()}
+
+  initialNumToRender={8}
+  maxToRenderPerBatch={10}
+  windowSize={5}
+  removeClippedSubviews={true}
           contentContainerStyle={{ paddingBottom: 120 }}
           renderItem={({ item }) => {
 
@@ -517,7 +545,28 @@ totalText: {
   fontWeight: "600",
 },
 
+topInfoBox: {
+  marginHorizontal: 20,
+  marginTop: 12,
+  padding: 14,
+  backgroundColor: "#fff",
+  borderRadius: 14,
+  borderWidth: 1,
+  borderColor: "#E5E7EB"
+},
 
+mainTitle: {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#111827",
+  textAlign: "center"
+},
+subTitle: {
+  fontSize: 13,
+  color: "#6B7280",
+  marginTop: 4,
+  textAlign: "center"
+},
   empty: {
     marginTop: 100,
     alignItems: "center"

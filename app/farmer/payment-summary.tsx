@@ -48,16 +48,24 @@ const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "">("");
   const loadData = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone) return;
+    const userDoc = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .get();
+
+const activeSession = userDoc.data()?.activeSession;
+if (!activeSession) return;
     setLoading(true);
     try {
         const selectedIds = JSON.parse(ids as string);
-        const snap = await firestore()
-          .collection("users")
-          .doc(userPhone)
-          .collection("mestris")
-          .doc(id as string)
-          .collection("attendance")
-          .get();
+       const snap = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .collection("mestris")
+  .doc(id as string)
+  .collection("attendance")
+  .where("session", "==", activeSession) // 🔥 ADD THIS
+  .get();
 
         const list = snap.docs
           .map(d => ({ id: d.id, ...(d.data() as any) }))
@@ -169,10 +177,10 @@ const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "">("");
       <StatusBar barStyle="light-content" />
 
       <AppHeader
-        title={`${crop} | ${work}`}
-        subtitle={language === "te" ? "ఎంపిక చేసిన వివరాలు" : "Selected Summary"}
-        language={language}
-      />
+  title={language === "te" ? "చెల్లింపు వివరాలు" : "Payment Summary"}
+  subtitle={language === "te" ? "ఎంపిక చేసిన హాజరు" : "Selected Attendance"}
+  language={language}
+/>
 
       <View style={styles.summaryCard}>
         <AppText style={styles.summaryTitle} language={language}>
@@ -201,9 +209,13 @@ const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "">("");
           <RatesShimmer />
         </View>
       ) : (
-        <FlatList
-          data={data}
-          keyExtractor={(item) => item.id}
+    <FlatList
+  data={data}
+  keyExtractor={(item, index) => item.id || index.toString()}
+  initialNumToRender={8}
+  maxToRenderPerBatch={10}
+  windowSize={5}
+  removeClippedSubviews={true}
           contentContainerStyle={{ paddingBottom: 140 }}
           renderItem={renderItem}
           ListFooterComponent={
@@ -271,7 +283,9 @@ const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "">("");
                 <AppText style={styles.totalLabel} language={language}>
                   {language === "te" ? "మొత్తం చెల్లింపు:" : "Total Amount:"}
                 </AppText>
-                <AppText style={styles.totalValue}>₹ {amount}</AppText>
+                <AppText style={styles.totalValue}>
+  ₹ {amount || 0}
+</AppText>
               </View>
             </View>
           }
@@ -448,7 +462,7 @@ const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "">("");
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  summaryCard: { marginHorizontal: 20, marginTop: 12, padding: 16, borderRadius: 14, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#BBF7D0" },
+  summaryCard: { marginHorizontal: 20, marginTop: 12, padding: 16, borderRadius: 14, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e9ecf3" },
   summaryTitle: { fontSize: 13, color: "#16A34A", fontWeight: "600", marginBottom: 10, textAlign: 'center' },
   summaryRow: { flexDirection: "row", justifyContent: "space-between" },
   summaryItem: { alignItems: "center", flex: 1 },
@@ -473,7 +487,7 @@ const styles = StyleSheet.create({
   inputBox: { flex: 1, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, paddingHorizontal: 8, paddingVertical: 10, marginHorizontal: 4, backgroundColor: "#FAFAFA" },
   inputText: { flex: 1, fontSize: 14, fontWeight: "600", color: "#111827" },
   rs: { marginLeft: 4, marginRight: 2, fontSize: 13, color: "#374151" },
-  totalBox: { marginHorizontal: 20, marginTop: 12, padding: 16, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", borderWidth: 1, borderColor: "#BBF7D0" },
+  totalBox: { marginHorizontal: 20, marginTop: 12, padding: 16, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", borderWidth: 1, borderColor: "#eaebee" },
   totalLabel: { fontSize: 12, color: "#6B7280" },
   totalValue: { fontSize: 20, fontWeight: "700", color: "#16A34A" },
   confirmWrapper: { position: "absolute", bottom: 20, left: 20, right: 20, borderRadius: 16, overflow: "hidden" },
@@ -508,8 +522,6 @@ const styles = StyleSheet.create({
   borderColor: "#E5E7EB",
   marginTop: 10
 },
-
-
 deleteBtn: {
   flex: 1,
   padding: 10,
