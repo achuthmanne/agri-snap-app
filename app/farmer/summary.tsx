@@ -4,6 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
+import { InteractionManager } from "react-native";
 // 1. Asset ఎర్రర్ కోసం ఇది:
 import { Asset } from 'expo-asset';
 
@@ -40,9 +41,9 @@ const center = size / 2;
   useEffect(() => {
     Animated.timing(animatedValue, {
       toValue: percent,
-      duration: 1500,
+      duration: 900,
       easing: Easing.bezier(0.4, 0, 0.2, 1),
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
   }, [percent]);
 
@@ -108,19 +109,27 @@ const rentPercent = total ? (summary.rent / total) * 100 : 0;
 const incomePercent = total ? (summary.income / total) * 100 : 0;
 const pulseAnim = useRef(new Animated.Value(0)).current;
 const floatAnim = useRef(new Animated.Value(0)).current;
-const shineAnim = useRef(new Animated.Value(0)).current;
-
+const [barWidth, setBarWidth] = useState(0);
 const dotAnim = useRef(new Animated.Value(0)).current;
 
 useEffect(() => {
-  Animated.loop(
+  const anim = Animated.loop(
     Animated.timing(dotAnim, {
       toValue: 1,
       duration: 800,
       useNativeDriver: true,
     })
-  ).start();
+  );
+
+  anim.start();
+
+  return () => anim.stop(); // 🔥 MUST
 }, []);
+
+useEffect(() => {
+  setAIState("idle");
+}, []);
+
 const dotsOpacity = dotAnim.interpolate({
   inputRange: [0, 1],
   outputRange: [0.3, 1],
@@ -147,66 +156,47 @@ useEffect(() => {
 }, [userName]);
 
 useEffect(() => {
-  // 🔥 Pulse (scale)
-  Animated.loop(
+  const anim = Animated.loop(
     Animated.sequence([
       Animated.timing(pulseAnim, {
         toValue: 1,
-        duration: 900,
+        duration: 1000,
         useNativeDriver: true,
       }),
       Animated.timing(pulseAnim, {
         toValue: 0,
-        duration: 900,
+        duration: 1000,
         useNativeDriver: true,
       }),
     ])
-  ).start();
+  );
 
+  anim.start();
+
+  return () => anim.stop();
+}, []);
   // 🔥 Floating (up-down)
-  Animated.loop(
+ useEffect(() => {
+  const anim = Animated.loop(
     Animated.sequence([
       Animated.timing(floatAnim, {
-        toValue: 1,
-        duration: 2000,
+        toValue: -10,
+        duration: 1200,
         useNativeDriver: true,
       }),
       Animated.timing(floatAnim, {
         toValue: 0,
-        duration: 2000,
+        duration: 1200,
         useNativeDriver: true,
       }),
     ])
-  ).start();
+  );
 
-  // 🔥 Shine effect
-  Animated.loop(
-    Animated.timing(shineAnim, {
-      toValue: 1,
-      duration: 2500,
-      useNativeDriver: true,
-    })
-  ).start();
+  anim.start();
+
+  return () => anim.stop();
 }, []);
 
-const glowAnim = useRef(new Animated.Value(0)).current;
-
-useEffect(() => {
-  Animated.loop(
-    Animated.sequence([
-      Animated.timing(glowAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.timing(glowAnim, {
-        toValue: 0,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-    ])
-  ).start();
-}, []);
 
 const handleAIClick = () => {
   if (aiState !== "idle") return; // 🔥 prevent spam
@@ -361,8 +351,10 @@ const exportProfessionalPDF = async (existingInsights: string[]) => {
       </html>
     `;
 
-    const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
-    await Sharing.shareAsync(uri);
+    setTimeout(async () => {
+  const { uri } = await Print.printToFileAsync({ html: htmlContent });
+  await Sharing.shareAsync(uri);
+}, 100);
 
   } catch (error) {
     console.error("PDF Error:", error);
@@ -446,16 +438,51 @@ const ShimmerTopCard = () => (
 
   </View>
 );
-  useEffect(() => {
-    if (!loading) {
-     Animated.stagger(150, [
-  Animated.timing(expenseAnim, { toValue: e, duration: 1000, useNativeDriver: false }),
-Animated.timing(labourAnim, { toValue: l, duration: 1000, useNativeDriver: false }),
-Animated.timing(rentAnim, { toValue: r, duration: 1000, useNativeDriver: false }),
-Animated.timing(incomeAnim, { toValue: finalIncomePercent, duration: 1000, useNativeDriver: false }),
-]).start();
-    }
-  }, [loading, expensePercent, labourPercent, incomePercent]);
+useEffect(() => {
+  if (!loading) {
+
+    // 🔥 reset values (VERY IMPORTANT)
+    expenseAnim.setValue(0);
+    labourAnim.setValue(0);
+    rentAnim.setValue(0);
+    incomeAnim.setValue(0);
+
+    InteractionManager.runAfterInteractions(() => {
+
+      Animated.parallel([
+        Animated.timing(expenseAnim, {
+          toValue: e,
+          duration: 850,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(labourAnim, {
+          toValue: l,
+          duration: 850,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(rentAnim, {
+          toValue: r,
+          duration: 850,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(incomeAnim, {
+          toValue: finalIncomePercent,
+          duration: 850,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+
+      ]).start();
+
+    });
+  }
+}, [loading]);
 
  // 🔥 THE ULTIMATE AGRI-INTELLIGENCE ENGINE (PRO VERSION)
   const generateSmartInsights = (cropMap: any, totalInc: number) => {
@@ -627,7 +654,7 @@ Animated.timing(incomeAnim, { toValue: finalIncomePercent, duration: 1000, useNa
     // --- 🚀 FINAL PROCESSING ---
     // Duplicate removal and showing top 10 most critical ones
     const uniqueInsights = [...new Set(insights)];
-    setSuggestions(uniqueInsights.slice(0, 12));
+    setSuggestions(uniqueInsights.slice(0, 10)); // Show only top 10 insights
   };
 useEffect(() => {
   const loadData = async () => {
@@ -635,15 +662,43 @@ useEffect(() => {
     const lang = await AsyncStorage.getItem("APP_LANG");
     if (lang) setLanguage(lang as any);
     if (!phone) return;
+const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
 
+const activeSession = userDoc.data()?.activeSession;
+
+if (!activeSession) return;
     setLoading(true);
     try {
       const [expSnap, salesSnap, paySnap, fieldsSnap] = await Promise.all([
-        firestore().collection("users").doc(phone).collection("expenses").get(),
-        firestore().collection("users").doc(phone).collection("sales").get(),
-        firestore().collection("users").doc(phone).collection("payments").get(),
-        firestore().collection("users").doc(phone).collection("fields").get()
+        firestore()
+  .collection("users")
+  .doc(phone)
+  .collection("expenses")
+  .where("session", "==", activeSession)
+        .get(),
+              firestore()
+  .collection("users")
+  .doc(phone)
+  .collection("sales")
+  .where("session", "==", activeSession)
+  .get(),
+        firestore()
+  .collection("users")
+  .doc(phone)
+  .collection("payments")
+  .where("session", "==", activeSession)
+  .get(),
+        firestore()
+  .collection("users")
+  .doc(phone)
+  .collection("fields")
+  .where("session", "==", activeSession)
+  .get()
       ]);
+await new Promise(resolve => setTimeout(resolve, 0)); // 🔥 ADD HERE
 
       const cropMap: any = {};
       let totalExp = 0, totalLab = 0, totalInc = 0, totalRent = 0;
@@ -657,7 +712,10 @@ setUserName(name);
       expSnap.forEach(doc => {
         const d = doc.data();
         const crop = d.crop || "Others";
-        const amt = Number(d.amount) || 0;
+        const amt =
+  typeof d.amount === "number"
+    ? d.amount
+    : Number(d.amount) || 0;
         totalExp += amt;
         if (!cropMap[crop]) cropMap[crop] = { expense: 0, labour: 0, income: 0, totalKg: 0, unitStats: {}, acres: 0, rent: 0 };
         cropMap[crop].expense += amt;
@@ -678,8 +736,16 @@ setUserName(name);
         const crop = d.crop || "Others";
         const amt = Number(d.total) || 0;
         const qty = Number(d.quantity) || 0;
-        const unit = (d.unit || "kg").toLowerCase();
+        const unitMap: any = {
+  ton: "ton",
+  tons: "ton",
+  kg: "kg",
+  quintal: "quintal",
+  gms: "gms"
+};
 
+const unit =
+  unitMap[(d.unit || "kg").toLowerCase()] || "kg";
         totalInc += amt;
         if (!cropMap[crop]) cropMap[crop] = { expense: 0, labour: 0, income: 0, totalKg: 0, unitStats: {}, acres: 0, rent: 0 };
 
@@ -724,7 +790,9 @@ setUserName(name);
         }
 
         const factor = unitToKg[bestUnit] || 1;
-        c.quantity = (c.totalKg / factor).toFixed(2); // ఫైనల్ క్వాంటిటీ
+c.quantity = factor
+  ? (c.totalKg / factor).toFixed(2)
+  : "0";
         c.unit = bestUnit; // ఫైనల్ యూనిట్
         c.profit = c.income - (c.expense + c.labour + c.rent);
       });
@@ -737,9 +805,18 @@ setUserName(name);
         profit: totalInc - (totalExp + totalLab + totalRent)
       });
       setCrops(cropMap);
-      generateSmartInsights(cropMap, totalInc);
+     setTimeout(() => {
+  generateSmartInsights(cropMap, totalInc);
+}, 300);
+    } catch (e) {
+  console.log(e);
 
-    } catch (e) { console.log(e); }
+  setSuggestions([
+    language === "te"
+      ? "డేటా లోడ్ చేయడంలో సమస్య వచ్చింది"
+      : "Error loading data"
+  ]);
+}
     setLoading(false);
   };
   loadData();
@@ -782,9 +859,13 @@ setUserName(name);
 ) : (
 
   // ✅ FULL DATA UI
-  <FlatList
+ <FlatList
+  initialNumToRender={6}
+  maxToRenderPerBatch={8}
+  windowSize={5}
+  removeClippedSubviews={true}
      data={Object.keys(crops)}
-        keyExtractor={(item) => item}
+        keyExtractor={(item, index) => item + index}
       ListHeaderComponent={
   loading ? <ShimmerBars /> : (
     <View style={styles.stickyBox}>
@@ -809,19 +890,33 @@ setUserName(name);
                 ₹{item.val.toLocaleString("en-IN")}
               </AppText>
             </View>
-            <View style={styles.barBg}>
-              <Animated.View 
-                style={[
-                  styles.barFill, 
-                  { 
-                    backgroundColor: item.color, 
-                    width: targetAnim.interpolate({ 
-                      inputRange: [0, 100], 
-                      outputRange: ["0%", "100%"] 
-                    }) 
-                  }
-                ]} 
-              />
+          <View 
+  style={styles.barBg}
+  onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
+>
+           <Animated.View 
+  style={[
+    styles.barFill,
+    {
+      backgroundColor: item.color,
+      alignSelf: "flex-start", // 🔥 KEY FIX
+      transform: [
+  {
+    translateX: targetAnim.interpolate({
+      inputRange: [0, 100],
+      outputRange: [-barWidth / 2, 0], // 🔥 EXACT FIX
+    }),
+  },
+  {
+    scaleX: targetAnim.interpolate({
+      inputRange: [0, 100],
+      outputRange: [0.01, 1],
+    }),
+  },
+]
+    },
+  ]}
+/>
             </View>
           </View>
         );
@@ -1067,16 +1162,19 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     fontWeight: "600" 
   },
-  barBg: { 
-    height: 10, // కొంచెం లావుగా ఉంటే బాగుంటుంది
-    backgroundColor: "#F1F5F9", 
-    borderRadius: 12, 
-    overflow: "hidden" 
-  },
-  barFill: { 
-    height: "100%", 
-    borderRadius: 12 
-  },
+ barBg: {
+  height: 10,
+  backgroundColor: "#F1F5F9",
+  borderRadius: 12,
+  overflow: "hidden",
+  flexDirection: "row", // 🔥 KEY FIX
+},
+barFill: {
+  height: "100%",
+  width: "100%", // 🔥 MUST
+  borderRadius: 12,
+  transform: [{ scaleX: 0.01 }], // 🔥 IMPORTANT
+},
   card: { marginHorizontal: 20, marginVertical: 6, flexDirection: "row", backgroundColor: "#fff", padding: 14, borderRadius: 16, borderWidth: 1, borderColor: "#E5E7EB", alignItems: 'center' },
   sideBar: { width: 4, height: '80%', marginRight: 12, borderRadius: 2 },
   cropName: { fontSize: 20, fontWeight: "600", marginBottom: 4 },
@@ -1163,20 +1261,16 @@ emptyIcon: {
 aiSmartCard: {
   marginHorizontal: 20,
   marginTop: 18,
-},
 
+  transform: [{ translateY: -6 }], // 🔥 FLOAT LIKE NAVBAR
+},
 aiSmartInner: {
   flexDirection: "row",
   alignItems: "center",
   padding: 16,
-  borderRadius: 18,
-
-  shadowColor: "#10B981",
-  shadowOpacity: 0.4,
-  shadowRadius: 12,
-  elevation: 10,
+  borderRadius: 20,
+  elevation: 12,
 },
-
 aiSmartIcon: {
   width: 42,
   height: 42,
@@ -1185,8 +1279,11 @@ aiSmartIcon: {
   alignItems: "center",
 
   backgroundColor: "rgba(255,255,255,0.15)",
-},
 
+  // 🔥 ADD THIS (missing)
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.25)",
+},
 aiSmartTitle: {
   color: "#fff",
   fontSize: 14,
