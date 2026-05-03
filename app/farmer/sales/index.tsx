@@ -56,51 +56,66 @@ const unitMap: any = {
     const load = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone) return;
+
+const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
+
+const activeSession = userDoc.data()?.activeSession;
+
+if (!activeSession) return;
+
  setLoading(true); // 🔥 ADD THIS
 
       unsubscribe = firestore()
         .collection("users")
         .doc(phone)
-        .collection("sales")
-        .orderBy("createdAt", "desc")
-        .onSnapshot((snap) => {
+       .collection("sales")
+.where("session", "==", activeSession) // 🔥 ADD THIS
+.where("createdAt", "!=", null)        // 🔥 ADD THIS
+.orderBy("createdAt", "desc")
+       .onSnapshot(
+  (snap) => {
+    const list: any[] = [];
 
-          const list: any[] = [];
+    let totalIncome = 0;
+    let totalQty = 0;
 
-let totalIncome = 0;
-let totalQty = 0;
+    const cropQtyMap: any = {};
+    const cropIncomeMap: any = {};
 
-const cropQtyMap: any = {};
-const cropIncomeMap: any = {};
+    snap.forEach(doc => {
+      const d: any = doc.data();
 
-snap.forEach(doc => {
-  const d: any = doc.data();
+      const qty = Number(d.quantity) || 0;
+      const total = Number(d.total) || 0;
+      const unit = d.unit || "";
 
-  const qty = Number(d.quantity) || 0;
-  const total = Number(d.total) || 0;
-  const unit = d.unit || "";
+      totalIncome += total;
+      totalQty += qty;
 
-  totalIncome += total;
-  totalQty += qty;
+      const key = `${d.crop}_${unit}`;
+      cropQtyMap[key] = (cropQtyMap[key] || 0) + qty;
+      cropIncomeMap[d.crop] = (cropIncomeMap[d.crop] || 0) + total;
 
-  // 🔥 crop + unit grouping
-  const key = `${d.crop}_${unit}`;
-  cropQtyMap[key] = (cropQtyMap[key] || 0) + qty;
+      list.push({ id: doc.id, ...d });
+    });
 
-  // 🔥 income (optional future use)
-  cropIncomeMap[d.crop] = (cropIncomeMap[d.crop] || 0) + total;
+    setData(list);
+    setTotalIncome(totalIncome);
+    setTotalQty(totalQty);
+    setCropQty(cropQtyMap);
+    setCropIncome(cropIncomeMap);
+    setLoading(false);
+  },
 
-  list.push({ id: doc.id, ...d });
-});
-
-setData(list);
-setTotalIncome(totalIncome);
-setTotalQty(totalQty);
-setCropQty(cropQtyMap);
-setCropIncome(cropIncomeMap);
- setLoading(false); // 🔥 ADD THIS
-
-        });
+  // 🔥 ERROR HANDLER (correct place)
+  (error: any) => {
+    console.log(error);
+    setLoading(false);
+  }
+);
     };
 
     load();
@@ -272,8 +287,11 @@ const ExpenseShimmerCard = () => (
   }
 
           const color = getColor(item.crop);
-           const date = item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : "---";
-
+          const date =
+  item.createdAt?.toDate?.().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short"
+  }) || "--";
           return (
             <View style={styles.card}>
 

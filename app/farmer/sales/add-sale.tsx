@@ -48,74 +48,7 @@ const [voiceTarget, setVoiceTarget] = useState<"crop" | null>(null);
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [activeInput, setActiveInput] = useState<string | null>(null);
-const cropOptions = [
-  { "en": "Acid Lime / Lemon", "te": "నిమ్మ" },
-  { "en": "Apple Gourd", "te": "దండకాయ" },
-  { "en": "Areca Nut", "te": "పోక చెక్క" },
-  { "en": "Banana", "te": "అరటి" },
-  { "en": "Bajra / Pearl Millet", "te": "సజ్జలు" },
-  { "en": "Beetroot", "te": "బీట్రూట్" },
-  { "en": "Bengal Gram / Chickpea", "te": "శనగలు" },
-  { "en": "Bhendi / Okra", "te": "బెండకాయ" },
-  { "en": "Bitter Gourd", "te": "కాకరకాయ" },
-  { "en": "Black Gram / Urad Dal", "te": "మినుములు" },
-  { "en": "Bottle Gourd", "te": "సొరకాయ" },
-  { "en": "Brinjal / Eggplant", "te": "వంకాయ" },
-  { "en": "Broad Beans", "te": "చిక్కుడుకాయ" },
-  { "en": "Cabbage", "te": "క్యాబేజీ" },
-  { "en": "Carrot", "te": "క్యారెట్" },
-  { "en": "Cashew Nut", "te": "జీడిమామిడి" },
-  { "en": "Castor", "te": "ఆముదం" },
-  { "en": "Cauliflower", "te": "కాలీఫ్లవర్" },
-  { "en": "Chilli", "te": "మిర్చి" },
-  { "en": "Citrus / Sweet Orange", "te": "బత్తాయి" },
-  { "en": "Cluster Beans", "te": "గోరు చిక్కుడు" },
-  { "en": "Coconut", "te": "కొబ్బరి" },
-  { "en": "Coriander", "te": "కొత్తిమీర" },
-  { "en": "Cotton", "te": "పత్తి" },
-  { "en": "Cowpea", "te": "బొబ్బర్లు" },
-  { "en": "Cucumber", "te": "దోసకాయ" },
-  { "en": "Curry Leaves", "te": "కరివేపాకు" },
-  { "en": "Drumstick", "te": "ములక్కాయ" },
-  { "en": "Flowers / Marigold", "te": "బంతి పూలు" },
-  { "en": "Garlic", "te": "వెల్లుల్లి" },
-  { "en": "Ginger", "te": "అల్లం" },
-  { "en": "Grapes", "te": "ద్రాక్ష" },
-  { "en": "Green Chilli", "te": "పచ్చి మిరపకాయ" },
-  { "en": "Green Gram / Mung Bean", "te": "పెసలు" },
-  { "en": "Groundnut / Peanut", "te": "వేరుశనగ" },
-  { "en": "Guava", "te": "జామ" },
-  { "en": "Horse Gram", "te": "ఉలవలు" },
-  { "en": "Jowar / Sorghum", "te": "జొన్న" },
-  { "en": "Jute", "te": "జనుము" },
-  { "en": "Maize / Corn", "te": "మొక్కజొన్న" },
-  { "en": "Mango", "te": "మామిడి" },
-  { "en": "Mesta", "te": "గోగునార" },
-  { "en": "Millets / Korra", "te": "కొర్రలు" },
-  { "en": "Muskmelon", "te": "కర్బూజా" },
-  { "en": "Mustard", "te": "ఆవాలు" },
-  { "en": "Oil Palm", "te": "పామాయిల్" },
-  { "en": "Onion", "te": "ఉల్లిపాయ" },
-  { "en": "Paddy / Rice", "te": "వరి" },
-  { "en": "Papaya", "te": "బొప్పాయి" },
-  { "en": "Pomegranate", "te": "దానిమ్మ" },
-  { "en": "Potato", "te": "బంగాళాదుంప" },
-  { "en": "Radish", "te": "ముల్లంగి" },
-  { "en": "Ragi / Finger Millet", "te": "రాగులు" },
-  { "en": "Red Gram / Pigeon Pea", "te": "కంది" },
-  { "en": "Ridge Gourd", "te": "బీరకాయ" },
-  { "en": "Sapota", "te": "సపోటా" },
-  { "en": "Sesame / Gingelly", "te": "నువ్వులు" },
-  { "en": "Snake Gourd", "te": "పొట్లకాయ" },
-  { "en": "Soybean", "te": "సోయాబీన్" },
-  { "en": "Sugarcane", "te": "చెరకు" },
-  { "en": "Sunflower", "te": "పొద్దుతిరుగుడు" },
-  { "en": "Tobacco", "te": "పొగాకు" },
-  { "en": "Tomato", "te": "టమాటా" },
-  { "en": "Turmeric", "te": "పసుపు" },
-  { "en": "Watermelon", "te": "పుచ్చకాయ" },
-  { "en": "Wheat", "te": "గోధుమ" }
-];
+
 useEffect(() => {
   const loadUserCrops = async () => {
     const phone = await AsyncStorage.getItem("USER_PHONE");
@@ -130,7 +63,8 @@ useEffect(() => {
     const set = new Set<string>();
 
     snap.forEach(doc => {
-      const data = doc.data();
+      if (!doc.exists) return;
+const data = doc.data();
       if (data.crop) set.add(data.crop);
     });
 
@@ -201,7 +135,7 @@ const filteredCrops = userCrops.filter(c =>
 
   useEffect(() => {
     if (!editId) return;
-
+if (loading) return; // 🔥 ADD FIRST LINE
     const load = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone) return;
@@ -224,39 +158,75 @@ const filteredCrops = userCrops.filter(c =>
     load();
   }, [editId]);
 
-  const total = Number(quantity || 0) * Number(rate || 0);
+  const total =
+  (Number(quantity) || 0) * (Number(rate) || 0);
 
-  const handleSave = async () => {
-        // 🛑 VALIDATION CHECK
-        if (!crop.trim() || !quantity || !rate) {
-            setShowValidationModal(true); // మోడల్ చూపిస్తుంది
-            return;
-        }
+ const handleSave = async () => {
+  if (loading) return;
 
-        const phone = await AsyncStorage.getItem("USER_PHONE");
-        if (!phone) return;
+  Keyboard.dismiss();
 
-        setLoading(true);
-        const data = {
-            crop: crop.trim(),
-            quantity: Number(quantity),
-            unit,
-            rate: Number(rate),
-            total,
-            createdAt: firestore.FieldValue.serverTimestamp()
-        };
+  if (!crop.trim() || !quantity || !rate) {
+    setShowValidationModal(true);
+    return;
+  }
 
-        try {
-            if (editId) {
-                await firestore().collection("users").doc(phone).collection("sales").doc(editId as string).update(data);
-            } else {
-                await firestore().collection("users").doc(phone).collection("sales").add(data);
-            }
-            router.back();
-        } catch (e) { console.log(e); }
-        setLoading(false);
+  const phone = await AsyncStorage.getItem("USER_PHONE");
+  if (!phone) return;
+
+  setLoading(true);
+
+  try {
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(phone)
+      .get();
+
+    const activeSession = userDoc.data()?.activeSession;
+
+    if (!activeSession) {
+      setLoading(false);
+      return;
+    }
+
+    const total =
+      (Number(quantity) || 0) * (Number(rate) || 0);
+
+    const data = {
+      crop: crop.trim(),
+      quantity: Number(quantity),
+      unit,
+      rate: Number(rate),
+      total,
+      session: activeSession, // 🔥 IMPORTANT
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      localCreatedAt: Date.now()
     };
 
+    if (editId) {
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("sales")
+        .doc(editId as string)
+        .update(data);
+    } else {
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("sales")
+        .add(data);
+    }
+
+    router.back();
+
+  } catch (e) {
+    console.log(e);
+    setShowValidationModal(true);
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -293,7 +263,7 @@ const filteredCrops = userCrops.filter(c =>
   <View style={styles.hintHeader}>
     <Ionicons name="bulb" size={18} color="#059669" />
     <AppText style={styles.hintTitle}>
-      {language === "te" ? "సూచన (Tip):" : "Tip:"}
+      {language === "te" ? "సూచన:" : "Tip:"}
     </AppText>
   </View>
 
