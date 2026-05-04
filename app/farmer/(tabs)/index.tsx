@@ -175,7 +175,7 @@ const getServices = () => [
 
   // 5. Intelligence & Knowledge (నాలెడ్జ్ కోసం)
   { service: "schemes", title: t.schemes, icon: icons.schemes, screen: "/farmer/schemes" },
-  { service: "calculator", title: t.calculator, icon: icons.calculator, screen: "/farmer/(tabs)/calculator" },
+  { service: "calculator", title: t.calculator, icon: icons.calculator, screen: "/farmer/calculator" },
   { service: "news", title: t.news, icon: icons.news, screen: "/farmer/(tabs)/news" },
 ];
 

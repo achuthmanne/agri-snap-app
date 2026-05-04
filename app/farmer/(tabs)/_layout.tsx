@@ -5,10 +5,9 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
-import { Tabs, useFocusEffect, useRouter, useSegments } from "expo-router";
+import { Tabs, useRouter, useSegments } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Modal,
   SafeAreaView,
@@ -19,9 +18,9 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
+import { useLanguage } from "@/context/LanguageContext";
 import AppText from "../../../components/AppText";
 import CustomTabBar from "../../../components/CustomTabBar";
-import { useLanguage } from "@/context/LanguageContext";
 
 export default function FarmerLayout() {
 
@@ -138,7 +137,6 @@ const toggleLanguage = async () => {
         <Tabs.Screen name="attendance-history" />
         <Tabs.Screen name="history" />
         <Tabs.Screen name="profile" />
-        <Tabs.Screen name="calculator" options={{ href:null }}/>
       </Tabs>
 
       {/* 🔥 DRAWER */}
