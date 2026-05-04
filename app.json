@@ -10,6 +10,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.achuth.agrisnap",
+      "config": {
+        "googleMapsApiKey": "AIzaSyCpd2HMnvu531V6S-6cx1jtArXmCh2KBcY"
+      },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "రైతులకు వాయిస్ సెర్చ్ కోసం మైక్రోఫోన్ అనుమతి అవసరం.",
         "NSSpeechRecognitionUsageDescription": "వాయిస్ కమాండ్స్ ద్వారా యంత్రాలను వెతకడానికి అనుమతి ఇవ్వండి."
@@ -24,6 +27,11 @@
       },
       "package": "com.achuth.agrisnap",
       "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCpd2HMnvu531V6S-6cx1jtArXmCh2KBcY"
+        }
+      },
       "permissions": [
         "INTERNET",
         "RECORD_AUDIO",
