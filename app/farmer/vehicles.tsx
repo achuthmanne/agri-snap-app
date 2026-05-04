@@ -24,7 +24,7 @@ export default function VehiclesScreen() {
 
   const [data, setData] = useState<any[]>([]);
   const [grouped, setGrouped] = useState<any>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
 
   const [menuVisible, setMenuVisible] = useState(false);
@@ -44,37 +44,62 @@ const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
   useEffect(() => {
     let unsubscribe: any;
 
-    const load = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
+   const load = async () => {
 
-      setLoading(true);
+  setLoading(true); // 🔥 MOVE HERE FIRST
+
+  const phone = await AsyncStorage.getItem("USER_PHONE");
+  if (!phone) {
+    setLoading(false);
+    return;
+  }
+
+  const userDoc = await firestore()
+    .collection("users")
+    .doc(phone)
+    .get();
+
+  const activeSession = userDoc.data()?.activeSession;
+
+  if (!activeSession) {
+    setLoading(false);
+    return;
+  }
 
       unsubscribe = firestore()
         .collection("users")
         .doc(phone)
         .collection("vehicles")
-        .orderBy("createdAt", "desc")
+.where("session", "==", activeSession) // 🔥 ADD THIS
+.where("createdAt", "!=", null)  
+.orderBy("createdAt", "desc") // 🔥 keep this after where
         .onSnapshot((snap) => {
 
-          const list: any[] = [];
-          const group: any = {};
+  if (!snap || !snap.docs) {
+    setLoading(false);
+    return;
+  }
 
-          snap.forEach(doc => {
-            const d: any = doc.data();
+  const list: any[] = [];
+  const group: any = {};
 
-            list.push({ id: doc.id, ...d });
+  snap.forEach(doc => {
+    const d: any = doc.data();
 
-            const type = d.type || "Others";
+    if (!d) return; // 🔥 extra safety
 
-            if (!group[type]) group[type] = [];
-            group[type].push({ id: doc.id, ...d });
-          });
+    list.push({ id: doc.id, ...d });
 
-          setData(list);
-          setGrouped(group);
-          setLoading(false);
-        });
+    const type = d.type || "Others";
+
+    if (!group[type]) group[type] = [];
+    group[type].push({ id: doc.id, ...d });
+  });
+
+  setData(list);
+  setGrouped(group);
+  setLoading(false);
+});
     };
 
     load();
@@ -126,7 +151,7 @@ const getColor = (type: string) => {
   // 🐘 TATA ACE (ఏస్)
   if (label.includes("ace") || label.includes("ఏస్") || label.includes("ఏనుగు")) return typeColors.ace;
 
-  return "#80736b"; // Default Grey if nothing matches
+  return "#520b33"; // Default Grey if nothing matches
 };
 
   /* ---------------- SHIMMER ---------------- */
@@ -176,6 +201,11 @@ const getColor = (type: string) => {
 
   </View>
 );
+
+const formatDisplay = (num: string) => {
+  const match = num.match(/^([A-Z]{2})(\d{2})([A-Z]{2})(\d{4})$/);
+  return match ? `${match[1]} ${match[2]} ${match[3]} ${match[4]}` : num;
+};
   /* ---------------- UI ---------------- */
 
   return (
@@ -197,9 +227,9 @@ const getColor = (type: string) => {
         keyExtractor={(item, index) => loading ? index.toString() : item}
         contentContainerStyle={{ paddingBottom: 120, flexGrow: 1 }}
 
-        ListEmptyComponent={
-          !loading ? (
-            <View style={styles.emptyContainer}>
+      ListEmptyComponent={
+  !loading && Object.keys(grouped).length === 0 ? (
+    <View style={styles.emptyContainer}>
               <View style={styles.emptyIconBg}>
                 <MaterialCommunityIcons name="tractor" size={80} color="#16A34A" />
               </View>
@@ -247,7 +277,7 @@ const getColor = (type: string) => {
 
                     {v.number && (
                       <View style={styles.plate}>
-                        <AppText style={styles.plateText}>{v.number}</AppText>
+                        <AppText style={styles.plateText}>{formatDisplay(v.number)}</AppText>
                       </View>
                     )}
                   </View>
@@ -288,10 +318,15 @@ const getColor = (type: string) => {
                 onPress={() => {
                   const id = selectedItem.id;
                   setMenuVisible(false);
-                  router.push({
-                    pathname: "/farmer/add-vehicle",
-                    params: { vehicleId: id }
-                  });
+                 router.push({
+  pathname: "/farmer/add-vehicle",
+  params: {
+    vehicleId: selectedItem.id,
+    name: selectedItem.nickname,
+    type: selectedItem.type,
+    number: selectedItem.number || ""
+  }
+});
                 }}
               >
                 <Ionicons name="pencil-outline" size={20} color="#3B82F6" />
@@ -354,17 +389,59 @@ const getColor = (type: string) => {
         <TouchableOpacity activeOpacity={0.8}
           style={styles.deleteBtn}
           onPress={async () => {
-            const phone = await AsyncStorage.getItem("USER_PHONE");
-            if (phone && selectedItem) {
-              await firestore()
-                .collection("users")
-                .doc(phone)
-                .collection("vehicles")
-                .doc(selectedItem.id)
-                .delete();
-            }
-            setDeleteVisible(false);
-          }}
+  const phone = await AsyncStorage.getItem("USER_PHONE");
+  if (!phone || !selectedItem) return;
+
+  try {
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(phone)
+      .get();
+
+    const activeSession = userDoc.data()?.activeSession;
+    if (!activeSession) return;
+
+    const docRef = firestore()
+      .collection("users")
+      .doc(phone)
+      .collection("vehicles")
+      .doc(selectedItem.id);
+
+    const doc = await docRef.get();
+
+    // 🔥 SESSION SAFETY
+    if (doc.data()?.session !== activeSession) {
+      console.log("Wrong session delete blocked");
+      return;
+    }
+// 🔥 INSTANT UI REMOVE
+setGrouped((prev: any) => {
+  const newGroup = { ...prev };
+
+  Object.keys(newGroup).forEach((type) => {
+    newGroup[type] = newGroup[type].filter(
+      (item: any) => item.id !== selectedItem.id
+    );
+
+    if (newGroup[type].length === 0) {
+      delete newGroup[type];
+    }
+  });
+
+  return newGroup;
+});
+
+// 🔥 CLOSE MODAL IMMEDIATELY
+setDeleteVisible(false);
+
+// 🔥 THEN DELETE FROM FIRESTORE
+await docRef.delete();
+  } catch (e) {
+    console.log(e);
+  }
+
+  
+}}
         >
           <AppText style={styles.deleteBtnText}>
             {language === "te" ? "అవును" : "Delete"}

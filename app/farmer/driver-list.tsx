@@ -8,6 +8,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 import {
     FlatList,
     Linking,
@@ -86,6 +88,76 @@ useEffect(() => {
     });
   }, []);
 
+  // 🔥 useEffect బదులు useFocusEffect వాడుతున్నాం (Instant Reload కోసం)
+  useFocusEffect(
+    useCallback(() => {
+      let unsub: any;
+
+      const load = async () => {
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (!phone) return;
+
+        setLoading(true);
+
+        // 🔥 URL Params Array లాగా వస్తే సేఫ్ గా మార్చడం
+        const vId = Array.isArray(id) ? id[0] : id;
+
+        // 🔥 1. FETCH ACTIVE SESSION
+        const userDoc = await firestore()
+          .collection("users")
+          .doc(phone)
+          .get();
+
+        const activeSession = userDoc.data()?.activeSession;
+
+        if (!activeSession) {
+          setLoading(false);
+          return;
+        }
+
+        // 🔥 2. SESSION BASED QUERY 
+        unsub = firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("vehicles")
+          .doc(vId as string)
+          .collection("drivers")
+          .where("session", "==", activeSession) // సెషన్ ఫిల్టర్
+          .onSnapshot(snap => {
+
+            if (!snap || !snap.docs) {
+              setLoading(false);
+              return;
+            }
+
+            const list: any[] = [];
+
+            snap.forEach(doc => {
+              const d = doc.data();
+              if (!d) return;
+              list.push({ id: doc.id, ...d });
+            });
+
+            // 🔥 3. Pro Trick: Client Side Sorting (Firebase Index Crash రాకుండా)
+            list.sort((a, b) => {
+              const timeA = a.createdAt?.toMillis() || 0;
+              const timeB = b.createdAt?.toMillis() || 0;
+              return timeB - timeA;
+            });
+
+            setData(list);
+            setLoading(false);
+          });
+      };
+
+      load();
+
+      // క్లీన్-అప్ ఫంక్షన్
+      return () => {
+        if (unsub) unsub();
+      };
+    }, [id])
+  );
   useEffect(() => {
     let unsub: any;
 
@@ -157,24 +229,35 @@ const handleDelete = (item: any) => {
   setShowDeleteModal(true);
 };
 
-const confirmDelete = async () => {
-  if (!deleteItem) return;
+/* ---------------- DELETE ---------------- */
 
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-  if (!phone) return;
+  const confirmDelete = async () => {
+    if (!deleteItem) return;
 
-  await firestore()
-    .collection("users")
-    .doc(phone)
-    .collection("vehicles")
-    .doc(id as string)
-    .collection("drivers")
-    .doc(deleteItem.id)
-    .delete();
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
 
-  setShowDeleteModal(false);
-  setDeleteItem(null);
-};
+    const vId = Array.isArray(id) ? id[0] : id;
+
+    // 🔥 INSTANT UI REMOVE (Optimistic Update)
+    setData(prev => prev.filter(item => item.id !== deleteItem.id));
+    setShowDeleteModal(false);
+
+    try {
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("vehicles")
+        .doc(vId as string)
+        .collection("drivers")
+        .doc(deleteItem.id)
+        .delete();
+    } catch (e) {
+      console.log("Delete Error:", e);
+    }
+
+    setDeleteItem(null);
+  };
   /* ---------------- SHIMMER ---------------- */
 
   const ShimmerRow = () => (
@@ -194,12 +277,12 @@ const confirmDelete = async () => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      <AppHeader
-        title={name as string}
+     <AppHeader
+        title={language === "te" ? "డ్రైవర్ల జాబితా" : "Drivers List"}
         subtitle={
           vehicleNumber && vehicleNumber.trim() !== ""
-            ? vehicleNumber
-            : vehicleType
+            ? `${Array.isArray(name) ? name[0] : name || vehicleType} | ${vehicleNumber}`
+            : `${Array.isArray(name) ? name[0] : name || vehicleType || (language === "te" ? "వాహన వివరాలు" : "Vehicle Details")}`
         }
         language={language}
       />

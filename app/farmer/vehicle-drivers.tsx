@@ -84,9 +84,22 @@ const [isListening, setIsListening] = useState(false);
 
   /* ---------------- SAVE ---------------- */
 
-  const handleSave = async () => {
+ /* ---------------- SAVE ---------------- */
 
-    if (!name.trim() || !village.trim()) {
+  const handleSave = async () => {
+    // ముందుగా స్పేసెస్ లేకుండా క్లీన్ చేసుకుందాం
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+    const cleanVillage = village.trim();
+
+    // 🔥 STEP 1: BASIC VALIDATION (మూడు ఫీల్డ్స్ కచ్చితంగా ఉండాలి)
+    if (!cleanName || !cleanPhone || !cleanVillage) {
+      setShowAlert(true);
+      return;
+    }
+
+    // 🔥 STEP 2: PHONE VALIDATION (6-9 తో స్టార్ట్ అవ్వాలి, 10 అంకెలు ఉండాలి)
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
       setShowAlert(true);
       return;
     }
@@ -94,40 +107,109 @@ const [isListening, setIsListening] = useState(false);
     try {
       setLoading(true);
 
+      // 🔥 FORCE UI RENDER
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
-      if (!userPhone) return;
+      if (!userPhone || !vehicleId) {
+        setLoading(false);
+        return;
+      }
+
+      // 🔥 URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా
+      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
+      const eId = editId ? (Array.isArray(editId) ? editId[0] : editId) : null;
+
+      // 🔥 FETCH ACTIVE SESSION (Session based checking)
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .get();
+
+      const activeSession = userDoc.data()?.activeSession;
+
+      if (!activeSession) {
+        setLoading(false);
+        return;
+      }
 
       const ref = firestore()
         .collection("users")
         .doc(userPhone)
         .collection("vehicles")
-        .doc(vehicleId as string)
+        .doc(vId)
         .collection("drivers");
 
-      if (editId) {
-        await ref.doc(editId as string).update({
-          driverName: name.trim(),
-          phone: phone.trim(),
-          village: village.trim()
+      if (eId) {
+        // ఎడిట్ చేసేటప్పుడు
+        await ref.doc(eId).update({
+          driverName: cleanName,
+          phone: cleanPhone,
+          village: cleanVillage
         });
       } else {
+        // కొత్తగా యాడ్ చేసేటప్పుడు
         await ref.add({
-          driverName: name.trim(),
-          phone: phone.trim(),
-          village: village.trim(),
+          driverName: cleanName,
+          phone: cleanPhone,
+          village: cleanVillage,
+          session: activeSession, // 🔥 SESSION ADDED
           createdAt: firestore.FieldValue.serverTimestamp()
         });
       }
 
-      router.back();
+      // స్మూత్ గా వెనక్కి వెళ్ళడానికి
+      setTimeout(() => {
+        setLoading(false);
+        router.back();
+      }, 400);
 
     } catch (e) {
       console.log(e);
-    } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    const loadEditData = async () => {
+      if (!editId) return;
+
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) return;
+
+      // Params fix
+      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
+      const eId = Array.isArray(editId) ? editId[0] : editId;
+
+      const doc = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("drivers")
+        .doc(eId)
+        .get();
+
+      const data = doc.data();
+
+      // 🔥 SESSION SECURITY CHECK (పాత సెషన్ డేటా ఓపెన్ అవ్వకుండా)
+      const userDoc = await firestore().collection("users").doc(userPhone).get();
+      const activeSession = userDoc.data()?.activeSession;
+
+      if (data?.session && data.session !== activeSession) {
+        console.log("Wrong session blocked");
+        return;
+      }
+
+      if (data) {
+        setName(data.driverName || "");
+        setPhone(data.phone || "");
+        setVillage(data.village || "");
+      }
+    };
+
+    loadEditData();
+  }, [editId]);
 
   useEffect(() => {
   const loadEditData = async () => {
@@ -323,11 +405,11 @@ const [isListening, setIsListening] = useState(false);
             colors={["#2E7D32", "#1B5E20"]}
             style={styles.saveGradient}
           >
-            <AppText style={styles.saveText}>
-                        {editId
-                          ? (language === "te" ? "సవరించండి" : "Update Farmer")
-                          : (language === "te" ? "భద్రపరచండి" : "Save Farmer")}
-                      </AppText>
+          <AppText style={styles.saveText}>
+              {editId
+                ? (language === "te" ? "సవరించండి" : "Update Driver")
+                : (language === "te" ? "భద్రపరచండి" : "Save Driver")}
+            </AppText>
           </LinearGradient>
         </TouchableOpacity>
 

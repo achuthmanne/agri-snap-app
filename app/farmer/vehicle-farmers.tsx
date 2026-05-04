@@ -1,12 +1,11 @@
 //vechile farmer
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import React, { useEffect, useRef, useState } from "react";
 import {
   SafeAreaView,
   StatusBar,
@@ -88,17 +87,44 @@ const [isListening, setIsListening] = useState(false);
   /* ---------------- SAVE ---------------- */
 
   const handleSave = async () => {
+    // ముందుగా స్పేసెస్ లేకుండా క్లీన్ చేసుకుందాం
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+    const cleanVillage = village.trim();
 
-    if (!name.trim() || !village.trim()) {
+    // 🔥 STEP 1: BASIC VALIDATION (మూడు ఫీల్డ్స్ కచ్చితంగా ఉండాలి)
+    if (!cleanName || !cleanPhone || !cleanVillage) {
       setShowAlert(true);
+      return;
+    }
+
+    // 🔥 STEP 2: PHONE VALIDATION (6-9 తో స్టార్ట్ అవ్వాలి, 10 అంకెలు ఉండాలి)
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      // ఫోన్ నంబర్ తప్పుగా ఉంటే యూజర్ కి అర్థం కావడానికి ఇక్కడ కూడా alert చూపిస్తున్నాం
+      // కావాలంటే దీనికి సపరేట్ modal క్రియేట్ చేసుకోవచ్చు, ప్రస్తుతానికి ఇదే వాడుకుందాం
+      setShowAlert(true); 
       return;
     }
 
     try {
       setLoading(true);
 
+      // 🔥 FORCE UI RENDER
+      await new Promise(resolve => setTimeout(resolve, 0));
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
       if (!userPhone) return;
+
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .get();
+
+      const activeSession = userDoc.data()?.activeSession;
+
+      if (!activeSession) {
+        setLoading(false);
+        return;
+      }
 
       const ref = firestore()
         .collection("users")
@@ -109,15 +135,16 @@ const [isListening, setIsListening] = useState(false);
 
       if (editId) {
         await ref.doc(editId as string).update({
-          farmerName: name.trim(),
-          phone: phone.trim(),
-          village: village.trim()
+          farmerName: cleanName,
+          phone: cleanPhone,
+          village: cleanVillage
         });
       } else {
         await ref.add({
-          farmerName: name.trim(),
-          phone: phone.trim(),
-          village: village.trim(),
+          farmerName: cleanName,
+          phone: cleanPhone,
+          village: cleanVillage,
+          session: activeSession, 
           createdAt: firestore.FieldValue.serverTimestamp()
         });
       }
@@ -131,7 +158,6 @@ const [isListening, setIsListening] = useState(false);
     }
   };
 
-
   useEffect(() => {
   const loadEditData = async () => {
     if (!editId) return;
@@ -139,6 +165,8 @@ const [isListening, setIsListening] = useState(false);
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone) return;
 
+
+    
     const doc = await firestore()
       .collection("users")
       .doc(userPhone)
@@ -149,7 +177,17 @@ const [isListening, setIsListening] = useState(false);
       .get();
 
     const data = doc.data();
+const userDoc = await firestore()
+  .collection("users")
+  .doc(userPhone)
+  .get();
 
+const activeSession = userDoc.data()?.activeSession;
+
+if (data?.session !== activeSession) {
+  console.log("Wrong session blocked");
+  return;
+}
     if (data) {
       setName(data.farmerName || "");
       setPhone(data.phone || "");

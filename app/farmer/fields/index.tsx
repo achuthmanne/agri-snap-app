@@ -239,19 +239,15 @@ const ShimmerLoader = () => {
           {/* ఎడమ వైపున ఉండే చిన్న కలర్ బార్ కోసం */}
           <View style={styles.shimmerSideBar} />
           
-          <View style={styles.fieldInfo}>
-            {/* పంట పేరు కోసం షిమ్మర్ లైన్ */}
-            <View style={styles.shimmerLineTitle} />
-            {/* ఎకరాల వివరాల కోసం షిమ్మర్ లైన్ */}
-            <View style={styles.shimmerLineSub} />
-          </View>
+         <View style={styles.shimmerContent}>
+  <View style={styles.shimmerLineTitle} />
+  <View style={styles.shimmerLineSub} />
+</View>
 
-          <View style={styles.cardRightSection}>
-             {/* ప్రైస్ సెక్షన్ కోసం ఒక బాక్స్ */}
-            <View style={styles.shimmerPriceBox} />
-            {/* మెనూ ఐకాన్ కోసం ఒక చిన్న సర్కిల్ */}
-            <View style={styles.shimmerMenuCircle} />
-          </View>
+<View style={styles.shimmerRight}>
+  <View style={styles.shimmerPriceBox} />
+  <View style={styles.shimmerMenuCircle} />
+</View>
         </View>
       ))}
     </View>
@@ -745,51 +741,68 @@ chartRowWrapper: {
     textAlign: 'center',
     lineHeight: 22,
   },
-  // 🔥 PRODUCTION SHIMMER STYLES
+
   shimmerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    height: 85, // ఒరిజినల్ కార్డ్ హైట్ తో మ్యాచ్ చేశా బ్రో
-    borderRadius: 20,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    overflow: 'hidden',
-    opacity: 0.6
-  },
-  shimmerSideBar: {
-    width: 5,
-    height: '100%',
-    backgroundColor: '#E2E8F0',
-  },
-  shimmerLineTitle: {
-    width: '60%',
-    height: 18,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-    marginBottom: 8
-  },
-  shimmerLineSub: {
-    width: '40%',
-    height: 12,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 4
-  },
-  shimmerPriceBox: {
-    width: 50,
-    height: 30,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    marginRight: 10
-  },
-  shimmerMenuCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    marginRight: 8
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#fff',
+
+  borderRadius: 20,
+  marginBottom: 12,
+
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+
+  overflow: 'hidden'
+},
+
+shimmerSideBar: {
+  width: 5,
+  height: '100%',
+  backgroundColor: '#E2E8F0'
+},
+
+shimmerContent: {
+  flex: 1,
+  padding: 16
+},
+
+shimmerLineTitle: {
+  width: '55%',
+  height: 18,
+  backgroundColor: '#E2E8F0',
+  borderRadius: 6,
+  marginBottom: 8
+},
+
+shimmerLineSub: {
+  width: '40%',
+  height: 12,
+  backgroundColor: '#F1F5F9',
+  borderRadius: 6
+},
+
+shimmerRight: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingRight: 10,
+  gap: 10
+},
+
+shimmerPriceBox: {
+  width: 55,
+  height: 30,
+  backgroundColor: '#F1F5F9',
+  borderRadius: 8
+},
+
+shimmerMenuCircle: {
+  width: 34,
+  height: 34,
+  borderRadius: 10,
+  backgroundColor: '#F1F5F9'
+},
+ 
   donutHole: {
   position: 'absolute',
   width: 90,
@@ -950,96 +963,5 @@ semiChartWrapper: {
     borderRadius: 1,
     opacity: 0.8,
   },
- sessionAdvancedWrapper: {
-    paddingHorizontal: 16,
-    marginTop: 15,
-    marginBottom: 8,
-  },
-  sessionMainContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    height: 90,
-    alignItems: 'center',
-    // షాడోస్ తీసేసి సన్నని బార్డర్ వాడదాం (Neat look)
-    borderWidth: 1.2,
-    borderColor: '#F1F5F9', 
-    overflow: 'hidden',
-  },
-  accentBar: {
-    width: 6,
-    height: '40%', // ఫుల్ కాకుండా మధ్యలో చిన్న బార్
-    backgroundColor: '#16A34A',
-    borderRadius: 10,
-    marginLeft: 15,
-  },
-  sessionContent: {
-    flex: 1,
-    paddingLeft: 12,
-    justifyContent: 'center',
-  },
-  sessionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-
-  sessionSmallTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#000000', // Muted slate color
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  sessionMainYear: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#0F172A',
-    letterSpacing: -0.5,
-  },
-  activeIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC', // Very light grey
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    gap: 6,
-  },
-  innerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#16A34A',
-  },
-  activeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  statusSide: {
-    paddingRight: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  powerButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    overflow: 'hidden',
-    // Soft Red Glow - ఎలివేషన్ కి బదులు ఇది అడ్వాన్స్‌డ్ గా ఉంటుంది
-    shadowColor: "#EF4444",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  powerGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+ 
 });

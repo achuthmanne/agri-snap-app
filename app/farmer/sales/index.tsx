@@ -27,7 +27,7 @@ export default function SalesScreen() {
 
   const [data, setData] = useState<any[]>([]);
   const [language, setLanguage] = useState<"te" | "en">("te");
- const [loading, setLoading] = useState(false);
+const [loading, setLoading] = useState(true); // 🔥 MUST
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalQty, setTotalQty] = useState(0);
   const [cropQty, setCropQty] = useState<any>({});

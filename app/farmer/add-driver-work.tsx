@@ -271,57 +271,88 @@ const validate = (lang: SupportedLang = 'en') => {
   return null;
 };
 
-const handleSave = async () => {
-  const err = validate(language);
+/* ---------------- SAVE ---------------- */
+  const handleSave = async () => {
+    const err = validate(language);
 
-  if (err) {
-    setErrorMsg(err);
-    setErrorModal(true);
-    return;
-  }
+    if (err) {
+      setErrorMsg(err);
+      setErrorModal(true);
+      return;
+    }
 
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-if (!phone || !vehicleId || !driverId) {
-    setErrorMsg("Invalid Driver or Vehicle ID");
-    setErrorModal(true);
-    return;
-  }
-  setSaving(true);
+    try {
+      // 1. లోడర్ ఆన్ చేయడం
+      setSaving(true);
 
-  try {
-    await firestore()
-      .collection("users")
-      .doc(phone)
-      .collection("vehicles")
-      .doc(vehicleId as string)
-      .collection("drivers")
-.doc(driverId as string)
-.collection("entries")// or "works" (better same name maintain)
-      .add({
-        date,
-        crop,
-        work,
-        acres,
-        payableAmount,
-        advanceAmount,
-        finalAmount: getFinalAmount(),
-        notes,
-        createdAt: firestore.FieldValue.serverTimestamp()
-      });
+      // 🔥 FORCE UI RENDER: లోడర్ వెంటనే UI మీద కనిపించడానికి
+      await new Promise(resolve => setTimeout(resolve, 0));
 
-   setTimeout(() => {
-  setSaving(false);
-  router.back();
-}, 800); // smooth feel
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone || !vehicleId || !driverId) {
+        setSaving(false);
+        setErrorMsg(language === "te" ? "సరైన డ్రైవర్ లేదా వాహనం ఐడి లేదు" : "Invalid Driver or Vehicle ID");
+        setErrorModal(true);
+        return;
+      }
 
-   
+      // 🔥 URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా స్ట్రింగ్ లా మార్చడం
+      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
+      const dId = Array.isArray(driverId) ? driverId[0] : driverId;
 
-  } catch (e) {
-    setSaving(false);
-    setErrorMsg("Something went wrong");
-    setErrorModal(true);
-  }
-};
+      // 🔥 FETCH ACTIVE SESSION (Session based checking)
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(phone)
+        .get();
+
+      const activeSession = userDoc.data()?.activeSession;
+
+      // సెషన్ లేకపోతే డేటా సేవ్ చేయకుండా ఆపేయాలి
+      if (!activeSession) {
+        setSaving(false);
+        setErrorMsg(language === "te" ? "సెషన్ కనుగొనబడలేదు!" : "Active session not found!");
+        setErrorModal(true);
+        return;
+      }
+
+      // 🔥 Clean & Save Data (వైట్-స్పేసెస్ లేకుండా)
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("drivers")
+        .doc(dId)
+        .collection("entries")
+        .add({
+          date: date.trim(),
+          crop: crop.trim(),
+          work: work.trim(),
+          acres: acres.trim(),
+          payableAmount: payableAmount.trim(),
+          advanceAmount: advanceAmount.trim(),
+          finalAmount: getFinalAmount(),
+          notes: notes.trim(),
+          session: activeSession, // 🔥 SESSION ADDED HERE
+          createdAt: firestore.FieldValue.serverTimestamp()
+        });
+
+      // స్మూత్ గా వెనక్కి వెళ్ళడానికి
+      setTimeout(() => {
+        setSaving(false);
+        router.back();
+      }, 500);
+
+    } catch (e) {
+      console.log("Save Error: ", e);
+      setSaving(false);
+      // ఫైర్ బేస్ ఎర్రర్ వస్తే యాప్ క్రాష్ అవ్వకుండా యూజర్ కి మెసేజ్ చూపించడం
+      setErrorMsg(language === "te" ? "నెట్వర్క్ లేదా సర్వర్ సమస్య, మళ్లీ ప్రయత్నించండి." : "Something went wrong, please try again.");
+      setErrorModal(true);
+    }
+  };
+
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
       if (l) setLanguage(l as any);
@@ -452,8 +483,10 @@ const filteredData = options.filter(item => {
           value={payableAmount}
           onChangeText={setPayableAmount}
           keyboardType="numeric"
-          style={styles.input}
+          // 🔥 FIX: ఇక్కడ flex: 1, width, height 100% యాడ్ చేశాం. దీనివల్ల బాక్స్ మొత్తం ఎక్కడ క్లిక్ చేసినా కీబోర్డ్ ఓపెన్ అవుతుంది.
+          style={[styles.input, { flex: 1, width: "100%", height: "100%" }]} 
           cursorColor="#2E7D32"
+          selectionColor="#2E7D32"
           onFocus={() => setActiveInput("payable")}
           onBlur={() => setActiveInput(null)}
         />
@@ -481,8 +514,10 @@ const filteredData = options.filter(item => {
           value={advanceAmount}
           onChangeText={setAdvanceAmount}
           keyboardType="numeric"
-          style={styles.input}
+          // 🔥 FIX: ఇక్కడ కూడా flex: 1, width, height 100% యాడ్ చేశాం.
+          style={[styles.input, { flex: 1, width: "100%", height: "100%" }]} 
           cursorColor="#2E7D32"
+          selectionColor="#2E7D32"
           onFocus={() => setActiveInput("advance")}
           onBlur={() => setActiveInput(null)}
         />
@@ -503,7 +538,6 @@ const filteredData = options.filter(item => {
     <Ionicons name="checkmark-done-circle" size={40} color="rgba(255,255,255,0.4)" />
   </View>
 </View>
-
 {/* 📝 REMARKS / NOTES */}
 <View style={{ marginBottom: 20 }}>
  <AppText style={styles.label}>

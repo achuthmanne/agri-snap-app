@@ -25,8 +25,8 @@ import AppText from "@/components/AppText";
 
 export default function AddVehicle() {
   const router = useRouter();
-  const { vehicleId } = useLocalSearchParams();
-
+  const { vehicleId, name: paramName, type: paramType, number: paramNumber } = useLocalSearchParams();
+const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [type, setType] = useState("");
@@ -35,7 +35,7 @@ export default function AddVehicle() {
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [modalType, setModalType] = useState<"vehicle" | null>(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
-  
+  const [errorType, setErrorType] = useState<"validation" | "duplicate" | null>(null);
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
 
@@ -65,6 +65,21 @@ const filteredVehicles = vehicleOptions.filter(item => {
 
   return value.includes(searchText.toLowerCase().trim());
 });
+
+
+const formatVehicleNumber = (value: string) => {
+  const clean = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  // AP13HU1232 → AP 13 HU 1232
+  const match = clean.match(/^([A-Z]{2})(\d{2})([A-Z]{2})(\d{4})$/);
+
+  if (match) {
+    return `${match[1]} ${match[2]} ${match[3]} ${match[4]}`;
+  }
+
+  return clean; // partial typing case
+};
+
   useSpeechRecognitionEvent("result", (event) => {
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
@@ -91,32 +106,91 @@ const filteredVehicles = vehicleOptions.filter(item => {
     AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
   }, []);
 
-  useEffect(() => {
-    if (!vehicleId) return;
-    const loadData = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
-      const doc = await firestore().collection("users").doc(phone).collection("vehicles").doc(vehicleId as string).get();
-      const data = doc.data();
-      if (data) { setName(data.nickname); setVehicleNumber(data.number || ""); setType(data.type); }
-    };
-    loadData();
-  }, [vehicleId]);
+useEffect(() => {
+  if (vehicleId) {
+    setName((paramName as string) || "");
+    setType((paramType as string) || "");
+    setVehicleNumber((paramNumber as string) || "");
+  }
+}, [vehicleId]);
 
   const handleSave = async () => {
-    if (!name.trim() || !type.trim()) { setShowValidationModal(true); return; }
+   if (saving) return; // 🔥 FIRST LINE
+
+setSaving(true);
+
+if (!name.trim() || !type.trim()) {
+  setErrorType("validation");
+  setShowValidationModal(true);
+  setSaving(false); // 🔥 ADD
+  return;
+}
+
     const phone = await AsyncStorage.getItem("USER_PHONE");
-    if (!phone) return;
-    setLoading(true);
-    const data = { nickname: name.trim(), type, number: vehicleNumber.trim(), createdAt: firestore.FieldValue.serverTimestamp() };
+    if (!phone) {
+  setSaving(false); // 🔥 ADD
+  return;
+}
+    const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
+
+const activeSession = userDoc.data()?.activeSession;
+if (!activeSession) return;
+   
+
+
+    const existing = await firestore()
+  .collection("users")
+  .doc(phone)
+  .collection("vehicles")
+  .where("number", "==", vehicleNumber.trim())
+  .where("session", "==", activeSession)
+  .get();
+if (!existing.empty && !vehicleId) {
+  setErrorType("duplicate");
+  setShowValidationModal(true);
+  setSaving(false); // 🔥 ADD THIS
+  return;
+}
+
+ setLoading(true);
+const cleanNumber = vehicleNumber.replace(/\s/g, "");
+
+const isValid = /^[A-Z]{2}\d{2}[A-Z]{2}\d{4}$/.test(cleanNumber);
+
+if (!isValid) {
+  setErrorType("validation");
+  setShowValidationModal(true);
+  setSaving(false);
+  return;
+}
+const data = {
+  nickname: name.trim(),
+  type,
+  number: cleanNumber,
+  session: activeSession, // 🔥 MUST ADD
+  createdAt: firestore.FieldValue.serverTimestamp()
+};
     try {
+    
       const col = firestore().collection("users").doc(phone).collection("vehicles");
       if (vehicleId) await col.doc(vehicleId as string).update(data);
       else await col.add(data);
       router.back();
-    } catch (e) { console.log(e); }
-    setLoading(false);
+    }  catch (e) {
+  console.log(e);
+} finally {
+  setLoading(false);
+  setSaving(false); // 🔥 IMPORTANT
+}
   };
+
+const formatDisplay = (num: string) => {
+  const match = num.match(/^([A-Z]{2})(\d{2})([A-Z]{2})(\d{4})$/);
+  return match ? `${match[1]} ${match[2]} ${match[3]} ${match[4]}` : num;
+};
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -174,7 +248,10 @@ const filteredVehicles = vehicleOptions.filter(item => {
               <TextInput
                 ref={numberRef}
                 value={vehicleNumber}
-                onChangeText={setVehicleNumber}
+                onChangeText={(text) => {
+  const formatted = formatVehicleNumber(text);
+  setVehicleNumber(formatted);
+}}
                 onFocus={() => setActiveInput("number")}
                 onBlur={() => setActiveInput(null)}
                 style={[styles.input, { textTransform: "uppercase", fontFamily: 'Mandali' }]}
@@ -196,7 +273,12 @@ const filteredVehicles = vehicleOptions.filter(item => {
           </View>
 
           {/* SAVE BUTTON */}
-          <TouchableOpacity activeOpacity={0.85} style={styles.saveBtn} onPress={handleSave}>
+         <TouchableOpacity
+  activeOpacity={0.85}
+  style={[styles.saveBtn]}
+  onPress={handleSave}
+  disabled={saving} // 🔥 ADD THIS
+>
             <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
               <AppText style={styles.saveText}>
                 {vehicleId ? (language === "te" ? "సవరించండి" : "Update Vehicle") : (language === "te" ? "భద్రపరచండి" : "Save Vehicle")}
@@ -211,8 +293,20 @@ const filteredVehicles = vehicleOptions.filter(item => {
         <View style={styles.modalOverlayCenter}>
           <View style={styles.alertBox}>
             <View style={styles.alertIconBg}><Ionicons name="warning-outline" size={32} color="#F59E0B" /></View>
-            <AppText style={styles.alertTitle}>{language === "te" ? "వివరాలు అవసరం" : "Missing Details"}</AppText>
-            <AppText style={styles.alertSub}>{language === "te" ? "దయచేసి * అన్ని వివరాలు నమోదు చేయండి" : "Please enter all * details"}</AppText>
+            <AppText style={styles.alertTitle}>
+  {errorType === "duplicate"
+    ? (language === "te" ? "ఇప్పటికే ఉంది" : "Already Exists")
+    : (language === "te" ? "వివరాలు అవసరం" : "Missing Details")}
+</AppText>
+<AppText style={styles.alertSub}>
+  {errorType === "duplicate"
+    ? (language === "te"
+        ? "ఈ వాహనం ఇప్పటికే ఉంది"
+        : "This vehicle already exists")
+    : (language === "te"
+        ? "దయచేసి * అన్ని వివరాలు నమోదు చేయండి"
+        : "Please enter all * details")}
+</AppText>
             <TouchableOpacity activeOpacity={0.8} style={styles.alertBtn} onPress={() => setShowValidationModal(false)}>
               <AppText style={styles.alertBtnText}>{language === "te" ? "సరే" : "OK"}</AppText>
             </TouchableOpacity>
@@ -238,7 +332,7 @@ const filteredVehicles = vehicleOptions.filter(item => {
                 value={searchText}
                 cursorColor={'green'}
                 placeholderTextColor={'black'}
-                onChangeText={(text) => { setSearchText(text); setType(text); }}
+               onChangeText={(text) => setSearchText(text)}
                 style={[styles.searchInput, { fontFamily: "Mandali", flex: 1 }]}
               />
               {searchText.trim().length > 0 && (

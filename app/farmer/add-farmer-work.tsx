@@ -346,60 +346,91 @@ const validate = (lang: SupportedLang = 'en') => {
   return null;
 };
 
-const handleSave = async () => {
-  const err = validate(language);
+/* ---------------- SAVE ---------------- */
+  const handleSave = async () => {
+    const err = validate(language);
 
-  if (err) {
-    setErrorMsg(err);
-    setErrorModal(true);
-    return;
-  }
+    if (err) {
+      setErrorMsg(err);
+      setErrorModal(true);
+      return;
+    }
 
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-  if (!phone || !vehicleId) return;
+    try {
+      // 1. లోడర్ ముందు ఆన్ చేయాలి
+      setSaving(true);
 
-  setSaving(true);
+      // 🔥 FORCE UI RENDER: లోడర్ వెంటనే UI మీద కనిపించడానికి (Production Trick)
+      await new Promise(resolve => setTimeout(resolve, 0));
 
-  try {
-    await firestore()
-      .collection("users")
-      .doc(phone)
-      .collection("vehicles")
-      .doc(vehicleId as string)
-      .collection("works")
-.doc(farmerId as string)
-.collection("entries")// or "works" (better same name maintain)
-      .add({
-        date,
-        crop,
-        work,
-        acres,
-        workType,
-        hrs,
-        mins,
-        ratePerHour,
-        saalluCount,
-        ratePerSaalu,
-        payableAmount,
-        advanceAmount,
-        finalAmount: getFinalAmount(),
-        notes,
-        createdAt: firestore.FieldValue.serverTimestamp()
-      });
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone || !vehicleId || !farmerId) {
+        setSaving(false);
+        return;
+      }
 
-   setTimeout(() => {
-  setSaving(false);
-  router.back();
-}, 800); // smooth feel
+      // 🔥 2. FETCH ACTIVE SESSION (Production Level)
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(phone)
+        .get();
 
-   
+      const activeSession = userDoc.data()?.activeSession;
 
-  } catch (e) {
-    setSaving(false);
-    setErrorMsg("Something went wrong");
-    setErrorModal(true);
-  }
-};
+      // సెషన్ లేకపోతే డేటా సేవ్ చేయకుండా ఆపేయాలి
+      if (!activeSession) {
+        setSaving(false);
+        setErrorMsg(language === "te" ? "సెషన్ కనుగొనబడలేదు!" : "Active session not found!");
+        setErrorModal(true);
+        return;
+      }
+
+      // 🔥 3. URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా స్ట్రింగ్ లా మార్చడం
+      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
+      const fId = Array.isArray(farmerId) ? farmerId[0] : farmerId;
+
+      // 🔥 4. సేవ్ చేసేముందు వైట్-స్పేసెస్ క్లీన్ చేయడం (Data consistency)
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("works")
+        .doc(fId)
+        .collection("entries")
+        .add({
+          date,
+          crop: crop.trim(),
+          work: work.trim(),
+          acres: acres.trim(),
+          workType,
+          hrs: hrs.trim(),
+          mins: mins.trim(),
+          ratePerHour: ratePerHour.trim(),
+          saalluCount: saalluCount.trim(),
+          ratePerSaalu: ratePerSaalu.trim(),
+          payableAmount: payableAmount.trim(),
+          advanceAmount: advanceAmount.trim(),
+          finalAmount: getFinalAmount(),
+          notes: notes.trim(),
+          session: activeSession, // 🔥 SESSION ADDED HERE
+          createdAt: firestore.FieldValue.serverTimestamp()
+        });
+
+      // సక్సెస్ అయ్యాక కొంచెం స్మూత్ గా వెనక్కి వెళ్లడానికి
+      setTimeout(() => {
+        setSaving(false);
+        router.back();
+      }, 500); 
+
+    } catch (e) {
+      console.log("Save Error: ", e);
+      setSaving(false);
+      // ఫైర్ బేస్ ఎర్రర్ వస్తే యాప్ క్రాష్ అవ్వకుండా యూజర్ కి మెసేజ్ చూపించడం
+      setErrorMsg(language === "te" ? "నెట్వర్క్ లేదా సర్వర్ సమస్య, మళ్లీ ప్రయత్నించండి." : "Something went wrong, please try again.");
+      setErrorModal(true);
+    }
+  };
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
       if (l) setLanguage(l as any);

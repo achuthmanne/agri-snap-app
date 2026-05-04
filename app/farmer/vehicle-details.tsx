@@ -8,7 +8,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { useEffect, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import React, { useCallback } from "react";
 import {
   FlatList,
   Linking,
@@ -30,7 +31,7 @@ export default function VehicleDetails() {
   const vehicleType = Array.isArray(type) ? type[0] : type;
 
   const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
 
   const [search, setSearch] = useState("");
@@ -68,11 +69,73 @@ useSpeechRecognitionEvent("result", (event) => {
 }, []);
   /* ---------------- LOAD ---------------- */
 
+
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then(l => {
       if (l) setLanguage(l as any);
     });
   }, []);
+
+  // 🔥 useEffect బదులు useFocusEffect వాడుతున్నాం
+  useFocusEffect(
+    useCallback(() => {
+      let unsub: any;
+
+      const load = async () => {
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (!phone) return;
+
+        setLoading(true);
+
+        const userDoc = await firestore()
+          .collection("users")
+          .doc(phone)
+          .get();
+
+        const activeSession = userDoc.data()?.activeSession;
+
+        if (!activeSession) {
+          setLoading(false);
+          return;
+        }
+
+        unsub = firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("vehicles")
+          .doc(id as string)
+          .collection("farmers")
+          .where("session", "==", activeSession) 
+          .orderBy("createdAt", "desc")
+          .onSnapshot((snap) => {
+
+            if (!snap || !snap.docs) {
+              setLoading(false);
+              return;
+            }
+
+            const list: any[] = [];
+
+            snap.forEach(doc => {
+              const d = doc.data();
+              if (!d) return;
+              list.push({ id: doc.id, ...d });
+            });
+
+            setData(list);
+            setLoading(false);
+          });
+      };
+
+      load();
+
+      // స్క్రీన్ నుండి బయటకి వెళ్లగానే listener ఆగిపోయేలా
+      return () => {
+        if (unsub) unsub();
+      };
+
+    }, [id]) // id మారినా కూడా మళ్లీ ఫ్రెష్ గా డేటా తెస్తుంది
+  );
 
   useEffect(() => {
     let unsub: any;
@@ -83,25 +146,44 @@ useSpeechRecognitionEvent("result", (event) => {
 
       setLoading(true);
 
-      unsub = firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("vehicles")
-        .doc(id as string)
-        .collection("farmers")
-        .orderBy("createdAt", "desc")
-        .onSnapshot(snap => {
+     const userDoc = await firestore()
+  .collection("users")
+  .doc(phone)
+  .get();
 
-          const list: any[] = [];
+const activeSession = userDoc.data()?.activeSession;
 
-          snap.forEach(doc => {
-            list.push({ id: doc.id, ...(doc.data() as any) });
-          });
+if (!activeSession) {
+  setLoading(false);
+  return;
+}
 
-          setData(list);
+unsub = firestore()
+  .collection("users")
+  .doc(phone)
+  .collection("vehicles")
+  .doc(id as string)
+  .collection("farmers")
+  .where("session", "==", activeSession) // 🔥 ADD THIS
+  .orderBy("createdAt", "desc")
+  .onSnapshot((snap) => {
 
-          setTimeout(() => setLoading(false), 300);
-        });
+    if (!snap || !snap.docs) {
+      setLoading(false);
+      return;
+    }
+
+    const list: any[] = [];
+
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (!d) return;
+      list.push({ id: doc.id, ...d });
+    });
+
+    setData(list);
+    setLoading(false);
+  });
     };
 
     load();
@@ -130,12 +212,15 @@ useSpeechRecognitionEvent("result", (event) => {
     Linking.openURL(`tel:${phone}`);
   };
 
-  const handleEdit = (item: any) => {
+const handleEdit = (item: any) => {
   router.push({
     pathname: "/farmer/vehicle-farmers",
     params: {
       vehicleId: id,
-      editId: item.id
+      editId: item.id,
+      name: item.farmerName,
+      phone: item.phone,
+      village: item.village
     }
   });
 };
@@ -151,16 +236,24 @@ const confirmDelete = async () => {
   const phone = await AsyncStorage.getItem("USER_PHONE");
   if (!phone) return;
 
-  await firestore()
-    .collection("users")
-    .doc(phone)
-    .collection("vehicles")
-    .doc(id as string)
-    .collection("farmers")
-    .doc(deleteItem.id)
-    .delete();
+  // 🔥 INSTANT UI REMOVE
+  setData(prev => prev.filter(item => item.id !== deleteItem.id));
 
   setShowDeleteModal(false);
+
+  try {
+    await firestore()
+      .collection("users")
+      .doc(phone)
+      .collection("vehicles")
+      .doc(id as string)
+      .collection("farmers")
+      .doc(deleteItem.id)
+      .delete();
+  } catch (e) {
+    console.log(e);
+  }
+
   setDeleteItem(null);
 };
   /* ---------------- SHIMMER ---------------- */
@@ -182,12 +275,12 @@ const confirmDelete = async () => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      <AppHeader
-        title={name as string}
+     <AppHeader
+        title={language === "te" ? "రైతుల జాబితా" : "Farmers List"}
         subtitle={
           vehicleNumber && vehicleNumber.trim() !== ""
-            ? vehicleNumber
-            : vehicleType
+            ? `${name || vehicleType} | ${vehicleNumber}` // ఉదాహరణకి: Mahindra Tractor • AP 39 AB 1234
+            : `${name || vehicleType || (language === "te" ? "వాహన వివరాలు" : "Vehicle Details")}`
         }
         language={language}
       />
