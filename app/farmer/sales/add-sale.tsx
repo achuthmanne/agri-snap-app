@@ -54,17 +54,25 @@ useEffect(() => {
     const phone = await AsyncStorage.getItem("USER_PHONE");
     if (!phone) return;
 
+    // 🔥 1. ముందుగా యూజర్ యొక్క ఆక్టివ్ సెషన్ ఏంటో తెలుసుకుందాం
+    const userDoc = await firestore().collection("users").doc(phone).get();
+    const activeSession = userDoc.data()?.activeSession;
+
+    if (!activeSession) return; // ఆక్టివ్ సెషన్ లేకపోతే రిటర్న్
+
+    // 🔥 2. ఆ ఆక్టివ్ సెషన్ కు సంబంధించిన పంటలను మాత్రమే ఫిల్టర్ చేద్దాం
     const snap = await firestore()
       .collection("users")
       .doc(phone)
       .collection("fields")
+      .where("session", "==", activeSession) // 👉 ఇక్కడే అసలైన మ్యాజిక్
       .get();
 
     const set = new Set<string>();
 
     snap.forEach(doc => {
       if (!doc.exists) return;
-const data = doc.data();
+      const data = doc.data();
       if (data.crop) set.add(data.crop);
     });
 
@@ -73,7 +81,6 @@ const data = doc.data();
 
   loadUserCrops();
 }, []);
-
   const cropRef = useRef<TextInput>(null);
   const qtyRef = useRef<TextInput>(null);
   const rateRef = useRef<TextInput>(null);
@@ -269,8 +276,8 @@ if (loading) return; // 🔥 ADD FIRST LINE
 
   <AppText style={styles.cropHintText}>
     {language === "te"
-      ? "పంటకు సంబంధించిన ఇతర రకాలు (ఉదా: తాలుకాయ, నూకలు) అమ్మినప్పుడు కూడా అదే పంట పేరునే ఎంచుకోండి."
-      : "For related variants (e.g., small-grade, husks), please select the main crop name."}
+      ? "పంటకు సంబంధించిన ఇతర రకాలు (ఉదా: తాలు కాయ, మిర్చి) అమ్మినప్పుడు కూడా అదే పంట పేరునే ఎంచుకోండి."
+      : "For related variants (e.g., Mirchi Thalu, Chilli), please select the main crop name."}
   </AppText>
   
   {/* Adding a subtle example line */}
