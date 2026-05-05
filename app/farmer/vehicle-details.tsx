@@ -67,15 +67,84 @@ useSpeechRecognitionEvent("result", (event) => {
     ExpoSpeechRecognitionModule.stop(); // 🔥 stop when leaving screen
   };
 }, []);
-  /* ---------------- LOAD ---------------- */
+/* ---------------- LOAD ---------------- */
 
+  useFocusEffect(
+    useCallback(() => {
+      let unsub: any;
 
-  useEffect(() => {
-    AsyncStorage.getItem("APP_LANG").then(l => {
-      if (l) setLanguage(l as any);
-    });
-  }, []);
+      const load = async () => {
+        try {
+          const phone = await AsyncStorage.getItem("USER_PHONE");
+          if (!phone) return;
 
+          setLoading(true);
+
+          const userDoc = await firestore()
+            .collection("users")
+            .doc(phone)
+            .get();
+
+          const activeSession = userDoc.data()?.activeSession;
+
+          if (!activeSession) {
+            setData([]); // సెషన్ లేకపోతే లిస్ట్ ఖాళీ
+            setLoading(false);
+            return;
+          }
+
+          unsub = firestore()
+            .collection("users")
+            .doc(phone)
+            .collection("vehicles")
+            .doc(id as string)
+            .collection("farmers")
+            .where("session", "==", activeSession) // 🔥 సెషన్ ఫిల్టర్
+            // ❌ .orderBy తీసేశాను (Index ఇష్యూ రాకుండా ఉండటానికి)
+            .onSnapshot(
+              (snap) => {
+                if (!snap || !snap.docs) {
+                  setData([]);
+                  setLoading(false);
+                  return;
+                }
+
+                const list: any[] = [];
+                snap.forEach(doc => {
+                  const d = doc.data();
+                  if (!d) return;
+                  list.push({ id: doc.id, ...d });
+                });
+
+                // 🔥 జావాస్క్రిప్ట్ లోనే లేటెస్ట్ ముందు వచ్చేలా సార్ట్ చేస్తున్నాం
+                list.sort((a, b) => {
+                  const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                  const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                  return timeB - timeA;
+                });
+
+                setData(list);
+                setLoading(false);
+              },
+              (error) => {
+                console.log("Firestore Error: ", error);
+                setLoading(false);
+              }
+            );
+        } catch (error) {
+          console.log("Loading Error: ", error);
+          setLoading(false);
+        }
+      };
+
+      load();
+
+      // స్క్రీన్ నుండి బయటకి వెళ్లగానే listener ఆగిపోయేలా
+      return () => {
+        if (unsub) unsub();
+      };
+    }, [id])
+  );
   // 🔥 useEffect బదులు useFocusEffect వాడుతున్నాం
   useFocusEffect(
     useCallback(() => {

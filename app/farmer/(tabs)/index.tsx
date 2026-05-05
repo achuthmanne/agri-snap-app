@@ -157,7 +157,7 @@ const priceScroll = useRef(new Animated.Value(0)).current;
 const getServices = () => [
   // 1. Daily Essentials (యూజర్ రోజూ చెక్ చేసేవి)
   { service: "attendance", title: t.attendance, icon: icons.attendance, screen: "/farmer/attendance" },
-  { service: "weather", title: t.weather, icon: icons.weather, screen: "/farmer/(tabs)/weather" },
+  { service: "weather", title: t.weather, icon: icons.weather, screen: "/farmer/weather" },
   { service: "expenses", title: t.expenses, icon: icons.expenses, screen: "/farmer/expenses" },
 
   // 2. Field & Crop Management (ప్రధానమైన వ్యవసాయ పనులు)
