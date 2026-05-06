@@ -470,3 +470,79 @@ export const sendInactiveNotifications = onSchedule({
     } 
   } 
 );
+
+/* ---------------- 6. NEW SCHEME NOTIFICATION (AP/TS FILTERED) ---------------- */
+export const notifyNewScheme = onDocumentCreated(
+  "schemes/{schemeId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    
+    const scheme = snap.data();
+    const schemeId = event.params.schemeId;
+
+    // స్కీమ్ యొక్క రాష్ట్రం మరియు పేరు
+    const schemeState = scheme.state; // "AP", "TS", or "BOTH"
+    const title = scheme.title || "కొత్త ప్రభుత్వ పథకం";
+    
+    let tokens: string[] = [];
+    
+    // యూజర్స్ డేటాబేస్ నుండి టోకెన్స్ తెచ్చుకోవడం
+    const usersSnap = await admin.firestore().collection("users").get();
+    
+    usersSnap.forEach((doc) => {
+      const userData = doc.data();
+      const userState = (userData.state || "").trim().toUpperCase();
+      const token = userData.fcmToken;
+
+      if (token) {
+        // 1. స్కీమ్ 'BOTH' అయితే అందరికీ వెళ్ళాలి
+        if (schemeState === "BOTH") {
+          tokens.push(token);
+        } 
+        // 2. స్కీమ్ 'AP' అయితే కేవలం AP రైతులకే వెళ్ళాలి
+        else if (schemeState === "AP" && userState === "AP") {
+          tokens.push(token);
+        } 
+        // 3. స్కీమ్ 'TS' అయితే కేవలం TS రైతులకే వెళ్ళాలి
+        else if (schemeState === "TS" && userState === "TS") {
+          tokens.push(token);
+        }
+      }
+    });
+
+    // డూప్లికేట్ టోకెన్స్ లేకుండా ఫిల్టర్ చేయడం
+    tokens = [...new Set(tokens)];
+    
+    if (tokens.length === 0) {
+      console.log(`❌ No tokens found for ${schemeState} state`);
+      return;
+    }
+
+    console.log(`✅ Sending Scheme Notification to ${tokens.length} users in ${schemeState}`);
+
+    try {
+      await admin.messaging().sendEachForMulticast({
+        tokens,
+        notification: {
+          title: "🎉 కొత్త ప్రభుత్వ పథకం!",
+          body: `${title} - అర్హతలు, కావాల్సిన పత్రాలు మరియు దరఖాస్తు విధానం కోసం ఇప్పుడే AgriSnap లో చూడండి.`,
+        },
+        android: {
+          priority: "high",
+          notification: { 
+            channelId: "default", 
+            sound: "default"
+          },
+        },
+        data: {
+          // నోటిఫికేషన్ క్లిక్ చేయగానే డైరెక్ట్ గా ఆ స్కీమ్ డీటెయిల్స్ స్క్రీన్ కి వెళ్లేలా
+          screen: `/farmer/schemes/${schemeId}`, 
+        },
+      });
+      console.log("✅ Scheme Notification Sent Successfully");
+    } catch (e) {
+      console.error("❌ Error sending scheme notification:", e);
+    }
+  }
+);
