@@ -552,10 +552,12 @@ export default function AddMachine() {
                 {locationText}
               </AppText>
             </View>
-            <TouchableOpacity activeOpacity={0.85} style={styles.minimalConfirmBtn} onPress={() => setShowMapModal(false)}>
+            <TouchableOpacity activeOpacity={0.85}  onPress={() => setShowMapModal(false)}>
+              <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.minimalConfirmBtn}>
               <AppText style={styles.minimalConfirmText}>
                 {language === "te" ? "నిర్ధారించండి" : "Confirm Location"}
               </AppText>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>

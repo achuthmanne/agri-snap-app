@@ -7,7 +7,7 @@ import firestore from "@react-native-firebase/firestore";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import ShimmerPlaceHolder from "react-native-shimmer-placeholder";
-import LinearGradient from "react-native-linear-gradient";
+import LinearGradient from "expo-linear-gradient";
 import { LayoutAnimation, Platform, UIManager } from "react-native";
 import {
   FlatList,
@@ -234,7 +234,7 @@ const handleDelete = async () => {
 
 const Shimmer = (props: any) => (
   <ShimmerPlaceHolder
-    LinearGradient={LinearGradient}
+    LinearGradient={LinearGradient as any} // 👈 ఇక్కడ 'as any' పెట్టాను చూడు
     shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
     style={{ borderRadius: 6, ...props.style }}
   />

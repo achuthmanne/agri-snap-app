@@ -246,16 +246,78 @@ export const getWeather = functions.https.onRequest(async (req, res) => {
 /* ---------------- 3. GET PRICES ---------------- */
 export const getPrices = functions.https.onRequest(async (req, res) => {
   try {
-    const API = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd0000012deb5555117e4ebe4ffd6df74e6ae0d8&format=json&filters[state]=Andhra Pradesh&limit=100";
-    const API2 = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd0000012deb5555117e4ebe4ffd6df74e6ae0d8&format=json&filters[state]=Telangana&limit=100";
-    const ap = await fetch(API);
-    const ts = await fetch(API2);
+    
+    const DATA_GOV_API_KEY = process.env.DATA_GOV_API_KEY || "579b464db66ec23bdd0000012deb5555117e4ebe4ffd6df74e6ae0d8";
+
+    const AP_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Andhra Pradesh&limit=100`;
+    const TS_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Telangana&limit=100`;
+    
+    const ap = await fetch(AP_API);
+    const ts = await fetch(TS_API);
     const apData = await ap.json();
     const tsData = await ts.json();
     const combined = [...(apData.records || []), ...(tsData.records || [])];
     res.json(combined.slice(0, 10));
   } catch (e) {
     res.status(500).json({ error: "Price fetch failed" });
+  }
+});
+
+
+/* ---------------- 3.5 ADVANCED PRICES (NEW - FOR MARKET SCREEN) ---------------- */
+export const getAdvancedPrices = functions.https.onRequest(async (req, res) => {
+  try {
+    // 🔥 data.gov.in API కీ ని .env నుంచి తీసుకుంటున్నాం
+    const DATA_GOV_API_KEY = process.env.DATA_GOV_API_KEY || "579b464db66ec23bdd0000012deb5555117e4ebe4ffd6df74e6ae0d8";
+    
+    // ఆంధ్రా మరియు తెలంగాణ కోసం పూర్తి డేటా (100 లిమిట్ తో) తెచ్చుకుంటున్నాం
+    const AP_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Andhra Pradesh&limit=100`;
+    const TS_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Telangana&limit=100`;
+    
+    const [apRes, tsRes] = await Promise.all([fetch(AP_API), fetch(TS_API)]);
+    
+    const apData = await apRes.json();
+    const tsData = await tsRes.json();
+    
+    // రెండు రాష్ట్రాల డేటాని కలుపుతున్నాం (slice తీసేశాం)
+    const combinedRecords = [...(apData.records || []), ...(tsData.records || [])];
+
+    // లేటెస్ట్ డేట్ ప్రకారం సార్ట్ చేస్తున్నాం
+    const sorted = combinedRecords.sort(
+      (a: any, b: any) => new Date(b.arrival_date).getTime() - new Date(a.arrival_date).getTime()
+    );
+
+    // మార్కెట్ మరియు పంట పేరు బట్టి గ్రూప్ చేస్తున్నాం (నిన్నటి/ఈరోజుటి రేట్లు పోల్చడానికి)
+    const grouped: any = {};
+    sorted.forEach((item: any) => {
+      // ఒకే మార్కెట్, ఒకే పంట (ఉదా: Guntur - Cotton) ని కీ గా వాడుతున్నాం
+      const key = `${item.market}-${item.commodity}`; 
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(item);
+    });
+
+    // ఫైనల్ లిస్ట్ తయారు చేస్తున్నాం
+    const finalPrices = Object.keys(grouped).map((key) => {
+      const items = grouped[key];
+      return {
+        state: items[0].state,
+        market: items[0].market,
+        commodity: items[0].commodity,
+        min_price: items[0].min_price,
+        max_price: items[0].max_price,
+        modal_price: items[0].modal_price, // ఈరోజు రేటు
+        arrival_date: items[0].arrival_date,
+        // ఒకవేళ పాత డేటా ఉంటే దాన్ని prevPrice గా పంపుతున్నాం
+        prevPrice: items[1]?.modal_price || items[0].modal_price 
+      };
+    });
+
+    res.status(200).json(finalPrices);
+  } catch (error) {
+    console.error("Advanced Price Fetch Error:", error);
+    res.status(500).json({ error: "Failed to fetch advanced prices" });
   }
 });
 

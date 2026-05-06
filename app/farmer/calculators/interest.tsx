@@ -280,7 +280,7 @@ export default function InterestCalculator() {
           )}
 
           <TouchableOpacity activeOpacity={0.8} style={styles.calculateBtn} onPress={handleCalculate}>
-            <LinearGradient colors={["#16A34A", "#15803D"]} style={styles.btnGradient}>
+            <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.btnGradient}>
               <Ionicons name="calculator" size={22} color="#fff" />
               <AppText style={styles.btnText}>{language === 'te' ? 'లెక్కించు' : 'Calculate'}</AppText>
             </LinearGradient>
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   
   tabContainer: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 14, padding: 4, marginHorizontal: 20, marginTop: 10, marginBottom: 20 },
   tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 6 },
-  activeTabBtn: { backgroundColor: '#16A34A', elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+  activeTabBtn: { backgroundColor: '#1B5E20', elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
   tabText: { fontSize: 13, fontWeight: '600', color: '#4B5563', fontFamily: 'Mandali' },
   activeTabText: { color: '#fff' },
 
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   datePickerBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, height: 56, paddingHorizontal: 15 },
   dateText: { fontSize: 15, color: '#1F2937', fontWeight: '600', marginLeft: 10, fontFamily: 'Mandali' },
 
-  calculateBtn: { marginTop: 10, borderRadius: 16, overflow: 'hidden', elevation: 3, shadowColor: '#16A34A', shadowOpacity: 0.3, shadowRadius: 8 },
+  calculateBtn: { marginTop: 10, borderRadius: 16, overflow: 'hidden', elevation: 3, shadowColor: '#1B5E20', shadowOpacity: 0.3, shadowRadius: 8 },
   btnGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 56, gap: 10 },
   btnText: { color: '#fff', fontSize: 18, fontWeight: '600', fontFamily: 'Mandali' },
 
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   resultValue: { fontSize: 16, color: '#1F2937', fontWeight: '600', fontFamily: 'Mandali' },
   
   totalLabel: { fontSize: 18, color: '#1E40AF', fontWeight: '600', fontFamily: 'Mandali' },
-  totalValue: { fontSize: 24, color: '#16A34A', fontWeight: '600', fontFamily: 'Mandali' },
+  totalValue: { fontSize: 24, color: '#1B5E20', fontWeight: '600', fontFamily: 'Mandali' },
 
   // 🔥 CUSTOM ALERT STYLES
   statusOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 20 },
@@ -398,5 +398,5 @@ const styles = StyleSheet.create({
   statusTitle: { fontSize: 22, fontWeight: "600", color: "#1F2937", marginBottom: 10, fontFamily: "Mandali" },
   statusDescription: { fontSize: 16, textAlign: "center", color: "#6B7280", lineHeight: 24, marginBottom: 25, fontFamily: "Mandali" },
   statusActionBtn: { width: "100%", height: 55, borderRadius: 18, justifyContent: "center", alignItems: "center", backgroundColor: "#F59E0B" },
-  statusActionText: { color: "#fff", fontSize: 17, fontWeight: "600", fontFamily: "Mandali" },
+  statusActionText: { color: "#fff", fontSize: 16, fontWeight: "600", fontFamily: "Mandali" },
 });

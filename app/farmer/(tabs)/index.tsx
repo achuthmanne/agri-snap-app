@@ -113,6 +113,9 @@ const headerCardRef = useRef<any>(null);
 const [isOnline, setIsOnline] = useState(true);
 const [weatherType, setWeatherType] = useState("");
 const [activeSession, setActiveSession] = useState("");
+// 🔥 నీ పర్సనల్ అడ్మిన్ నెంబర్ (నీ అసలు నెంబర్ ఇక్కడ పెట్టుకో)
+  const ADMIN_PHONE = "8121648629"; 
+  const [isAdmin, setIsAdmin] = useState(false);
 const [sessionModal, setSessionModal] = useState(false);
 const [oldSessionModal, setOldSessionModal] = useState(false);
 const [allSessions, setAllSessions] = useState<string[]>([]);
@@ -583,6 +586,10 @@ setRefreshing(false);
       if (!phone) {
         setLoading(false);
         return;
+      }
+      // 🔥 ఇక్కడ అడ్మిన్ చెక్ జరుగుతుంది!
+      if (phone === ADMIN_PHONE) {
+         setIsAdmin(true);
       }
 await fetchAllSessions(phone);
       const doc = await firestore().collection("users").doc(phone).get();
@@ -1601,8 +1608,20 @@ activeHeaderCard===1 && styles.headerDotActive
       <Ionicons name="power" size={20} color="#fff" />
     </LinearGradient>
   </TouchableOpacity>
-
+{/* 🔥 SECRET ADMIN BUTTON (కేవలం నీకు మాత్రమే కనిపిస్తుంది) */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.notifyBtn, { marginRight: 10, backgroundColor: "rgba(234, 179, 8, 0.2)" }]}
+              activeOpacity={0.8}
+              onPress={() => router.push("/farmer/admin-scheme" as any)}
+            >
+              <Ionicons name="shield-checkmark" size={22} color="#FBBF24" />
+            </TouchableOpacity>
+          )}
 </TouchableOpacity>
+
+
+
         {/* QUICK SERVICES */}
 
        <View style={styles.sectionHeader}>

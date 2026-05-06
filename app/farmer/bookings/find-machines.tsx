@@ -373,7 +373,7 @@ export default function FindMachines() {
               onPress={() => Linking.openURL(`tel:${item.phone}`)}
             >
               <LinearGradient colors={["#16A34A", "#15803D"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.callGradientIcon}>
-                <Ionicons name="call" size={20} color="#fff" />
+                <Ionicons name="call-outline" size={20} color="#fff" />
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -482,8 +482,10 @@ export default function FindMachines() {
               <Ionicons name="location" size={24} color="#16A34A" />
               <AppText style={styles.minimalAddress} numberOfLines={2}>{locationText}</AppText>
             </View>
-            <TouchableOpacity activeOpacity={0.85} style={styles.minimalConfirmBtn} onPress={() => setShowMapModal(false)}>
+            <TouchableOpacity activeOpacity={0.85}  onPress={() => setShowMapModal(false)}>
+              <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.minimalConfirmBtn}>
               <AppText style={styles.minimalConfirmText}>{language === "te" ? "నిర్ధారించండి" : "Confirm"}</AppText>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
