@@ -28,6 +28,7 @@ import {
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 
 const getLocalImage = (type: string) => {
   if (!type) return require("@/assets/images/John-deere-Tractors..jpg");
@@ -190,12 +191,12 @@ export default function FindMachines() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        setLocationText(language === "te" ? "లొకేషన్ అనుమతి ఇవ్వలేదు" : "Permission denied");
+        setLocationText("PERMISSION_DENIED");
         return;
       }
       const enabled = await Location.hasServicesEnabledAsync();
       if (!enabled) {
-        setLocationText(language === "te" ? "GPS ఆఫ్‌లో ఉంది" : "GPS is turned off");
+        setLocationText("GPS_OFF");
         return;
       }
       
@@ -347,7 +348,7 @@ export default function FindMachines() {
         </View>
         <View style={styles.divider} />
         
-        {/* 🔥 NEW FOOTER ROW: Phone + 2 Square Icon Buttons */}
+        {/* 🔥 FOOTER ROW */}
         <View style={styles.footerActionRow}>
           <View style={styles.phoneContainer}>
             <AppText style={styles.phoneLabel}>
@@ -357,7 +358,7 @@ export default function FindMachines() {
           </View>
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            {/* 📍 దారి బటన్ (Directions Icon Only) */}
+            {/* Directions Icon */}
             <TouchableOpacity 
               activeOpacity={0.8} 
               style={styles.iconBtn} 
@@ -366,7 +367,7 @@ export default function FindMachines() {
               <MaterialCommunityIcons name="directions-fork" size={22} color="#2563EB" />
             </TouchableOpacity>
 
-            {/* 📞 కాల్ బటన్ (Call Icon Only) */}
+            {/* Call Icon */}
             <TouchableOpacity 
               activeOpacity={0.8} 
               style={styles.callIconBtn} 
@@ -392,14 +393,14 @@ export default function FindMachines() {
       />
 
       <View style={styles.filterContainer}>
-        <View style={[styles.locationWrapper, { borderColor: (locationText.includes(",")) ? '#16A34A' : '#EF4444' }]}>
-          <Ionicons name="location" size={20} color={(locationText.includes(",")) ? "#16A34A" : "#EF4444"} />
-          <AppText style={[styles.locationInput, { color: (locationText.includes(",")) ? '#374151' : '#EF4444' }]} numberOfLines={1}>
+        <View style={[styles.locationWrapper, { borderColor: (locationText.includes(",") || !["PERMISSION_DENIED", "GPS_OFF"].includes(locationText)) ? '#16A34A' : '#EF4444' }]}>
+          <Ionicons name="location" size={20} color={(locationText.includes(",") || !["PERMISSION_DENIED", "GPS_OFF"].includes(locationText)) ? "#16A34A" : "#EF4444"} />
+          <AppText style={[styles.locationInput, { color: (locationText.includes(",") || !["PERMISSION_DENIED", "GPS_OFF"].includes(locationText)) ? '#374151' : '#EF4444' }]} numberOfLines={1}>
             {locationText === "PERMISSION_DENIED" ? (language === "te" ? "అనుమతి ఇవ్వలేదు" : "Permission Denied") : locationText === "GPS_OFF" ? (language === "te" ? "GPS ఆఫ్ లో ఉంది" : "GPS is Off") : locationText ? locationText : (language === "te" ? "మీ ప్రాంతం కోసం వెతుకుతోంది..." : "Fetching your location...")}
           </AppText>
           <TouchableOpacity onPress={handleOpenMap}>
             <View style={styles.blueMapBtn}>
-              <MaterialCommunityIcons name="map-marker-radius" size={20} color={(locationText.includes(",")) ? "#2563EB" : "#EF4444"} />
+              <MaterialCommunityIcons name="map-marker-radius" size={20} color={(locationText.includes(",") || !["PERMISSION_DENIED", "GPS_OFF"].includes(locationText)) ? "#2563EB" : "#EF4444"} />
             </View>
           </TouchableOpacity>
         </View>
@@ -418,31 +419,48 @@ export default function FindMachines() {
         </View>
       </View>
 
+      {/* 🔥 GLOBAL EMPTY STATES HANDLING 🔥 */}
       {locationText === "PERMISSION_DENIED" ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="lock-closed-outline" size={60} color="#EF4444" />
-          <AppText style={styles.emptyTitle}>{language === "te" ? "లొకేషన్ అనుమతి అవసరం" : "Location Permission Required"}</AppText>
-          <AppText style={styles.emptySub}>{language === "te" ? "మీకు దగ్గరలో ఉన్న యంత్రాలను చూపించడానికి లొకేషన్ పర్మిషన్ ఇవ్వండి." : "Please enable location permission in settings to see nearby machines."}</AppText>
-          <TouchableOpacity style={styles.settingsBtn} onPress={openSettings}><AppText style={{color: '#fff', fontWeight: '600'}}>{language === "te" ? "సెట్టింగ్స్ కి వెళ్ళండి" : "Open Settings"}</AppText></TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <AppEmptyState
+            iconName="lock-closed-outline"
+            title={language === "te" ? "లొకేషన్ అనుమతి అవసరం" : "Location Permission Required"}
+            subtitle={language === "te" ? "మీకు దగ్గరలో ఉన్న యంత్రాలను చూపించడానికి లొకేషన్ పర్మిషన్ ఇవ్వండి." : "Please enable location permission in settings to see nearby machines."}
+            onRetry={openSettings}
+            retryText={language === "te" ? "సెట్టింగ్స్ కి వెళ్ళండి" : "Open Settings"}
+            language={language}
+          />
         </View>
       ) : locationText === "GPS_OFF" ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="location" size={60} color="#F59E0B" />
-          <AppText style={styles.emptyTitle}>{language === "te" ? "GPS ఆఫ్ లో ఉంది" : "GPS is Switched Off"}</AppText>
-          <AppText style={styles.emptySub}>{language === "te" ? "దగ్గరలోని యంత్రాలను చూపించడానికి GPS ఆన్ చేయండి." : "Please turn on GPS to see nearby machines."}</AppText>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <AppEmptyState
+            iconName="location-outline"
+            title={language === "te" ? "GPS ఆఫ్ లో ఉంది" : "GPS is Switched Off"}
+            subtitle={language === "te" ? "దగ్గరలోని యంత్రాలను చూపించడానికి GPS ఆన్ చేయండి." : "Please turn on GPS to see nearby machines."}
+            onRetry={fetchLocation}
+            retryText={language === "te" ? "మళ్ళీ ప్రయత్నించండి" : "Try Again"}
+            language={language}
+          />
         </View>
       ) : !coords ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="location-outline" size={50} color="#16A34A" style={{ marginBottom: 15 }} />
-          <AppText style={styles.emptySub}>{language === "te" ? "దగ్గరలోని యంత్రాలను చూపించడానికి మీ లొకేషన్ అవసరం. దయచేసి వేచి ఉండండి." : "Please wait while we determine your current location."}</AppText>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <AppEmptyState
+            iconName="compass-outline"
+            title={language === "te" ? "లొకేషన్ వెతుకుతోంది..." : "Fetching Location..."}
+            subtitle={language === "te" ? "దగ్గరలోని యంత్రాలను చూపించడానికి మీ లొకేషన్ అవసరం. దయచేసి వేచి ఉండండి." : "Please wait while we determine your current location."}
+            language={language}
+          />
         </View>
       ) : loading ? (
         <View style={{ padding: 16 }}><ShimmerCard /><ShimmerCard /><ShimmerCard /></View>
       ) : results.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Image source={{ uri: "https://cdn-icons-png.flaticon.com/512/7486/7486744.png" }} style={styles.emptyImg} />
-          <AppText style={styles.emptyTitle}>{language === "te" ? "యంత్రాలు ఏమీ దొరకలేదు!" : "No Machines Found!"}</AppText>
-          <AppText style={styles.emptySub}>{language === "te" ? "మీరు ఎంచుకున్న దూరంలో ప్రస్తుతానికి ఏ యంత్రాలు లేవు. దూరాన్ని పెంచి చూడండి." : "No machines found in this radius. Try increasing the distance."}</AppText>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <AppEmptyState
+            iconName="tractor-outline"
+            title={language === "te" ? "యంత్రాలు ఏమీ దొరకలేదు!" : "No Machines Found!"}
+            subtitle={language === "te" ? "మీరు ఎంచుకున్న దూరంలో ప్రస్తుతానికి ఏ యంత్రాలు లేవు. దూరాన్ని పెంచి చూడండి." : "No machines found in this radius. Try increasing the distance."}
+            language={language}
+          />
         </View>
       ) : (
         <View style={{ flex: 1 }}> 
@@ -560,7 +578,6 @@ const styles = StyleSheet.create({
   image: { width: "100%", height: "100%", resizeMode: "cover" },
   distBadge: { position: 'absolute', top: 15, right: 15, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 5 },
   distText: { color: '#fff', fontSize: 11, fontWeight: '600' },
-  settingsBtn: { backgroundColor: '#16A34A', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 12, marginTop: 20, elevation: 3 },
   divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 12 },
   
   footerActionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
@@ -568,7 +585,6 @@ const styles = StyleSheet.create({
   phoneLabel: { fontSize: 10, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   phoneValue: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
   
-  // 🔥 కొత్త ఐకాన్ బటన్స్ స్టైల్స్ (సిమెట్రీ కోసం)
   iconBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' },
   callIconBtn: { width: 44, height: 44, borderRadius: 12, overflow: 'hidden', elevation: 2, shadowColor: '#16A34A', shadowOpacity: 0.3, shadowRadius: 5 },
   callGradientIcon: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -596,10 +612,6 @@ const styles = StyleSheet.create({
   activeRadius: { backgroundColor: '#DCFCE7', borderColor: '#16A34A' },
   radiusText: { fontSize: 14, fontWeight: '600', color: '#4B5563' },
   activeRadiusText: { color: '#166534' },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyImg: { width: 100, height: 100, opacity: 0.5, marginBottom: 20 },
-  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#374151' },
-  emptySub: { textAlign: 'center', color: '#6B7280', marginTop: 8, lineHeight: 20 },
   categoryItem: { padding: 18, flexDirection: "row", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
   seeAllBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0b6b06', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 15, marginHorizontal: 16, marginTop: 15, gap: 8, borderWidth: 1, borderColor: '#16A34A' },
   activeSeeAll: { backgroundColor: '#0b6b06' },

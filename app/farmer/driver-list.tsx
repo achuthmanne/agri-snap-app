@@ -1,6 +1,7 @@
 //drivers list
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -27,10 +28,9 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-spe
 export default function VehicleDetails() {
 
   const router = useRouter();
- const params = useLocalSearchParams();
+  const params = useLocalSearchParams();
 
-const { id, name, number, type } = useLocalSearchParams();
-
+  const { id, name, number, type } = useLocalSearchParams();
 
   const vehicleNumber = Array.isArray(number) ? number[0] : number;
   const vehicleType = Array.isArray(type) ? type[0] : type;
@@ -41,45 +41,44 @@ const { id, name, number, type } = useLocalSearchParams();
 
   const [search, setSearch] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-const [deleteItem, setDeleteItem] = useState<any>(null);
-const [showDeleteModal, setShowDeleteModal] = useState(false);
-const [showTypeModal, setShowTypeModal] = useState(true);
-const [isListening, setIsListening] = useState(false);
-const isScreenFocused = useIsFocused();
+  const [deleteItem, setDeleteItem] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showTypeModal, setShowTypeModal] = useState(true);
+  const [isListening, setIsListening] = useState(false);
+  const isScreenFocused = useIsFocused();
 
-useSpeechRecognitionEvent("result", (event) => {
+  useSpeechRecognitionEvent("result", (event) => {
+    if (!isScreenFocused || !isListening) return;
 
-  // 🔥 FIX: only current screen lo unna appude work avvali
-  if (!isScreenFocused || !isListening) return;
-
-  if (event.results && event.results.length > 0) {
-    setSearch(event.results[0].transcript);
-  }
-});
-
-useSpeechRecognitionEvent("end", () => setIsListening(false));
-
-const handleVoiceSearch = async () => {
-  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-  if (!result.granted) return;
-
-  setIsListening(true);
-  ExpoSpeechRecognitionModule.start({
-    lang: language === "te" ? "te-IN" : "en-US",
-    interimResults: true,
+    if (event.results && event.results.length > 0) {
+      setSearch(event.results[0].transcript);
+    }
   });
-};
 
-useEffect(() => {
-  if (!isScreenFocused) {
-    ExpoSpeechRecognitionModule.stop();
-    setIsListening(false);
-  }
+  useSpeechRecognitionEvent("end", () => setIsListening(false));
 
-  return () => {
-    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+  const handleVoiceSearch = async () => {
+    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!result.granted) return;
+
+    setIsListening(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: language === "te" ? "te-IN" : "en-US",
+      interimResults: true,
+    });
   };
-}, [isScreenFocused]);
+
+  useEffect(() => {
+    if (!isScreenFocused) {
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    }
+
+    return () => {
+      ExpoSpeechRecognitionModule.stop(); 
+    };
+  }, [isScreenFocused]);
+
   /* ---------------- LOAD ---------------- */
 
   useEffect(() => {
@@ -88,7 +87,6 @@ useEffect(() => {
     });
   }, []);
 
-  // 🔥 useEffect బదులు useFocusEffect వాడుతున్నాం (Instant Reload కోసం)
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
@@ -99,10 +97,8 @@ useEffect(() => {
 
         setLoading(true);
 
-        // 🔥 URL Params Array లాగా వస్తే సేఫ్ గా మార్చడం
         const vId = Array.isArray(id) ? id[0] : id;
 
-        // 🔥 1. FETCH ACTIVE SESSION
         const userDoc = await firestore()
           .collection("users")
           .doc(phone)
@@ -115,14 +111,13 @@ useEffect(() => {
           return;
         }
 
-        // 🔥 2. SESSION BASED QUERY 
         unsub = firestore()
           .collection("users")
           .doc(phone)
           .collection("vehicles")
           .doc(vId as string)
           .collection("drivers")
-          .where("session", "==", activeSession) // సెషన్ ఫిల్టర్
+          .where("session", "==", activeSession) 
           .onSnapshot(snap => {
 
             if (!snap || !snap.docs) {
@@ -138,7 +133,6 @@ useEffect(() => {
               list.push({ id: doc.id, ...d });
             });
 
-            // 🔥 3. Pro Trick: Client Side Sorting (Firebase Index Crash రాకుండా)
             list.sort((a, b) => {
               const timeA = a.createdAt?.toMillis() || 0;
               const timeB = b.createdAt?.toMillis() || 0;
@@ -152,12 +146,12 @@ useEffect(() => {
 
       load();
 
-      // క్లీన్-అప్ ఫంక్షన్
       return () => {
         if (unsub) unsub();
       };
     }, [id])
   );
+
   useEffect(() => {
     let unsub: any;
 
@@ -215,21 +209,21 @@ useEffect(() => {
   };
 
   const handleEdit = (item: any) => {
-  router.push({
-    pathname: "/farmer/vehicle-drivers",
-    params: {
-      vehicleId: id,
-      editId: item.id
-    }
-  });
-};
+    router.push({
+      pathname: "/farmer/vehicle-drivers",
+      params: {
+        vehicleId: id,
+        editId: item.id
+      }
+    });
+  };
 
-const handleDelete = (item: any) => {
-  setDeleteItem(item);
-  setShowDeleteModal(true);
-};
+  const handleDelete = (item: any) => {
+    setDeleteItem(item);
+    setShowDeleteModal(true);
+  };
 
-/* ---------------- DELETE ---------------- */
+  /* ---------------- DELETE ---------------- */
 
   const confirmDelete = async () => {
     if (!deleteItem) return;
@@ -258,6 +252,7 @@ const handleDelete = (item: any) => {
 
     setDeleteItem(null);
   };
+
   /* ---------------- SHIMMER ---------------- */
 
   const ShimmerRow = () => (
@@ -326,45 +321,38 @@ const handleDelete = (item: any) => {
 
       {/* LIST */}
       {loading ? (
-        <>
+        <View style={{ paddingTop: 10 }}>
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
-        </>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
-          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          keyboardShouldPersistTaps="handled" 
+          contentContainerStyle={[
+            { padding: 20, paddingBottom: 100 },
+            // 🔥 డేటా లేనప్పుడు సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
+            filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
 
-          
-           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-          
-              <Ionicons
-                name={search.length > 0 ? "search-outline" : "people-outline"}
-                size={60}
-                color="#9CA3AF"
-              />
-          
-              <AppText style={styles.emptyTitle} language={language}>
-                {search.length > 0
-                  ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "డ్రైవర్లు లేరు" : "No Drivers Added")}
-              </AppText>
-          
-              <AppText style={styles.emptySub} language={language}>
-                {search.length > 0
-                  ? (language === "te"
-                      ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
-                      : "No results match your search")
-                  : (language === "te"
-                      ? "+ బటన్ నొక్కి డ్రైవర్లను చేర్చండి"
-                      : "Tap + button to add drivers")}
-              </AppText>
-          
-            </View>
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
+          ListEmptyComponent={
+            <AppEmptyState
+              iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
+              title={
+                search.trim().length > 0
+                  ? language === "te" ? "ఏమి దొరకలేదు" : "Not Found"
+                  : language === "te" ? "డ్రైవర్లు లేరు" : "No Drivers Added"
+              }
+              subtitle={
+                search.trim().length > 0
+                  ? language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search"
+                  : language === "te" ? "+ బటన్ నొక్కి డ్రైవర్లను చేర్చండి" : "Tap + button to add drivers"
+              }
+              language={language}
+            />
           }
           renderItem={({ item }) => {
 
@@ -375,21 +363,21 @@ const handleDelete = (item: any) => {
 
                 {/* LEFT */}
                 <TouchableOpacity
-  style={styles.left}
-  activeOpacity={0.8}
-  onPress={() => {
-    router.push({
-      pathname: "/farmer/vdriver-work",
-      params: {
-        vehicleId: id,
-        driverId: item.id,
-        name: item.driverName,
-        phone: item.phone,
-        village: item.village
-      }
-    });
-  }}
->
+                  style={styles.left}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/farmer/vdriver-work",
+                      params: {
+                        vehicleId: id,
+                        driverId: item.id,
+                        name: item.driverName,
+                        phone: item.phone,
+                        village: item.village
+                      }
+                    });
+                  }}
+                >
                   <View style={[styles.avatar, { backgroundColor: color }]}>
                     <AppText style={styles.avatarText}>
                       {item.driverName?.charAt(0)?.toUpperCase()}
@@ -425,22 +413,20 @@ const handleDelete = (item: any) => {
                     </MenuTrigger>
 
                     <MenuOptions>
+                      <MenuOption onSelect={() => handleEdit(item)}>
+                        <View style={styles.menuItem}>
+                          <Ionicons name="create-outline" size={16} color="#2563EB" />
+                          <AppText>{language === "te" ? "మార్చు" : "Edit"}</AppText>
+                        </View>
+                      </MenuOption>
 
-  <MenuOption onSelect={() => handleEdit(item)}>
-    <View style={styles.menuItem}>
-      <Ionicons name="create-outline" size={16} color="#2563EB" />
-      <AppText>{language === "te" ? "మార్చు" : "Edit"}</AppText>
-    </View>
-  </MenuOption>
-
-  <MenuOption onSelect={() => handleDelete(item)}>
-    <View style={styles.menuItem}>
-      <Ionicons name="trash-outline" size={16} color="#DC2626" />
-      <AppText>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
-    </View>
-  </MenuOption>
-
-</MenuOptions>
+                      <MenuOption onSelect={() => handleDelete(item)}>
+                        <View style={styles.menuItem}>
+                          <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                          <AppText>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
+                        </View>
+                      </MenuOption>
+                    </MenuOptions>
                   </Menu>
 
                 </View>
@@ -462,57 +448,51 @@ const handleDelete = (item: any) => {
         }
       >
         <LinearGradient
-                       colors={["#16A34A","#166534"]}
-                       style={styles.addGradient}
-                     >
-                       <Ionicons name="add" size={30} color="#fff" />
-                     </LinearGradient>
+           colors={["#16A34A","#166534"]}
+           style={styles.addGradient}
+         >
+           <Ionicons name="add" size={30} color="#fff" />
+         </LinearGradient>
       </TouchableOpacity>
 
+      {/* DELETE MODAL */}
+      {showDeleteModal && (
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.iconBg}>
+              <Ionicons name="trash-outline" size={36} color="#DC2626" />
+            </View>
 
-{showDeleteModal && (
-  <View style={styles.overlay}>
+            <AppText style={styles.modalTitle} language={language}>
+              {language === "te" ? "తొలగించాలా?" : "Delete Entry?"}
+            </AppText>
 
-    <View style={styles.modalBox}>
+            <AppText style={styles.modalSub} language={language}>
+              {language === "te"
+                ? "ఈ వివరాన్ని తొలగించాలా?"
+                : "Are you sure you want to delete this record?"}
+            </AppText>
 
-      <View style={styles.iconBg}>
-        <Ionicons name="trash-outline" size={36} color="#DC2626" />
-      </View>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowDeleteModal(false)}
+              >
+                <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
+              </TouchableOpacity>
 
-      <AppText style={styles.modalTitle} language={language}>
-        {language === "te" ? "తొలగించాలా?" : "Delete Entry?"}
-      </AppText>
-
-      <AppText style={styles.modalSub} language={language}>
-        {language === "te"
-          ? "ఈ వివరాన్ని తొలగించాలా?"
-          : "Are you sure you want to delete this record?"}
-      </AppText>
-
-      <View style={styles.modalBtns}>
-
-        <TouchableOpacity
-          style={styles.cancelBtn}
-          onPress={() => setShowDeleteModal(false)}
-        >
-          <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={confirmDelete}
-        >
-          <AppText style={{ color: "#fff" }}>
-            {language === "te" ? "తొలగించు" : "Delete"}
-          </AppText>
-        </TouchableOpacity>
-
-      </View>
-
-    </View>
-
-  </View>
-)}
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={confirmDelete}
+              >
+                <AppText style={{ color: "#fff" }}>
+                  {language === "te" ? "తొలగించు" : "Delete"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -568,7 +548,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between"
   },
 
-
   left: {
     flexDirection: "row",
     alignItems: "center",
@@ -612,24 +591,7 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
 
-  emptyBox: {
-    marginTop: 100,
-    alignItems: "center"
-  },
-
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: "600"
-  },
-
-  emptySub: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#6B7280"
-  },
-
-   addBtn: { position: "absolute", bottom: 30, right: 20 },
+  addBtn: { position: "absolute", bottom: 30, right: 20 },
 
   addGradient: {
     width: 60,
@@ -638,75 +600,76 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center"
   },
+  
   overlay: {
-  position: "absolute",
-  top: 0,
-  bottom: 0,
-  left: 0,
-  right: 0,
-  backgroundColor: "rgba(0,0,0,0.5)",
-  justifyContent: "center",
-  alignItems: "center"
-},
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
 
-modalBox: {
-  width: "80%",
-  backgroundColor: "#fff",
-  borderRadius: 20,
-  padding: 24,
-  alignItems: "center"
-},
+  modalBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center"
+  },
 
-iconBg: {
-  width: 60,
-  height: 60,
-  borderRadius: 30,
-  backgroundColor: "#FEE2E2",
-  justifyContent: "center",
-  alignItems: "center",
-  marginBottom: 10
-},
+  iconBg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10
+  },
 
-modalTitle: {
-  fontSize: 16,
-  fontWeight: "600",
-  marginTop: 10
-},
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 10
+  },
 
-modalSub: {
-  fontSize: 13,
-  color: "#6B7280",
-  textAlign: "center",
-  marginTop: 6
-},
+  modalSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 6
+  },
 
-modalBtns: {
-  flexDirection: "row",
-  marginTop: 20,
-  gap: 10
-},
+  modalBtns: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 10
+  },
 
-cancelBtn: {
-  flex: 1,
-  padding: 12,
-  borderRadius: 12,
-  backgroundColor: "#F1F5F9",
-  alignItems: "center"
-},
+  cancelBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center"
+  },
 
-deleteBtn: {
-  flex: 1,
-  padding: 12,
-  borderRadius: 12,
-  backgroundColor: "#DC2626",
-  alignItems: "center"
-},
+  deleteBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
+    alignItems: "center"
+  },
 
-menuItem: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 8,
-  padding: 10
-}
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10
+  }
 
 });

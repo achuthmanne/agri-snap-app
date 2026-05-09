@@ -1,18 +1,24 @@
 //vechile details
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
-import { useEffect, useState } from "react";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Linking,
+  Modal // 🔥 Added Modal for better UI
+  ,
+
+
+
+
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -243,86 +249,82 @@ export default function VehicleDetails() {
         language={language}
       />
 
-      {/* 🔥 MINIMAL & CLEAN SEARCH BAR */}
-      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
-        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
+      {(!loading && data.length === 0) ? null : (
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={language === "te" ? "రైతును వెతకండి..." : "Search farmer..."}
-          placeholderTextColor="#9CA3AF"
-          cursorColor="#16A34A"
-          selectionColor="#16A34A40"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          style={styles.searchInput}
-        />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={language === "te" ? "రైతును వెతకండి..." : "Search farmer..."}
+            placeholderTextColor="#9CA3AF"
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            style={styles.searchInput}
+          />
 
-        {search.trim().length > 0 ? (
-          <TouchableOpacity 
-            onPress={() => setSearch("")} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            onPress={handleVoiceSearch} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MaterialCommunityIcons 
-              name={isListening ? "microphone" : "microphone-outline"} 
-              size={22} 
-              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+          {search.trim().length > 0 ? (
+            <TouchableOpacity 
+              onPress={() => setSearch("")} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              onPress={handleVoiceSearch} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialCommunityIcons 
+                name={isListening ? "microphone" : "microphone-outline"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* LIST */}
       {loading ? (
-        <>
+        <View style={{ paddingTop: 10 }}>
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
-        </>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
-          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          contentContainerStyle={[
+            { padding: 20, paddingBottom: 100 },
+            // 🔥 సెంటర్ లోకి రావడానికి లాజిక్
+            filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
 
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-          
-              <Ionicons
-                name={search.length > 0 ? "search-outline" : "people-outline"}
-                size={60}
-                color="#9CA3AF"
-              />
-          
-              <AppText style={styles.emptyTitle} language={language}>
-                {search.length > 0
+            <AppEmptyState
+              iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
+              title={
+                search.trim().length > 0
                   ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "రైతులు లేరు" : "No Farmers Added")}
-              </AppText>
-          
-              <AppText style={styles.emptySub} language={language}>
-                {search.length > 0
-                  ? (language === "te"
-                      ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
-                      : "No results match your search")
-                  : (language === "te"
-                      ? "+ బటన్ నొక్కి రైతులను చేర్చండి"
-                      : "Tap + button to add farmers")}
-              </AppText>
-          
-            </View>
+                  : (language === "te" ? "రైతులు లేరు" : "No Farmers Added")
+              }
+              subtitle={
+                search.trim().length > 0
+                  ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
+                  : (language === "te" ? "+ బటన్ నొక్కి రైతులను చేర్చండి" : "Tap + button to add farmers")
+              }
+              language={language}
+            />
           }
-          renderItem={({ item }) => {
 
+          renderItem={({ item }) => {
             const color = getColor(item.id);
 
             return (
@@ -422,10 +424,9 @@ export default function VehicleDetails() {
          </LinearGradient>
       </TouchableOpacity>
 
-      {/* DELETE MODAL */}
-      {showDeleteModal && (
+      {/* DELETE MODAL (Properly Wrapped in Modal) */}
+      <Modal visible={showDeleteModal} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
-
           <View style={styles.modalBox}>
 
             <View style={styles.iconBg}>
@@ -443,7 +444,6 @@ export default function VehicleDetails() {
             </AppText>
 
             <View style={styles.modalBtns}>
-
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={() => setShowDeleteModal(false)}
@@ -459,13 +459,12 @@ export default function VehicleDetails() {
                   {language === "te" ? "తొలగించు" : "Delete"}
                 </AppText>
               </TouchableOpacity>
-
             </View>
 
           </View>
-
         </View>
-      )}
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -564,23 +563,6 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
 
-  emptyBox: {
-    marginTop: 100,
-    alignItems: "center"
-  },
-
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: "600"
-  },
-
-  emptySub: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#6B7280"
-  },
-
   addBtn: { position: "absolute", bottom: 30, right: 20 },
 
   addGradient: {
@@ -592,11 +574,7 @@ const styles = StyleSheet.create({
   },
   
   overlay: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
+    flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center"
@@ -661,5 +639,5 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 10
   }
-
+  
 });

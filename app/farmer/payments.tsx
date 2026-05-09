@@ -2,6 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -55,7 +56,6 @@ export default function PaymentsScreen() {
       interimResults: true,
     });
   };
-
 
   useEffect(() => {
     if (!isScreenFocused) {
@@ -212,43 +212,39 @@ export default function PaymentsScreen() {
 
       {/* LIST */}
       {loading ? (
-        <>
+        <View style={{ paddingTop: 10 }}>
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
-        </>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled" // 🔥 PREVENT KEYBOARD CLOSING
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={[
+            { paddingBottom: 100, paddingTop: 10 },
+            // 🔥 డేటా లేనప్పుడు సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
+            filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
           showsVerticalScrollIndicator={false}
 
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={search.trim().length > 0 ? "search-outline" : "wallet-outline"}
-                size={60}
-                color="#9CA3AF"
-              />
-          
-              <AppText style={styles.emptyTitle} language={language}>
-                {search.trim().length > 0
+            <AppEmptyState
+              iconName={search.trim().length > 0 ? "search-outline" : "wallet-outline"}
+              title={
+                search.trim().length > 0
                   ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "చెల్లింపులు లేవు" : "No Payments Yet")}
-              </AppText>
-          
-              <AppText style={styles.emptySub} language={language}>
-                {search.trim().length > 0
-                  ? (language === "te"
-                      ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
-                      : "No results match your search")
-                  : (language === "te"
-                      ? "ముందుగా హాజరు నమోదు చేయండి"
-                      : "Mark Attendance to get Payments")}
-              </AppText>
-            </View>
+                  : (language === "te" ? "చెల్లింపులు లేవు" : "No Payments Yet")
+              }
+              subtitle={
+                search.trim().length > 0
+                  ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
+                  : (language === "te" ? "ముందుగా హాజరు నమోదు చేయండి" : "Mark Attendance to get Payments")
+              }
+              language={language}
+            />
           }
 
           renderItem={({ item }) => (
@@ -418,27 +414,5 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10
-  },
-
-  emptyBox: {
-    marginTop: 100,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 30
-  },
-
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937"
-  },
-
-  emptySub: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    lineHeight: 18
   }
 });

@@ -8,17 +8,17 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Linking,
-  ActivityIndicator
+  Linking
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
-import AgriLoader from "@/components/AgriLoader"; // 👈 నీ ఫైల్ పాత్ కరెక్ట్ గా ఉందో లేదో చూసుకో
+import AgriLoader from "@/components/AgriLoader"; 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState";
 
 /* ---------------- TRANSLATIONS ---------------- */
 const translations = {
@@ -28,7 +28,8 @@ const translations = {
     howToApply: "ఎలా దరఖాస్తు చేయాలి?",
     applyNow: "ఆన్‌లైన్ లో దరఖాస్తు చేయండి",
     loading: "వివరాలు లోడ్ అవుతున్నాయి...",
-    error: "డేటా తీసుకురావడంలో లోపం జరిగింది"
+    error: "డేటా తీసుకురావడంలో లోపం జరిగింది",
+    linkError: "లింక్ ఓపెన్ అవ్వట్లేదు. దయచేసి మళ్ళీ ప్రయత్నించండి." // 🔥 New Translation
   },
   en: {
     eligibility: "Eligibility Criteria",
@@ -36,12 +37,13 @@ const translations = {
     howToApply: "How to Apply?",
     applyNow: "Apply Online Here",
     loading: "Loading details...",
-    error: "Error fetching details"
+    error: "Error fetching details",
+    linkError: "Cannot open link right now. Please try again." // 🔥 New Translation
   }
 };
 
 export default function SchemeDetailsScreen() {
-  const { id } = useLocalSearchParams(); // URL నుండి స్కీమ్ ID తీసుకుంటాం
+  const { id } = useLocalSearchParams(); 
   const router = useRouter();
 
   const [language, setLanguage] = useState<"te" | "en">("te");
@@ -50,6 +52,9 @@ export default function SchemeDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [scheme, setScheme] = useState<any>(null);
+  
+  // 🔥 INLINE ERROR STATE
+  const [linkError, setLinkError] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -82,37 +87,60 @@ export default function SchemeDetailsScreen() {
     }
   };
 
+  // 🔥 INLINE ERROR HANDLER (Auto hide after 3 secs)
+  const showInlineError = () => {
+    setLinkError(true);
+    setTimeout(() => {
+      setLinkError(false);
+    }, 3000);
+  };
+
   const openApplyLink = async () => {
+    setLinkError(false); // Reset before trying
     if (scheme?.applyLink) {
-      const supported = await Linking.canOpenURL(scheme.applyLink);
-      if (supported) {
-        await Linking.openURL(scheme.applyLink);
-      } else {
-        alert(language === "te" ? "లింక్ ఓపెన్ అవ్వట్లేదు." : "Cannot open link.");
+      try {
+        const supported = await Linking.canOpenURL(scheme.applyLink);
+        if (supported) {
+          await Linking.openURL(scheme.applyLink);
+        } else {
+          showInlineError(); // 🔥 Call inline error
+        }
+      } catch (err) {
+        showInlineError(); // 🔥 Catch any crashing errors and show inline
       }
     }
   };
 
- if (loading) {
+  if (loading) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        {/* 🔥 ఇక్కడ visible={true} యాడ్ చేశాను చూడు */}
-        <AgriLoader visible={true} type="loading" /> 
-        <AppText style={{ marginTop: 10, color: "#6B7280" }} language={language}>
-          {t.loading}
-        </AppText>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" />
+        <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} language={language} />
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <AgriLoader visible={true} type="loading" /> 
+          <AppText style={{ marginTop: 10, color: "#6B7280" }} language={language}>
+            {t.loading}
+          </AppText>
+        </View>
       </SafeAreaView>
     );
   }
 
   if (error || !scheme) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <Ionicons name="warning-outline" size={50} color="#DC2626" />
-        <AppText style={{ marginTop: 10, color: "#4B5563" }} language={language}>{t.error}</AppText>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <AppText style={{ color: "white" }} language={language}>వెనక్కి వెళ్ళండి</AppText>
-        </TouchableOpacity>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" />
+        <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} language={language} />
+        <View style={{ flex: 1, justifyContent: "center" }}>
+          <AppEmptyState
+            iconName="alert-circle-outline"
+            title={language === "te" ? "లోపం జరిగింది" : "Oops! Something went wrong"}
+            subtitle={t.error}
+            onRetry={() => router.back()} 
+            retryText={language === "te" ? "వెనక్కి వెళ్ళండి" : "Go Back"}
+            language={language}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -120,11 +148,11 @@ export default function SchemeDetailsScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
-      <AppHeader title="పథకం వివరాలు" subtitle={scheme.title.substring(0, 20) + "..."} language={language} />
+      <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} subtitle={scheme.title.substring(0, 20) + "..."} language={language} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* 🔥 HERO BANNER */}
+        {/* HERO BANNER */}
         <View style={styles.heroContainer}>
           <Image source={{ uri: scheme.bannerImage }} style={styles.heroImage} />
           <LinearGradient
@@ -136,12 +164,12 @@ export default function SchemeDetailsScreen() {
           </View>
         </View>
 
-        {/* 🔥 SHORT DESCRIPTION */}
+        {/* SHORT DESCRIPTION */}
         <View style={styles.section}>
           <AppText style={styles.descText} language={language}>{scheme.shortDesc}</AppText>
         </View>
 
-        {/* 🔥 ELIGIBILITY (అర్హతలు) */}
+        {/* ELIGIBILITY */}
         {scheme.eligibility && scheme.eligibility.length > 0 && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -157,7 +185,7 @@ export default function SchemeDetailsScreen() {
           </View>
         )}
 
-        {/* 🔥 DOCUMENTS REQUIRED (కావాల్సిన పత్రాలు) */}
+        {/* DOCUMENTS REQUIRED */}
         {scheme.documentsRequired && scheme.documentsRequired.length > 0 && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -175,7 +203,7 @@ export default function SchemeDetailsScreen() {
           </View>
         )}
 
-        {/* 🔥 HOW TO APPLY (ఎలా దరఖాస్తు చేయాలి) */}
+        {/* HOW TO APPLY */}
         {scheme.howToApply ? (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -190,11 +218,21 @@ export default function SchemeDetailsScreen() {
 
       </ScrollView>
 
-     {/* 🔥 STICKY APPLY BUTTON (AgriLog Green Theme) */}
+      {/* STICKY APPLY BUTTON */}
       {scheme.applyLink && (
         <View style={styles.bottomBar}>
+          
+          {/* 🔥 INLINE ERROR MESSAGE */}
+          {linkError && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={14} color="#DC2626" style={{ marginRight: 4 }} />
+              <AppText style={styles.errorText} language={language}>
+                {t.linkError}
+              </AppText>
+            </View>
+          )}
+
           <TouchableOpacity activeOpacity={0.8} onPress={openApplyLink}>
-            {/* 🔥 కలర్స్ ని మన ట్యాబ్స్ కి మ్యాచ్ అయ్యేలా #1B5E20 కి మార్చాను */}
             <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.applyBtn}>
               <Ionicons name="globe-outline" size={22} color="white" />
               <AppText style={styles.applyBtnText} language={language}>{t.applyNow}</AppText>
@@ -209,8 +247,7 @@ export default function SchemeDetailsScreen() {
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  centerContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F6F7F6" },
-  scrollContent: { paddingBottom: 100 }, // Bottom bar space
+  scrollContent: { paddingBottom: 110 }, // Increased a bit to accommodate error space
 
   // HERO BANNER
   heroContainer: { width: "100%", height: 250, position: "relative" },
@@ -240,5 +277,21 @@ const styles = StyleSheet.create({
   applyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 12, gap: 8 },
   applyBtnText: { color: "white", fontSize: 16, fontWeight: "600" },
   
-  backBtn: { marginTop: 20, backgroundColor: "#4B5563", paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }
+  // INLINE ERROR STYLES 🔥
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+    backgroundColor: "#FEF2F2",
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#FEE2E2"
+  },
+  errorText: {
+    color: "#DC2626",
+    fontSize: 12,
+    fontWeight: "500",
+  }
 });

@@ -1,5 +1,6 @@
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -207,28 +208,31 @@ export default function FarmerHistory() {
 
 
       {loading ? (
-        <FlatList
-          data={[1, 2, 3]}
-          keyExtractor={(item) => item.toString()}
-          renderItem={() => <ShimmerCard />}
-          contentContainerStyle={{ padding: 16 }}
-        />
+        <View style={{ paddingTop: 10 }}>
+          <ShimmerCard />
+          <ShimmerCard />
+          <ShimmerCard />
+        </View>
       ) : (
         <FlatList
           data={grouped}
           keyExtractor={(item: any) => item.crop}
-          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+          contentContainerStyle={[
+            { padding: 16, paddingBottom: 120 },
+            // 🔥 సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
+            grouped.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
+          
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons name="clipboard-outline" size={60} color="#9CA3AF" />
-              <AppText style={styles.emptyTitle}>
-                {language === "te" ? "పనులు లేవు" : "No Works Found"}
-              </AppText>
-              <AppText style={styles.emptySub}>
-                {language === "te" ? "పనులను చేర్చడానికి + బటన్ నొక్కండి" : "Tap + button to add work"}
-              </AppText>
-            </View>
+            <AppEmptyState
+              iconName="clipboard-outline"
+              title={language === "te" ? "పనులు లేవు" : "No Works Found"}
+              subtitle={language === "te" ? "పనులను చేర్చడానికి + బటన్ నొక్కండి" : "Tap + button to add work"}
+              language={language}
+            />
           }
+
           renderItem={({ item }: any) => {
             const isOpen = expanded === item.crop;
 
@@ -476,8 +480,5 @@ const styles = StyleSheet.create({
   iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#e2fef3", justifyContent: "center", alignItems: "center", marginBottom: 10 },
   cancelBtn: { flex: 1, padding: 12, backgroundColor: "#F3F4F6", borderRadius: 10, alignItems: "center" },
   deleteConfirmBtn: { flex: 1, padding: 12, backgroundColor: "#0c652f", borderRadius: 10, alignItems: "center" },
-  deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 10, alignItems: "center" },
-  emptyBox: { marginTop: 120, alignItems: "center" },
-  emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: "600", color: "#111827" },
-  emptySub: { marginTop: 6, fontSize: 13, color: "#6B7280", textAlign: "center" }
+  deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 10, alignItems: "center" }
 });

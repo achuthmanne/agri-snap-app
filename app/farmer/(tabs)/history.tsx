@@ -1,5 +1,6 @@
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -286,42 +287,44 @@ export default function PaymentHistory() {
         language={language}
       />
 
-      {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
-      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
-        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
+      {(!loading && mestris.length === 0) ? null : (
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
-          placeholderTextColor="#9CA3AF"
-          cursorColor="#16A34A"
-          selectionColor="#16A34A40"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          style={styles.searchInput}
-        />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
+            placeholderTextColor="#9CA3AF"
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            style={styles.searchInput}
+          />
 
-        {search.trim().length > 0 ? (
-          <TouchableOpacity 
-            onPress={() => setSearch("")} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            onPress={handleVoiceSearch} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MaterialCommunityIcons 
-              name={isListening ? "microphone" : "microphone-outline"} 
-              size={22} 
-              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+          {search.trim().length > 0 ? (
+            <TouchableOpacity 
+              onPress={() => setSearch("")} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              onPress={handleVoiceSearch} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialCommunityIcons 
+                name={isListening ? "microphone" : "microphone-outline"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {loading ? (
         <>
@@ -334,33 +337,28 @@ export default function PaymentHistory() {
           data={filtered}
           keyExtractor={(i, index) => i.id || index.toString()}
           keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={[
+            { paddingBottom: 100 },
+            // 🔥 సెంటర్ లోకి రావడానికి లాజిక్
+            filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
 
-          /* 🔥 EMPTY STATE ADD HERE */
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={search.length > 0 ? "search-outline" : "wallet-outline"}
-                size={60}
-                color="#9CA3AF"
-              />
-
-              <AppText style={styles.emptyTitle} language={language}>
-                {search.length > 0
+            <AppEmptyState
+              iconName={search.trim().length > 0 ? "search-outline" : "wallet-outline"}
+              title={
+                search.trim().length > 0
                   ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "చెల్లింపు చరిత్ర లేవు" : "No Payments History Yet")}
-              </AppText>
-
-              <AppText style={styles.emptySub} language={language}>
-                {search.length > 0
-                  ? (language === "te"
-                      ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
-                      : "No results match your search")
-                  : (language === "te"
-                      ? "మీరు చేసిన చెల్లింపులు ఇక్కడ కనిపిస్తాయి"
-                      : "Your completed payments will appear here")}
-              </AppText>
-            </View>
+                  : (language === "te" ? "చెల్లింపు చరిత్ర లేవు" : "No Payments History Yet")
+              }
+              subtitle={
+                search.trim().length > 0
+                  ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
+                  : (language === "te" ? "మీరు చేసిన చెల్లింపులు ఇక్కడ కనిపిస్తాయి" : "Your completed payments will appear here")
+              }
+              language={language}
+            />
           }
 
           renderItem={({ item }) => {
@@ -551,27 +549,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#111827"
-  },
-  emptyBox: {
-    marginTop: 120,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 30
-  },
-
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#1F2937"
-  },
-
-  emptySub: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    lineHeight: 18
   },
   sub: {
     fontSize: 13,

@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
   },
   errorText: { fontSize: 16, fontWeight: "600", color: "#4B5563", textAlign: "center", marginBottom: 20 },
   retryBtn: { backgroundColor: "#2E7D32", paddingHorizontal: 30, paddingVertical: 12, borderRadius: 14 },
-  retryText: { color: "white", fontSize: 15, fontWeight: "bold" },
+  retryText: { color: "white", fontSize: 15, fontWeight: "600" },
   shimmerBox: { backgroundColor: "#E5E7EB", overflow: "hidden" },
   shimmerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "transparent" },
 });

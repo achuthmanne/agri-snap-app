@@ -2,6 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -90,7 +91,7 @@ const ProgressCircle = ({ percent }: { percent: number }) => {
   );
 };
 
-/* ---------------- SHIMMER ROW (Moved Outside for Performance) ---------------- */
+/* ---------------- SHIMMER ROW ---------------- */
 const ShimmerRow = () => (
   <View style={styles.row}>
     <ShimmerPlaceholder
@@ -271,45 +272,47 @@ export default function AttendanceHistory() {
         language={language}
       />
 
-   {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
-      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
-        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
+      {(!loading && mestris.length === 0) ? null : (
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
-          placeholderTextColor="#9CA3AF"
-          cursorColor="#16A34A"
-          selectionColor="#16A34A40"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          style={styles.searchInput}
-        />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
+            placeholderTextColor="#9CA3AF"
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            style={styles.searchInput}
+          />
 
-        {search.trim().length > 0 ? (
-          <TouchableOpacity 
-            onPress={() => setSearch("")} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            onPress={handleVoiceSearch} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            // 🔥 బ్యాక్ గ్రౌండ్ కలర్ తీసేసి మినిమల్ చేసాను
-          >
-            <MaterialCommunityIcons 
-              name={isListening ? "microphone" : "microphone-outline"} 
-              size={22} 
-              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+          {search.trim().length > 0 ? (
+            <TouchableOpacity 
+              onPress={() => setSearch("")} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              onPress={handleVoiceSearch} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialCommunityIcons 
+                name={isListening ? "microphone" : "microphone-outline"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {loading ? (
-        <View>
+        <View style={{ paddingTop: 10 }}>
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
@@ -319,27 +322,31 @@ export default function AttendanceHistory() {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
-          contentContainerStyle={{ paddingBottom: 100 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            { paddingBottom: 100, paddingTop: 10 },
+            // 🔥 సెంటర్ లోకి రావడానికి ఫ్లెక్స్ లాజిక్
+            filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
+
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={search.trim().length > 0 ? "search-outline" : "people-outline"}
-                size={60}
-                color="#9CA3AF"
-              />
-              <AppText style={styles.emptyTitle} language={language}>
-                {search.trim().length > 0
+            <AppEmptyState
+              iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
+              title={
+                search.trim().length > 0
                   ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "మేస్త్రీలు లేరు" : "No Mestris")}
-              </AppText>
-              <AppText style={styles.emptySub} language={language}>
-                {search.trim().length > 0
+                  : (language === "te" ? "హాజరు చరిత్ర లేదు" : "No Attendance History")
+              }
+              subtitle={
+                search.trim().length > 0
                   ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
-                  : (language === "te" ? "ముందుగా హాజరు నమోదు చేయండి." : "Please record the attendance first.")}
-              </AppText>
-            </View>
+                  : (language === "te" ? "ముందుగా హాజరు నమోదు చేయండి." : "Please record the attendance first.")
+              }
+              language={language}
+            />
           }
+
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.row}
@@ -406,7 +413,7 @@ export default function AttendanceHistory() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   
- // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -415,27 +422,26 @@ const styles = StyleSheet.create({
     marginTop: 15,
     marginBottom: 10,
     paddingHorizontal: 12,
-    height: 50, // 🔥 స్లీక్ గా ఉండటానికి కొంచెం సైజ్ తగ్గించాను
-    borderRadius: 8, // 🔥 రౌండ్ కార్నర్స్ తగ్గించి ప్రొఫెషనల్ గా పెట్టాను
+    height: 50, 
+    borderRadius: 8, 
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    // షాడోలు, ఎలివేషన్స్ అన్నీ పీకేశాను!
   },
   searchFocused: {
     borderColor: "#16A34A",
     backgroundColor: "#FFFFFF",
   },
-searchInput: {
+  searchInput: {
     flex: 1,
-    height: "100%", // 🔥 కంటైనర్ 50px హైట్ ని పూర్తిగా తీసుకుంటుంది
+    height: "100%", 
     marginLeft: 10,
     fontSize: 15,
-    paddingTop: 0, // 🔥 ఆండ్రాయిడ్ డీఫాల్ట్ ప్యాడింగ్ ని తీసేస్తుంది
-    paddingBottom: 0, // 🔥 ఆండ్రాయిడ్ డీఫాల్ట్ ప్యాడింగ్ ని తీసేస్తుంది
-    textAlignVertical: "center", // 🔥 పక్కాగా సెంటర్ చేస్తుంది (Android)
+    paddingTop: 0, 
+    paddingBottom: 0, 
+    textAlignVertical: "center", 
     color: "#1F2937",
     fontFamily: "Mandali",
-    includeFontPadding: false, // 🔥 ఫాంట్ కి ఉండే ఎక్స్‌ట్రా గ్యాప్ ని కట్ చేస్తుంది
+    includeFontPadding: false, 
   },
 
   row: {
@@ -460,8 +466,5 @@ searchInput: {
   sub: { fontSize: 14, color: "#64748B", lineHeight: 20 },
   right: { justifyContent: "center", alignItems: "center" },
   percentText: { position: "absolute", fontSize: 10, fontWeight: "600" },
-  emptyBox: { marginTop: 100, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   circleWrapper: { width: 60, height: 60, justifyContent: "center", alignItems: "center" },
-  emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: "600", color: "#1F2937" },
-  emptySub: { marginTop: 6, fontSize: 13, color: "#6B7280", textAlign: "center" },
 });

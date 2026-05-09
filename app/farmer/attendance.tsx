@@ -1,13 +1,14 @@
 // app/farmer/attendance.tsx
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 కొత్త గ్లోబల్ కాంపోనెంట్ ఇంపోర్ట్
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
+import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
-import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import {
   FlatList, Linking, SafeAreaView,
@@ -35,7 +36,6 @@ export default function AttendanceScreen() {
   const [activeSession, setActiveSession] = useState("");
 
   useSpeechRecognitionEvent("result", (event) => {
-    // 🔥 FIX: only current screen lo unna appude work avvali
     if (!isScreenFocused || !isListening) return;
 
     if (event.results && event.results.length > 0) {
@@ -63,7 +63,7 @@ export default function AttendanceScreen() {
     }
 
     return () => {
-      ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+      ExpoSpeechRecognitionModule.stop(); 
     };
   }, [isScreenFocused]);
 
@@ -134,10 +134,10 @@ export default function AttendanceScreen() {
     loadData();
 
     return () => {
-      if (unsubscribe) unsubscribe(); // 🔥 CLEANUP PROPER
+      if (unsubscribe) unsubscribe(); 
     };
 
-  }, []); // 🔥 ONLY ONCE
+  }, []); 
 
   const handleDelete = (item: any) => {
     setDeleteItem(item);
@@ -183,7 +183,7 @@ export default function AttendanceScreen() {
         await batch.commit();
       }
 
-      await mestriRef.delete(); // 🔥 ALWAYS RUN
+      await mestriRef.delete(); 
 
       setShowDeleteModal(false);
       setDeleteItem(null);
@@ -274,7 +274,6 @@ export default function AttendanceScreen() {
         language={language}
       />
         
-      {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
       <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
         <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
@@ -322,40 +321,32 @@ export default function AttendanceScreen() {
         <FlatList
           data={filteredMestris}
           keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
+          keyboardShouldPersistTaps="handled" 
           contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
 
+          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons
-                name={search.trim().length > 0 ? "search-outline" : "people-outline"}
-                size={60}
-                color="#9CA3AF"
-              />
-
-              <AppText style={styles.emptyTitle} language={language}>
-                {search.trim().length > 0
-                  ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "మేస్త్రీలు లేరు" : "No Mestris")}
-              </AppText>
-
-              <AppText style={styles.emptySub} language={language}>
-                {search.trim().length > 0
-                  ? (language === "te"
-                      ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
-                      : "No results match your search")
-                  : (language === "te"
-                      ? "+ బటన్ నొక్కి మేస్త్రీలను చేర్చండి"
-                      : "Tap + button to add mestris")}
-              </AppText>
-            </View>
+            <AppEmptyState
+              iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
+              title={
+                search.trim().length > 0
+                  ? language === "te" ? "ఏమి దొరకలేదు" : "Not Found"
+                  : language === "te" ? "మేస్త్రీలు లేరు" : "No Mestris"
+              }
+              subtitle={
+                search.trim().length > 0
+                  ? language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search"
+                  : language === "te" ? "+ బటన్ నొక్కి మేస్త్రీలను చేర్చండి" : "Tap + button to add mestris"
+              }
+              language={language}
+              marginTop={60} // FlatList లో కొంచెం కిందకి ఉండటానికి
+            />
           }
 
           renderItem={({ item }) => (
             <View style={styles.row}>
 
-              {/* LEFT CLICKABLE AREA */}
               <TouchableOpacity
                 style={styles.left}
                 activeOpacity={0.7}
@@ -366,14 +357,12 @@ export default function AttendanceScreen() {
                   })
                 }
               >
-                {/* AVATAR */}
                 <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
                   <AppText style={styles.avatarText} language={language}>
                     {item.name?.charAt(0)?.toUpperCase()}
                   </AppText>
                 </View>
 
-                {/* DETAILS */}
                 <View style={styles.details}>
                   <AppText style={styles.name} language={language}>
                     {item.name}
@@ -389,9 +378,7 @@ export default function AttendanceScreen() {
                 </View>
               </TouchableOpacity>
 
-              {/* RIGHT SIDE (NON CLICKABLE FOR NAVIGATION) */}
               <View style={styles.right}>
-                {/* CALL */}
                 <TouchableOpacity
                   style={styles.callBtn}
                   onPress={() => handleCall(item.phone || "")}
@@ -399,7 +386,6 @@ export default function AttendanceScreen() {
                   <Ionicons name="call" size={16} color="#16A34A" />
                 </TouchableOpacity>
 
-                {/* MENU */}
                 <Menu>
                   <MenuTrigger>
                     <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
@@ -431,7 +417,6 @@ export default function AttendanceScreen() {
         />
       )}
 
-      {/* ADD BUTTON */}
       <TouchableOpacity activeOpacity={0.8}
         style={styles.addBtn}
         onPress={() => router.push("/farmer/mestri/add-mestri")}
@@ -444,7 +429,6 @@ export default function AttendanceScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* DELETE MODAL */}
       {showDeleteModal && (
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
@@ -491,7 +475,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F6F7F6"
   },
 
-  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -559,10 +542,9 @@ const styles = StyleSheet.create({
   details: {
     flex: 1,
     gap: 4,
-    marginLeft: 8   // 🔥 clean spacing
+    marginLeft: 8 
   },
 
-  /* RIGHT */
   right: {
     flexDirection: "row",
     alignItems: "center",
@@ -573,7 +555,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "#ECFDF5", // light green box
+    backgroundColor: "#ECFDF5", 
     justifyContent: "center",
     alignItems: "center"
   },
@@ -603,27 +585,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#16A34A",
     lineHeight: 14
-  },
-
-  emptyBox: {
-    marginTop: 100,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20
-  },
-
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937"
-  },
-
-  emptySub: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center"
   },
 
   addBtn: { position: "absolute", bottom: 30, right: 20 },

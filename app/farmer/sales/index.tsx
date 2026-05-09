@@ -2,6 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
+import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన కొత్త కాంపోనెంట్ ఇంపోర్ట్
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -27,7 +28,7 @@ export default function SalesScreen() {
 
   const [data, setData] = useState<any[]>([]);
   const [language, setLanguage] = useState<"te" | "en">("te");
-const [loading, setLoading] = useState(true); // 🔥 MUST
+  const [loading, setLoading] = useState(true); 
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalQty, setTotalQty] = useState(0);
   const [cropQty, setCropQty] = useState<any>({});
@@ -36,12 +37,14 @@ const [loading, setLoading] = useState(true); // 🔥 MUST
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
-const unitMap: any = {
-  kg: { en: "Kg", te: "కిలో" },
-  gms: { en: "Gms", te: "గ్రా" },
-  quintal: { en: "Quintal", te: "క్వింటాల్" },
-  ton: { en: "Ton", te: "టన్ను" }
-};
+
+  const unitMap: any = {
+    kg: { en: "Kg", te: "కిలో" },
+    gms: { en: "Gms", te: "గ్రా" },
+    quintal: { en: "Quintal", te: "క్వింటాల్" },
+    ton: { en: "Ton", te: "టన్ను" }
+  };
+
   /* ---------------- LOAD ---------------- */
 
   useEffect(() => {
@@ -57,65 +60,63 @@ const unitMap: any = {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone) return;
 
-const userDoc = await firestore()
-  .collection("users")
-  .doc(phone)
-  .get();
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(phone)
+        .get();
 
-const activeSession = userDoc.data()?.activeSession;
+      const activeSession = userDoc.data()?.activeSession;
 
-if (!activeSession) return;
+      if (!activeSession) return;
 
- setLoading(true); // 🔥 ADD THIS
+      setLoading(true);
 
       unsubscribe = firestore()
         .collection("users")
         .doc(phone)
-       .collection("sales")
-.where("session", "==", activeSession) // 🔥 ADD THIS
-.where("createdAt", "!=", null)        // 🔥 ADD THIS
-.orderBy("createdAt", "desc")
-       .onSnapshot(
-  (snap) => {
-    const list: any[] = [];
+        .collection("sales")
+        .where("session", "==", activeSession) 
+        .where("createdAt", "!=", null)        
+        .orderBy("createdAt", "desc")
+        .onSnapshot(
+          (snap) => {
+            const list: any[] = [];
 
-    let totalIncome = 0;
-    let totalQty = 0;
+            let totalIncome = 0;
+            let totalQty = 0;
 
-    const cropQtyMap: any = {};
-    const cropIncomeMap: any = {};
+            const cropQtyMap: any = {};
+            const cropIncomeMap: any = {};
 
-    snap.forEach(doc => {
-      const d: any = doc.data();
+            snap.forEach(doc => {
+              const d: any = doc.data();
 
-      const qty = Number(d.quantity) || 0;
-      const total = Number(d.total) || 0;
-      const unit = d.unit || "";
+              const qty = Number(d.quantity) || 0;
+              const total = Number(d.total) || 0;
+              const unit = d.unit || "";
 
-      totalIncome += total;
-      totalQty += qty;
+              totalIncome += total;
+              totalQty += qty;
 
-      const key = `${d.crop}_${unit}`;
-      cropQtyMap[key] = (cropQtyMap[key] || 0) + qty;
-      cropIncomeMap[d.crop] = (cropIncomeMap[d.crop] || 0) + total;
+              const key = `${d.crop}_${unit}`;
+              cropQtyMap[key] = (cropQtyMap[key] || 0) + qty;
+              cropIncomeMap[d.crop] = (cropIncomeMap[d.crop] || 0) + total;
 
-      list.push({ id: doc.id, ...d });
-    });
+              list.push({ id: doc.id, ...d });
+            });
 
-    setData(list);
-    setTotalIncome(totalIncome);
-    setTotalQty(totalQty);
-    setCropQty(cropQtyMap);
-    setCropIncome(cropIncomeMap);
-    setLoading(false);
-  },
-
-  // 🔥 ERROR HANDLER (correct place)
-  (error: any) => {
-    console.log(error);
-    setLoading(false);
-  }
-);
+            setData(list);
+            setTotalIncome(totalIncome);
+            setTotalQty(totalQty);
+            setCropQty(cropQtyMap);
+            setCropIncome(cropIncomeMap);
+            setLoading(false);
+          },
+          (error: any) => {
+            console.log(error);
+            setLoading(false);
+          }
+        );
     };
 
     load();
@@ -125,55 +126,27 @@ if (!activeSession) return;
   }, []);
 
   /* ---------------- COLOR ---------------- */
-const EmptyShimmer = () => (
-  <View style={styles.emptyContainer}>
-
-    <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
-      style={{ width: 120, height: 120, borderRadius: 60 }}
-    />
-
-    <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
-      style={{ width: 150, height: 18, marginTop: 20, borderRadius: 6 }}
-    />
-
-    <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
-      style={{ width: 220, height: 12, marginTop: 10, borderRadius: 6 }}
-    />
-
-    <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
-      style={{ width: 180, height: 12, marginTop: 6, borderRadius: 6 }}
-    />
-
-  </View>
-);
-const ExpenseShimmerCard = () => (
-  <View style={styles.card}>
-
-    <View style={{ width: 4, height: 60, backgroundColor: "#E5E7EB", borderRadius: 2 }} />
-
-    <View style={{ flex: 1, marginLeft: 15 }}>
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ height: 16, width: "40%", borderRadius: 6 }}
-      />
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ height: 12, width: "60%", marginTop: 6 }}
-      />
+  const EmptyShimmer = () => (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 100 }}>
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 120, height: 120, borderRadius: 60 }} />
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 150, height: 18, marginTop: 20, borderRadius: 6 }} />
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 220, height: 12, marginTop: 10, borderRadius: 6 }} />
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 180, height: 12, marginTop: 6, borderRadius: 6 }} />
     </View>
+  );
 
-    <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
-      style={{ width: 60, height: 16, borderRadius: 6 }}
-    />
+  const ExpenseShimmerCard = () => (
+    <View style={styles.card}>
+      <View style={{ width: 4, height: 60, backgroundColor: "#E5E7EB", borderRadius: 2 }} />
+      <View style={{ flex: 1, marginLeft: 15 }}>
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 16, width: "40%", borderRadius: 6 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 12, width: "60%", marginTop: 6 }} />
+      </View>
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 60, height: 16, borderRadius: 6 }} />
+    </View>
+  );
 
-  </View>
-);
- const colors = ["#10B981", "#3B82F6", "#F59E0B", "#950f45", "#8B5CF6", "#EC4899"];
+  const colors = ["#10B981", "#3B82F6", "#F59E0B", "#950f45", "#8B5CF6", "#EC4899"];
   const getColor = (crop: string) => {
     const code = crop?.charCodeAt(0) || 0;
     return colors[code % colors.length];
@@ -191,38 +164,27 @@ const ExpenseShimmerCard = () => (
         language={language}
       />
       
-
-  <FlatList
-  data={loading ? [1, 2, 3, 4, 5] : data} // Increased numbers for better shimmer coverage
-  keyExtractor={(item, index) => (loading ? index.toString() : item.id.toString())}
+      <FlatList
+        data={loading ? [1, 2, 3, 4, 5] : data} 
+        keyExtractor={(item, index) => (loading ? index.toString() : item.id.toString())}
         contentContainerStyle={{ 
           paddingBottom: 120,
-          // 🔥 empty unnappudu screen center ki ravalante:
           flexGrow: 1 
         }}
         
-        // 🛑 DATA LEKAPOTHE EEMI KANIPINCHADU (ONLY EMPTY STATE)
-       ListEmptyComponent={
-  loading ? null : ( // Don't show "No Sales" while loading
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyBox}>
-        <View style={styles.emptyIconBg}>
-          <Ionicons name="cash-outline" size={80} color="#16A34A" />
-        </View>
-        <AppText style={styles.emptyTitle} language={language}>
-          {language === "te" ? "అమ్మకాలు లేవు" : "No Sales Yet"}
-        </AppText>
-        <AppText style={styles.emptySub} language={language}>
-          {language === "te"
-            ? "మీ మొదటి అమ్మకాన్ని నమోదు చేయండి"
-            : "Start adding your first sale"}
-        </AppText>
-      </View>
-    </View>
-  )
-}
+        // 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT
+        ListEmptyComponent={
+          loading ? null : ( 
+            <AppEmptyState
+              iconName="cash-outline"
+              title={language === "te" ? "అమ్మకాలు లేవు" : "No Sales Yet"}
+              subtitle={language === "te" ? "మీ మొదటి అమ్మకాన్ని నమోదు చేయండి" : "Start adding your first sale"}
+              language={language}
+              marginTop={60}
+            />
+          )
+        }
 
-        // 🔥 DATA UNTE MATRHAME HEADER CHUPISTHUNDHI
         ListHeaderComponent={
           data.length > 0 ? (
             <>
@@ -253,18 +215,17 @@ const ExpenseShimmerCard = () => (
               </LinearGradient>
 
               <View style={styles.categorySummary}>
-                
-               <AppText style={styles.sectionTitle} language={language}>
-    {language === "te" ? "పంటల వారీగా ఆదాయం" : "Crop-wise Income"}
-  </AppText>
+                <AppText style={styles.sectionTitle} language={language}>
+                  {language === "te" ? "పంటల వారీగా ఆదాయం" : "Crop-wise Income"}
+                </AppText>
                 <ScrollView 
                   horizontal 
                   showsHorizontalScrollIndicator={false} 
                   style={styles.catScroll}
-                  contentContainerStyle={{ paddingRight: 20 }} // 👈 Right side gap kosam
+                  contentContainerStyle={{ paddingRight: 20 }}
                 >
                   {Object.keys(cropIncome).map((crop) => (
-  <View key={`income-${crop}`} style={[styles.catBox, { borderColor: getColor(crop) + "40" }]}>
+                    <View key={`income-${crop}`} style={[styles.catBox, { borderColor: getColor(crop) + "40" }]}>
                       <View style={[styles.catIconCircle, { backgroundColor: getColor(crop) + "15" }]}>
                         <Ionicons name="pie-chart" size={16} color={getColor(crop)} />
                       </View>
@@ -280,150 +241,127 @@ const ExpenseShimmerCard = () => (
           ) : null
         }
 
-      renderItem={({ item }) => {
-
-  if (loading) {
-    return <ExpenseShimmerCard />;
-  }
+        renderItem={({ item }) => {
+          if (loading) {
+            return <ExpenseShimmerCard />;
+          }
 
           const color = getColor(item.crop);
-          const date =
-  item.createdAt?.toDate?.().toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short"
-  }) || "--";
+          const date = item.createdAt?.toDate?.().toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short"
+          }) || "--";
+
           return (
             <View style={styles.card}>
-
               <View style={[styles.cardBar, { backgroundColor: color }]} />
-
               <View style={styles.cardInfo}>
                 <AppText style={styles.cardCrop}>
                   {item.crop}
                 </AppText>
-
                 <AppText style={styles.cardCat}>
                   {item.quantity} × ₹{item.rate} | {date}
                 </AppText>
               </View>
 
-             <View style={styles.cardRight}>
-
-  {/* 💰 AMOUNT */}
-  <AppText style={styles.income}>
-    + ₹{item.total?.toLocaleString("en-IN")}
-  </AppText>
-
-  {/* MENU ICON */}
-  <TouchableOpacity
-    activeOpacity={0.6}
-    onPress={() => {
-      setSelectedItem(item);
-      setMenuVisible(true);
-    }}
-    style={styles.menuBtn}
-  >
-    <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
-  </TouchableOpacity>
-
-</View>
-
+              <View style={styles.cardRight}>
+                <AppText style={styles.income}>
+                  + ₹{item.total?.toLocaleString("en-IN")}
+                </AppText>
+                <TouchableOpacity
+                  activeOpacity={0.6}
+                  onPress={() => {
+                    setSelectedItem(item);
+                    setMenuVisible(true);
+                  }}
+                  style={styles.menuBtn}
+                >
+                  <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
             </View>
           );
         }}
       />
 
       {/* MENU */}
-     <Modal 
-         visible={menuVisible} 
-         transparent 
-         animationType="none"
-         onRequestClose={() => { setMenuVisible(false); setSelectedItem(null); }}
-     >
-         <TouchableWithoutFeedback onPress={() => { setMenuVisible(false); setSelectedItem(null); }}>
-             <View style={styles.modalOverlay}>
-                 {/* selectedItem ఉంటేనే UI ని లోడ్ చెయ్ (Null safety) */}
-                 {selectedItem ? (
-                     <View style={styles.menuContent}>
-                         <AppText style={styles.menuHeader}>
-                             {selectedItem.crop}
-                         </AppText>
-                         
-                         <TouchableOpacity 
-                             style={styles.menuItem} 
-                             onPress={() => {
-                                 const id = selectedItem.id; // ముందే ఐడిని సేవ్ చేసుకో
-                                 setMenuVisible(false);
-                                 setSelectedItem(null);
-                                 router.push({ 
-                                     pathname: "/farmer/sales/add-sale", 
-                                     params: { editId: id } 
-                                 });
-                             }}
-                         >
-                             <Ionicons name="pencil-outline" size={20} color="#3B82F6" />
-                             <AppText style={styles.menuText}>
-                                 {language === "te" ? "సవరించండి" : "Edit Record"}
-                             </AppText>
-                         </TouchableOpacity>
-     
-                         <TouchableOpacity 
-                             style={[styles.menuItem, { borderBottomWidth: 0 }]} 
-                             onPress={() => {
-       setMenuVisible(false);
-       setDeleteVisible(true);
-     }}
-     >
-                             <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                             <AppText style={[styles.menuText, { color: '#EF4444' }]}>
-                                 {language === "te" ? "తొలగించండి" : "Delete Record"}
-                             </AppText>
-                         </TouchableOpacity>
-                     </View>
-                 ) : null}
-             </View>
-         </TouchableWithoutFeedback>
-     </Modal>
+      <Modal 
+        visible={menuVisible} 
+        transparent 
+        animationType="none"
+        onRequestClose={() => { setMenuVisible(false); setSelectedItem(null); }}
+      >
+        <TouchableWithoutFeedback onPress={() => { setMenuVisible(false); setSelectedItem(null); }}>
+          <View style={styles.modalOverlay}>
+            {selectedItem ? (
+              <View style={styles.menuContent}>
+                <AppText style={styles.menuHeader}>
+                  {selectedItem.crop}
+                </AppText>
+                  
+                <TouchableOpacity 
+                  style={styles.menuItem} 
+                  onPress={() => {
+                    const id = selectedItem.id;
+                    setMenuVisible(false);
+                    setSelectedItem(null);
+                    router.push({ 
+                      pathname: "/farmer/sales/add-sale", 
+                      params: { editId: id } 
+                    });
+                  }}
+                >
+                  <Ionicons name="pencil-outline" size={20} color="#3B82F6" />
+                  <AppText style={styles.menuText}>
+                    {language === "te" ? "సవరించండి" : "Edit Record"}
+                  </AppText>
+                </TouchableOpacity>
+      
+                <TouchableOpacity 
+                  style={[styles.menuItem, { borderBottomWidth: 0 }]} 
+                  onPress={() => {
+                    setMenuVisible(false);
+                    setDeleteVisible(true);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  <AppText style={[styles.menuText, { color: '#EF4444' }]}>
+                    {language === "te" ? "తొలగించండి" : "Delete Record"}
+                  </AppText>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       {/* DELETE MODAL */}
-     <Modal visible={deleteVisible} transparent animationType="fade">
-  <View style={styles.overlay}>
+      <Modal visible={deleteVisible} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.deleteBox}>
+            <View style={styles.iconBg}>
+              <Ionicons name="trash-outline" size={32} color="#DC2626" />
+            </View>
+            <AppText style={styles.deleteTitle} language={language}>
+              {language === "te" ? "తొలగించాలా?" : "Delete Expense?"}
+            </AppText>
+            <AppText style={styles.deleteSub} language={language}>
+              {language === "te"
+                ? "ఈ రికార్డ్ శాశ్వతంగా తొలగించబడుతుంది"
+                : "This record will be permanently deleted"}
+            </AppText>
+            <View style={styles.deleteBtns}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.cancelBtn}
+                onPress={() => setDeleteVisible(false)}
+              >
+                <AppText style={styles.cancelText} language={language}>
+                  {language === "te" ? "వద్దు" : "Cancel"}
+                </AppText>
+              </TouchableOpacity>
 
-    <View style={styles.deleteBox}>
-
-      {/* ICON */}
-      <View style={styles.iconBg}>
-        <Ionicons name="trash-outline" size={32} color="#DC2626" />
-      </View>
-
-      {/* TITLE */}
-      <AppText style={styles.deleteTitle} language={language}>
-        {language === "te" ? "తొలగించాలా?" : "Delete Expense?"}
-      </AppText>
-
-      {/* SUB */}
-      <AppText style={styles.deleteSub} language={language}>
-        {language === "te"
-          ? "ఈ రికార్డ్ శాశ్వతంగా తొలగించబడుతుంది"
-          : "This record will be permanently deleted"}
-      </AppText>
-
-      {/* BUTTONS */}
-      <View style={styles.deleteBtns}>
-
-  {/* CANCEL */}
-  <TouchableOpacity
-    activeOpacity={0.8}
-    style={styles.cancelBtn}
-    onPress={() => setDeleteVisible(false)}
-  >
-    <AppText style={styles.cancelText} language={language}>
-      {language === "te" ? "వద్దు" : "Cancel"}
-    </AppText>
-  </TouchableOpacity>
-
-  {/* DELETE */}
-   <TouchableOpacity
+              <TouchableOpacity
                 style={styles.deleteBtn}
                 onPress={async () => {
                   const phone = await AsyncStorage.getItem("USER_PHONE");
@@ -438,21 +376,19 @@ const ExpenseShimmerCard = () => (
                   setDeleteVisible(false);
                 }}
               >
-    <Ionicons name="trash-outline" size={16} color="#fff" />
-    <AppText style={styles.deleteText} language={language}>
-      {language === "te" ? "తొలగించు" : "Delete"}
-    </AppText>
-  </TouchableOpacity>
-
-</View>
-    </View>
-
-  </View>
-</Modal>
+                <Ionicons name="trash-outline" size={16} color="#fff" />
+                <AppText style={styles.deleteText} language={language}>
+                  {language === "te" ? "తొలగించు" : "Delete"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ADD BTN */}
       <TouchableOpacity
-      activeOpacity={0.8}
+        activeOpacity={0.8}
         style={styles.addBtn}
         onPress={() => router.push("/farmer/sales/add-sale")}
       >
@@ -479,145 +415,91 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 20
   },
-  // Empty state screen center lo ravadaniki:
-  emptyContainer: {
+  
+  modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 100 // adjusts vertical position
+    backgroundColor: "rgba(0,0,0,0.25)",
+    justifyContent: "center",
+    alignItems: "center"
   },
-  emptyBox: {
-    alignItems: 'center',
-    padding: 20
+  deleteBtns: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 10
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1e293b',
-  },
-   emptyIconBg: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: '#f2fef2',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20
-    },
-  emptySub: {
-    fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 25
-  },
-  emptyBtn: {
-    backgroundColor: '#16A34A',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+  cancelBtn: {
+    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 8
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center"
   },
-  emptyBtnText: {
-    color: '#fff',
-    fontWeight: '600'
+  cancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151"
   },
-  modalOverlay: {
-  flex: 1,
-  backgroundColor: "rgba(0,0,0,0.25)",
-  justifyContent: "center",
-  alignItems: "center"
-},
-deleteBtns: {
-  flexDirection: "row",
-  marginTop: 20,
-  gap: 10
-},
+  deleteBtn: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  deleteText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff"
+  },
+  menuContent: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#E5E7EB"
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  deleteBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 20,
+    alignItems: "center"
+  },
+  iconBg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  deleteTitle: {
+    fontSize: 16,
+    fontWeight: "600"
+  },
+  deleteSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 6
+  },
+  menuHeader: { fontSize: 14, fontWeight: '600', color: '#64748b', marginBottom: 15, textAlign: 'center' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  menuText: { marginLeft: 12, fontSize: 16, fontWeight: '600', color: '#1e293b' },
 
-cancelBtn: {
-  flex: 1,
-  paddingVertical: 12,
-  borderRadius: 12,
-  backgroundColor: "#F3F4F6",
-  alignItems: "center",
-  justifyContent: "center"
-},
-
-cancelText: {
-  fontSize: 14,
-  fontWeight: "600",
-  color: "#374151"
-},
-
-deleteBtn: {
-  flex: 1,
-  flexDirection: "row",
-  gap: 6,
-  paddingVertical: 12,
-  borderRadius: 12,
-  backgroundColor: "#DC2626",
-  alignItems: "center",
-  justifyContent: "center"
-},
-
-deleteText: {
-  fontSize: 14,
-  fontWeight: "600",
-  color: "#fff"
-},
-menuContent: {
-  width: "80%",
-  backgroundColor: "#fff",
-  borderRadius: 20,
-  padding: 18,
-
-  borderWidth: 1,
-  borderColor: "#E5E7EB"
-},
-overlay: {
-  flex: 1,
-  backgroundColor: "rgba(0,0,0,0.3)",
-  justifyContent: "center",
-  alignItems: "center"
-},
-
-deleteBox: {
-  width: "80%",
-  backgroundColor: "#fff",
-  borderRadius: 18,
-  padding: 20,
-  alignItems: "center"
-},
-
-iconBg: {
-  width: 60,
-  height: 60,
-  borderRadius: 30,
-  backgroundColor: "#FEE2E2",
-  justifyContent: "center",
-  alignItems: "center",
-  marginBottom: 10
-},
-
-deleteTitle: {
-  fontSize: 16,
-  fontWeight: "600"
-},
-
-deleteSub: {
-  fontSize: 13,
-  color: "#6B7280",
-  textAlign: "center",
-  marginTop: 6
-},
-
-    menuHeader: { fontSize: 14, fontWeight: '600', color: '#64748b', marginBottom: 15, textAlign: 'center' },
-    menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-    menuText: { marginLeft: 12, fontSize: 16, fontWeight: '600', color: '#1e293b' },
-
- divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
+  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
   statLabel: { color: "#bbf7d0", fontSize: 12 },
   statValue: { color: "#fff", fontSize: 28, fontWeight: "600" },
   qtyText: { color: "#86efac", fontSize: 12, marginTop: 4 },
@@ -632,90 +514,80 @@ deleteSub: {
     minWidth: 110
   },
 
-cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
- dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-chipText: {
-  color: "#E5E7EB",
-  fontSize: 12
-},
-
-chipSubText: {
-  color: "#ffffff",
-  fontSize: 14,
-  fontWeight: "600",
-  marginTop: 2
-},
+  cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  chipText: {
+    color: "#E5E7EB",
+    fontSize: 12
+  },
+  chipSubText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 2
+  },
   cropChipTitle: { fontWeight: "600" },
   cropQty: { fontSize: 16, fontWeight: "600" },
   cropIncome: { color: "#16A34A", marginTop: 4 },
-categorySummary: {
-  marginTop: 10,
-  marginBottom: 6
-},
-cardRight: {
-  flexDirection: "row",        // 🔥 SIDE BY SIDE
-  alignItems: "center",
-  gap: 10                      // 🔥 spacing between amount & icon
-},
-
-income: {
-  color: "#16A34A",
-  fontWeight: "600",
-  fontSize: 14
-},
-
-menuBtn: {
-  padding: 6,
-  borderRadius: 10,
-  backgroundColor: "#F3F4F6"   // 🔥 subtle bg
-},
-sectionTitle: {
-  fontSize: 18,
-  fontWeight: "600",
-  marginHorizontal: 16,
-  marginBottom: 10,
-  color: "#111827"
-},
-
-catScroll: {
-  paddingLeft: 16
-},
-
-catBox: {
-  backgroundColor: "#fff",
-  padding: 14,
-  borderRadius: 14,
-  marginRight: 10,
-
-  borderWidth: 1,
-  borderColor: "#E5E7EB",
- width: 110,          // 🔥 FIXED WIDTH
-  height: 110,         // 🔥 FIXED HEIGHT
-
-  alignItems: "center",
-  minWidth: 90
-},
-
-catIconCircle: {
-  width: 36,
-  height: 36,
-  borderRadius: 18,
-  backgroundColor: "#F3F4F6",
-  justifyContent: "center",
-  alignItems: "center",
-  marginBottom: 6
-},
-
-catBoxLabel: {
-  fontSize: 12,
-  color: "#6B7280"
-},
-
-catBoxValue: {
-  fontSize: 14,
-  fontWeight: "600",
-  marginTop: 2
-},
+  categorySummary: {
+    marginTop: 10,
+    marginBottom: 6
+  },
+  cardRight: {
+    flexDirection: "row",        
+    alignItems: "center",
+    gap: 10                      
+  },
+  income: {
+    color: "#16A34A",
+    fontWeight: "600",
+    fontSize: 14
+  },
+  menuBtn: {
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6"   
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginHorizontal: 16,
+    marginBottom: 10,
+    color: "#111827"
+  },
+  catScroll: {
+    paddingLeft: 16
+  },
+  catBox: {
+    backgroundColor: "#fff",
+    padding: 14,
+    borderRadius: 14,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    width: 110,          
+    height: 110,         
+    alignItems: "center",
+    minWidth: 90
+  },
+  catIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6
+  },
+  catBoxLabel: {
+    fontSize: 12,
+    color: "#6B7280"
+  },
+  catBoxValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 2
+  },
   card: {
     marginHorizontal: 16,
     marginVertical: 6,
@@ -726,18 +598,16 @@ catBoxValue: {
     borderWidth: 1,
     borderColor: "#E5E7EB"
   },
-
   cardBar: { width: 4, borderRadius: 2 },
   cardInfo: { flex: 1, marginLeft: 10 },
   cardCrop: { fontSize: 16, fontWeight: "600" },
   cardCat: { fontSize: 12, color: "#6B7280" },
- 
+  
   menuBox: {
     backgroundColor: "#fff",
     padding: 16,
     borderRadius: 12
   },
-
   addBtn: { position: "absolute", bottom: 30, right: 20 },
   addGradient: {
     width: 60,
@@ -746,5 +616,4 @@ catBoxValue: {
     justifyContent: "center",
     alignItems: "center"
   }
-
 });
