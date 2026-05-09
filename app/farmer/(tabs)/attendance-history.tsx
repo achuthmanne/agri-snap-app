@@ -90,6 +90,30 @@ const ProgressCircle = ({ percent }: { percent: number }) => {
   );
 };
 
+/* ---------------- SHIMMER ROW (Moved Outside for Performance) ---------------- */
+const ShimmerRow = () => (
+  <View style={styles.row}>
+    <ShimmerPlaceholder
+      LinearGradient={LinearGradient}
+      style={{ width: 42, height: 42, borderRadius: 21 }}
+    />
+    <View style={{ flex: 1, marginLeft: 12 }}>
+      <ShimmerPlaceholder
+        LinearGradient={LinearGradient}
+        style={{ width: "60%", height: 14, borderRadius: 6 }}
+      />
+      <ShimmerPlaceholder
+        LinearGradient={LinearGradient}
+        style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 6 }}
+      />
+    </View>
+    <ShimmerPlaceholder
+      LinearGradient={LinearGradient}
+      style={{ width: 45, height: 45, borderRadius: 25 }}
+    />
+  </View>
+);
+
 /* ---------------- SCREEN ---------------- */
 export default function AttendanceHistory() {
   const router = useRouter();
@@ -98,45 +122,41 @@ export default function AttendanceHistory() {
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [isFocused, setIsFocused] = useState(false);
   const [loading, setLoading] = useState(false);
- const [isListening, setIsListening] = useState(false);
-const isScreenFocused = useIsFocused();
-const [activeSession, setActiveSession] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const isScreenFocused = useIsFocused();
+  const [activeSession, setActiveSession] = useState("");
 
-useSpeechRecognitionEvent("result", (event) => {
+  useSpeechRecognitionEvent("result", (event) => {
+    if (!isScreenFocused || !isListening) return;
 
-  // 🔥 FIX: only current screen lo unna appude work avvali
-  if (!isScreenFocused || !isListening) return;
-
-  if (event.results && event.results.length > 0) {
-    setSearch(event.results[0].transcript);
-  }
-});
-
-useSpeechRecognitionEvent("end", () => setIsListening(false));
-
-const handleVoiceSearch = async () => {
-  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-  if (!result.granted) return;
-
-  setIsListening(true);
-  ExpoSpeechRecognitionModule.start({
-    lang: language === "te" ? "te-IN" : "en-US",
-    interimResults: true,
+    if (event.results && event.results.length > 0) {
+      setSearch(event.results[0].transcript);
+    }
   });
-};
 
+  useSpeechRecognitionEvent("end", () => setIsListening(false));
 
-useEffect(() => {
-  if (!isScreenFocused) {
-    ExpoSpeechRecognitionModule.stop();
-    setIsListening(false);
-  }
+  const handleVoiceSearch = async () => {
+    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!result.granted) return;
 
-  return () => {
-    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+    setIsListening(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: language === "te" ? "te-IN" : "en-US",
+      interimResults: true,
+    });
   };
-}, [isScreenFocused]);
 
+  useEffect(() => {
+    if (!isScreenFocused) {
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    }
+
+    return () => {
+      ExpoSpeechRecognitionModule.stop(); 
+    };
+  }, [isScreenFocused]);
 
   useFocusEffect(
     useCallback(() => {
@@ -147,8 +167,6 @@ useEffect(() => {
       loadLang();
     }, [])
   );
-
- 
 
   const avatarColors = [
     "#22C55E", "#3B82F6", "#F59E0B", "#EF4444",
@@ -161,59 +179,34 @@ useEffect(() => {
     return avatarColors[index];
   };
 
-
-
-  const ShimmerRow = () => (
-    <View style={styles.row}>
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ width: 42, height: 42, borderRadius: 21 }}
-      />
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <ShimmerPlaceholder
-          LinearGradient={LinearGradient}
-          style={{ width: "60%", height: 14, borderRadius: 6 }}
-        />
-        <ShimmerPlaceholder
-          LinearGradient={LinearGradient}
-          style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 6 }}
-        />
-      </View>
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ width: 45, height: 45, borderRadius: 25 }}
-      />
-    </View>
-  );
-const getUsageColor = (percent: number) => {
-  if (percent >= 70) return "#16A34A"; // green
-  if (percent >= 40) return "#F59E0B"; // yellow
-  return "#EF4444"; // red
-};
-
+  const getUsageColor = (percent: number) => {
+    if (percent >= 70) return "#16A34A"; 
+    if (percent >= 40) return "#F59E0B"; 
+    return "#EF4444"; 
+  };
 
   const loadData = async () => {
-   const userPhone = await AsyncStorage.getItem("USER_PHONE");
+    const userPhone = await AsyncStorage.getItem("USER_PHONE");
 
-if (!userPhone) {
-  setLoading(false);
-  return;
-}
+    if (!userPhone) {
+      setLoading(false);
+      return;
+    }
 
-setLoading(true);
-const userDoc = await firestore()
-  .collection("users")
-  .doc(userPhone)
-  .get();
+    setLoading(true);
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
 
-const session = userDoc.data()?.activeSession;
+    const session = userDoc.data()?.activeSession;
 
-if (!session) {
-  setLoading(false);
-  return;
-}
+    if (!session) {
+      setLoading(false);
+      return;
+    }
 
-setActiveSession(session);
+    setActiveSession(session);
 
     try {
       const mestriSnap = await firestore()
@@ -226,18 +219,18 @@ setActiveSession(session);
       for (const doc of mestriSnap.docs) {
         const mestri = doc.data();
         const attendanceSnap = await firestore()
-  .collection("users")
-  .doc(userPhone)
-  .collection("mestris")
-  .doc(doc.id)
-  .collection("attendance")
-  .where("session", "==", session) // 🔥 FIX
-  .get();
+          .collection("users")
+          .doc(userPhone)
+          .collection("mestris")
+          .doc(doc.id)
+          .collection("attendance")
+          .where("session", "==", session) 
+          .get();
 
         const list = attendanceSnap.docs.map(d => d.data());
         let total = 0;
         list.forEach(a => {
-         total += 1; // 🔥 each record = 1 day
+          total += 1; 
         });
         if (total > 0) {
           counts.push({ id: doc.id, ...mestri, total });
@@ -265,7 +258,7 @@ setActiveSession(session);
   );
 
   const filtered = mestris.filter(item =>
-  (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
+    (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
   );
 
   return (
@@ -274,56 +267,47 @@ setActiveSession(session);
 
       <AppHeader
         title={language === "te" ? "హాజరు చరిత్ర" : "Attendance History"}
-         subtitle={language === "te"
-  ? `సీజన్: ${activeSession}`
-  : `Season: ${activeSession}`}
-  language={language}
-/>
-
-    {/* SEARCH */}
-<View style={[
-  styles.searchContainer,
-  { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }
-]}>
-  <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
-
-  <TextInput
-    value={search}
-    onChangeText={setSearch}
-    placeholder={
-    language === "te"
-      ? "మేస్త్రీని వెతకండి..."
-      : "Search mestri..."
-  }
-    placeholderTextColor="#9CA3AF"
-    cursorColor={'green'}
-    selectionColor={'green'}
-    onFocus={() => setIsFocused(true)}
-    onBlur={() => setIsFocused(false)}
-    style={[styles.searchInput, { fontFamily: 'Mandali' }]}
-  />
-
-  {search.trim().length > 0 ? (
-    <TouchableOpacity onPress={() => setSearch("")} >
-      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-    </TouchableOpacity>
-  ) : (
-    <TouchableOpacity 
-      onPress={handleVoiceSearch}   style={{
-      marginLeft: 10,
-      padding: 5,
-      borderRadius: 50,
-      backgroundColor: "#f0f9f3"
-    }}>
-      <MaterialCommunityIcons 
-        name={isListening ? "microphone" : "microphone-outline"} 
-        size={20} 
-        color={isListening ? "#EF4444" : "#16A34A"} 
+        subtitle={language === "te" ? `సీజన్: ${activeSession}` : `Season: ${activeSession}`}
+        language={language}
       />
-    </TouchableOpacity>
-  )}
-</View>
 
+   {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
+      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
+          placeholderTextColor="#9CA3AF"
+          cursorColor="#16A34A"
+          selectionColor="#16A34A40"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          style={styles.searchInput}
+        />
+
+        {search.trim().length > 0 ? (
+          <TouchableOpacity 
+            onPress={() => setSearch("")} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            onPress={handleVoiceSearch} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            // 🔥 బ్యాక్ గ్రౌండ్ కలర్ తీసేసి మినిమల్ చేసాను
+          >
+            <MaterialCommunityIcons 
+              name={isListening ? "microphone" : "microphone-outline"} 
+              size={22} 
+              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+            />
+          </TouchableOpacity>
+        )}
+      </View>
       {loading ? (
         <View>
           <ShimmerRow />
@@ -335,6 +319,7 @@ setActiveSession(session);
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
           contentContainerStyle={{ paddingBottom: 100 }}
           ListEmptyComponent={
             <View style={styles.emptyBox}>
@@ -387,31 +372,28 @@ setActiveSession(session);
                   <ProgressCircle percent={item.percent || 0} />
                 </View>
                 <View
-  style={{
-    backgroundColor: getUsageColor(item.percent) + "15", // light bg
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4
-  }}
->
-
-  <AppText
-    style={{
-      fontSize: 11,
-      color: getUsageColor(item.percent),
-      fontWeight: "600"
-    }}
-    language={language}
-  >
-    {language === "te" ? "పని వాటా" : "Work Share"}
-  </AppText>
-
-</View>
-                
+                  style={{
+                    backgroundColor: getUsageColor(item.percent) + "15", 
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                    marginTop: 6,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4
+                  }}
+                >
+                  <AppText
+                    style={{
+                      fontSize: 11,
+                      color: getUsageColor(item.percent),
+                      fontWeight: "600"
+                    }}
+                    language={language}
+                  >
+                    {language === "te" ? "పని వాటా" : "Work Share"}
+                  </AppText>
+                </View>
               </View>
             </TouchableOpacity>
           )}
@@ -423,6 +405,39 @@ setActiveSession(session);
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
+  
+ // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    marginHorizontal: 20,
+    marginTop: 15,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    height: 50, // 🔥 స్లీక్ గా ఉండటానికి కొంచెం సైజ్ తగ్గించాను
+    borderRadius: 8, // 🔥 రౌండ్ కార్నర్స్ తగ్గించి ప్రొఫెషనల్ గా పెట్టాను
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    // షాడోలు, ఎలివేషన్స్ అన్నీ పీకేశాను!
+  },
+  searchFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+  },
+searchInput: {
+    flex: 1,
+    height: "100%", // 🔥 కంటైనర్ 50px హైట్ ని పూర్తిగా తీసుకుంటుంది
+    marginLeft: 10,
+    fontSize: 15,
+    paddingTop: 0, // 🔥 ఆండ్రాయిడ్ డీఫాల్ట్ ప్యాడింగ్ ని తీసేస్తుంది
+    paddingBottom: 0, // 🔥 ఆండ్రాయిడ్ డీఫాల్ట్ ప్యాడింగ్ ని తీసేస్తుంది
+    textAlignVertical: "center", // 🔥 పక్కాగా సెంటర్ చేస్తుంది (Android)
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    includeFontPadding: false, // 🔥 ఫాంట్ కి ఉండే ఎక్స్‌ట్రా గ్యాప్ ని కట్ చేస్తుంది
+  },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -436,26 +451,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#ffffff",
   },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 20,
-    marginTop: 12,
-    paddingHorizontal: 14,
-    height: 50, // కొంచెం హైట్ పెంచితే బాగుంటుంది
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1,
-    elevation: 1 // నీట్‌గా కనిపిస్తుంది
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: "#111827",
-    paddingVertical: 0,
-    height: '100%'
-  },
   percentLabel: { fontSize: 12, color: "#6B7280", marginTop: 2, lineHeight: 18 },
   left: { flexDirection: "row", alignItems: "center", flex: 1 },
   avatar: { width: 50, height: 50, borderRadius: 25, justifyContent: "center", alignItems: "center", marginRight: 12 },
@@ -465,13 +460,8 @@ const styles = StyleSheet.create({
   sub: { fontSize: 14, color: "#64748B", lineHeight: 20 },
   right: { justifyContent: "center", alignItems: "center" },
   percentText: { position: "absolute", fontSize: 10, fontWeight: "600" },
-  searchWrapper: { paddingHorizontal: 20, marginTop: 10, alignItems: "flex-end" },
   emptyBox: { marginTop: 100, alignItems: "center", justifyContent: "center", paddingHorizontal: 20 },
   circleWrapper: { width: 60, height: 60, justifyContent: "center", alignItems: "center" },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: "600", color: "#1F2937" },
   emptySub: { marginTop: 6, fontSize: 13, color: "#6B7280", textAlign: "center" },
-  searchBox: { borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 12, height: 44, flexDirection: "row", alignItems: "center" },
-  inputWrap: { flex: 1, marginLeft: 8, justifyContent: "center" },
-  input: { fontSize: 14, color: "#111827", padding: 0 },
-  placeholder: { position: "absolute", left: 0, fontSize: 14, color: "#9CA3AF" },
 });

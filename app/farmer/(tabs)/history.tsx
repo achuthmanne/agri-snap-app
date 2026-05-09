@@ -57,47 +57,47 @@ const ProgressCircle = ({ percent }: { percent: number }) => {
 
   return (
    <View style={{
-  width: size,
-  height: size,
-  alignItems: "center",
-  justifyContent: "center"
-}}>
-  <Svg width={size} height={size}>
-    <Circle
-      cx={center}
-      cy={center}
-      r={radius}
-      stroke="#E5E7EB"
-      strokeWidth={strokeWidth}
-      fill="none"
-    />
+      width: size,
+      height: size,
+      alignItems: "center",
+      justifyContent: "center"
+    }}>
+      <Svg width={size} height={size}>
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke="#E5E7EB"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
 
-    <AnimatedCircle
-      cx={center}
-      cy={center}
-      r={radius}
-      stroke={color}
-      strokeWidth={strokeWidth}
-      fill="none"
-      strokeDasharray={circumference}
-      animatedProps={animatedProps}
-      strokeLinecap="round"
-      rotation="-90"
-      origin={`${center},${center}`}
-    />
-  </Svg>
+        <AnimatedCircle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          animatedProps={animatedProps}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${center},${center}`}
+        />
+      </Svg>
 
-  {/* 🔥 PERFECT CENTER */}
-  <AppText
-    style={{
-      position: "absolute",
-      fontSize: 11,
-      fontWeight: "600"
-    }}
-  >
-    {Math.round(percent)}%
-  </AppText>
-</View>
+      {/* 🔥 PERFECT CENTER */}
+      <AppText
+        style={{
+          position: "absolute",
+          fontSize: 11,
+          fontWeight: "600"
+        }}
+      >
+        {Math.round(percent)}%
+      </AppText>
+    </View>
   );
 };
 
@@ -111,49 +111,46 @@ const getStatus = (paid: number, total: number) => {
 /* ---------------- SCREEN ---------------- */
 export default function PaymentHistory() {
   const router = useRouter();
-const [isFocused, setIsFocused] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [mestris, setMestris] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [language, setLanguage] = useState<"te" | "en">("te");
-   const [isListening, setIsListening] = useState(false);
-const isScreenFocused = useIsFocused();
+  const [isListening, setIsListening] = useState(false);
+  const isScreenFocused = useIsFocused();
 
-useSpeechRecognitionEvent("result", (event) => {
+  useSpeechRecognitionEvent("result", (event) => {
+    // 🔥 FIX: only current screen lo unna appude work avvali
+    if (!isScreenFocused || !isListening) return;
 
-  // 🔥 FIX: only current screen lo unna appude work avvali
-  if (!isScreenFocused || !isListening) return;
-
-  if (event.results && event.results.length > 0) {
-    setSearch(event.results[0].transcript);
-  }
-});
-
-useSpeechRecognitionEvent("end", () => setIsListening(false));
-
-const handleVoiceSearch = async () => {
-  const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-  if (!result.granted) return;
-
-  setIsListening(true);
-  ExpoSpeechRecognitionModule.start({
-    lang: language === "te" ? "te-IN" : "en-US",
-    interimResults: true,
+    if (event.results && event.results.length > 0) {
+      setSearch(event.results[0].transcript);
+    }
   });
-};
 
+  useSpeechRecognitionEvent("end", () => setIsListening(false));
 
-useEffect(() => {
-  if (!isScreenFocused) {
-    ExpoSpeechRecognitionModule.stop();
-    setIsListening(false);
-  }
+  const handleVoiceSearch = async () => {
+    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!result.granted) return;
 
-  return () => {
-    ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+    setIsListening(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: language === "te" ? "te-IN" : "en-US",
+      interimResults: true,
+    });
   };
-}, [isScreenFocused]);
 
+  useEffect(() => {
+    if (!isScreenFocused) {
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    }
+
+    return () => {
+      ExpoSpeechRecognitionModule.stop(); 
+    };
+  }, [isScreenFocused]);
 
   /* ---------- LANGUAGE ---------- */
   useFocusEffect(
@@ -164,7 +161,6 @@ useEffect(() => {
     }, [])
   );
 
- 
   /* ---------- COLORS ---------- */
   const avatarColors = ["#22C55E","#3B82F6","#F59E0B","#EF4444","#8B5CF6"];
 
@@ -175,100 +171,98 @@ useEffect(() => {
 
   /* ---------- LOAD DATA ---------- */
   const loadData = async () => {
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-  if (!phone) return;
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
 
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const db = firestore();
-const userDoc = await db.collection("users").doc(phone).get();
-const activeSession = userDoc.data()?.activeSession;
+    try {
+      const db = firestore();
+      const userDoc = await db.collection("users").doc(phone).get();
+      const activeSession = userDoc.data()?.activeSession;
 
-if (!activeSession) return;
-    /* 🔥 1. GET PAYMENTS ONLY */
-    const paymentSnap = await db
-      .collection("users")
-      .doc(phone)
-      .collection("payments")
-.where("session", "==", activeSession) // 🔥 KEY FIX
-.get();
+      if (!activeSession) return;
+      
+      /* 🔥 1. GET PAYMENTS ONLY */
+      const paymentSnap = await db
+        .collection("users")
+        .doc(phone)
+        .collection("payments")
+        .where("session", "==", activeSession) 
+        .get();
 
-    const payments = paymentSnap.docs.map(d => d.data());
+      const payments = paymentSnap.docs.map(d => d.data());
 
-    /* 🔥 2. GROUP BY MESTRI */
-    const map: any = {};
+      /* 🔥 2. GROUP BY MESTRI */
+      const map: any = {};
 
-   payments.forEach(p => {
-  const id = p.mestriId;
-  if (!id) return;
+      payments.forEach(p => {
+        const id = p.mestriId;
+        if (!id) return;
 
-  const ids = Array.isArray(p.selectedAttendanceIds)
-    ? p.selectedAttendanceIds
-    : [];
+        const ids = Array.isArray(p.selectedAttendanceIds)
+          ? p.selectedAttendanceIds
+          : [];
 
-  if (!map[id]) {
-    map[id] = {
-      id,
-      name: p.name,
-      village: p.village,
-      paid: 0
-    };
-  }
+        if (!map[id]) {
+          map[id] = {
+            id,
+            name: p.name,
+            village: p.village,
+            paid: 0
+          };
+        }
 
-  map[id].paid += ids.length; // ✅ safe
-});
+        map[id].paid += ids.length; 
+      });
 
-    /* 🔥 3. FETCH TOTAL ATTENDANCE */
+      /* 🔥 3. FETCH TOTAL ATTENDANCE */
+      const promises = Object.keys(map).map(async (key) => {
+        const attendanceSnap = await db
+          .collection("users")
+          .doc(phone)
+          .collection("mestris")
+          .doc(key)
+          .collection("attendance")
+          .where("session", "==", activeSession)
+          .get();
 
- const promises = Object.keys(map).map(async (key) => {
+        const total = attendanceSnap.size;
+        const paid = map[key].paid;
 
-  const attendanceSnap = await db
-    .collection("users")
-    .doc(phone)
-    .collection("mestris")
-    .doc(key)
-    .collection("attendance")
-    .where("session", "==", activeSession)
-    .get();
+        if (total === 0) return null;
 
-  const total = attendanceSnap.size;
-  const paid = map[key].paid;
+        const percent = (paid / total) * 100;
 
-  // 🔥 KEY FIX
-  if (total === 0) return null;
+        return {
+          id: key,
+          name: map[key].name,
+          village: map[key].village,
+          total,
+          paid,
+          percent
+        };
+      });
 
-  const percent = (paid / total) * 100;
+      const result = (await Promise.all(promises)).filter(Boolean);
+      setMestris(result);
 
-  return {
-    id: key,
-    name: map[key].name,
-    village: map[key].village,
-    total,
-    paid,
-    percent
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setLoading(false); 
+    }
   };
-});
-
-const result = (await Promise.all(promises)).filter(Boolean);
-setMestris(result);
-
-  } catch (e) {
-    console.log(e);
-  }finally {
-  setLoading(false); // 🔥 MUST
-}
-};
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
-const filtered = useMemo(() => {
-  return mestris.filter(item =>
-    (item.name || "")
-      .toLowerCase()
-      .includes(search.trim().toLowerCase())
-  );
-}, [mestris, search]);
+  const filtered = useMemo(() => {
+    return mestris.filter(item =>
+      (item.name || "")
+        .toLowerCase()
+        .includes(search.trim().toLowerCase())
+    );
+  }, [mestris, search]);
 
   /* ---------- SHIMMER ---------- */
   const ShimmerRow = () => (
@@ -292,171 +286,157 @@ const filtered = useMemo(() => {
         language={language}
       />
 
-    {/* SEARCH */}
-<View style={[
-  styles.searchContainer,
-  { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }
-]}>
-  <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+      {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
+      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
-  <TextInput
-    value={search}
-    onChangeText={setSearch}
-    placeholder={
-    language === "te"
-      ? "మేస్త్రీని వెతకండి..."
-      : "Search mestri..."
-  }
-    placeholderTextColor="#9CA3AF"
-    cursorColor={'green'}
-    selectionColor={'green'}
-    onFocus={() => setIsFocused(true)}
-    onBlur={() => setIsFocused(false)}
-    style={[styles.searchInput, { fontFamily: 'Mandali' }]}
-  />
-
-  {search.length > 0 ? (
-    <TouchableOpacity onPress={() => setSearch("")} >
-      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-    </TouchableOpacity>
-  ) : (
-    <TouchableOpacity 
-      onPress={handleVoiceSearch}   style={{
-      marginLeft: 10,
-      padding: 5,
-      borderRadius: 50,
-      backgroundColor: "#f0f9f3"
-    }}>
-      <MaterialCommunityIcons 
-        name={isListening ? "microphone" : "microphone-outline"} 
-        size={20} 
-        color={isListening ? "#EF4444" : "#16A34A"} 
-      />
-    </TouchableOpacity>
-  )}
-</View>
-
-      {loading ? (
-  <>
-    <ShimmerRow />
-    <ShimmerRow />
-    <ShimmerRow />
-  </>
-) : (
-  <FlatList
-    data={filtered}
-keyExtractor={(i, index) => i.id || index.toString()}
-    contentContainerStyle={{ paddingBottom: 100 }}
-
-    /* 🔥 EMPTY STATE ADD HERE */
-    ListEmptyComponent={
-      <View style={styles.emptyBox}>
-
-        <Ionicons
-          name={search.length > 0 ? "search-outline" : "wallet-outline"}
-          size={60}
-          color="#9CA3AF"
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
+          placeholderTextColor="#9CA3AF"
+          cursorColor="#16A34A"
+          selectionColor="#16A34A40"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          style={styles.searchInput}
         />
 
-        <AppText style={styles.emptyTitle} language={language}>
-          {search.length > 0
-            ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-            : (language === "te" ? "చెల్లింపు చరిత్ర లేవు" : "No Payments History Yet")}
-        </AppText>
-
-        <AppText style={styles.emptySub} language={language}>
-          {search.length > 0
-            ? (language === "te"
-                ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
-                : "No results match your search")
-            : (language === "te"
-                ? "మీరు చేసిన చెల్లింపులు ఇక్కడ కనిపిస్తాయి"
-                : "Your completed payments will appear here")}
-        </AppText>
-
+        {search.trim().length > 0 ? (
+          <TouchableOpacity 
+            onPress={() => setSearch("")} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            onPress={handleVoiceSearch} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons 
+              name={isListening ? "microphone" : "microphone-outline"} 
+              size={22} 
+              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+            />
+          </TouchableOpacity>
+        )}
       </View>
-    }
 
-    renderItem={({ item }) => {
-      const status = getStatus(item.paid, item.total);
+      {loading ? (
+        <>
+          <ShimmerRow />
+          <ShimmerRow />
+          <ShimmerRow />
+        </>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(i, index) => i.id || index.toString()}
+          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
+          contentContainerStyle={{ paddingBottom: 100 }}
 
-      return (
-        <TouchableOpacity
-  style={styles.card}
-  activeOpacity={0.7}
-  onPress={() => {
-    router.push({
-      pathname: "/farmer/payment-detail-history",
-      params: {
-        mestriId: item.id,
-        name: item.name,
-        village: item.village
-      }
-    });
-  }}
->
+          /* 🔥 EMPTY STATE ADD HERE */
+          ListEmptyComponent={
+            <View style={styles.emptyBox}>
+              <Ionicons
+                name={search.length > 0 ? "search-outline" : "wallet-outline"}
+                size={60}
+                color="#9CA3AF"
+              />
 
-          <View style={styles.mainRow}>
+              <AppText style={styles.emptyTitle} language={language}>
+                {search.length > 0
+                  ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
+                  : (language === "te" ? "చెల్లింపు చరిత్ర లేవు" : "No Payments History Yet")}
+              </AppText>
 
-            {/* LEFT */}
-            <View style={styles.leftSection}>
-
-              <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
-                <AppText style={styles.avatarText} language={language}>
-                  {item.name?.charAt(0)?.toUpperCase()}
-                </AppText>
-              </View>
-
-              <View style={styles.details}>
-                <AppText style={styles.name} language={language}>
-                  {item.name}
-                </AppText>
-
-                <AppText style={styles.sub} language={language}>
-                  {item.village || "----"}
-                </AppText>
-
-                <AppText style={styles.paidText} language={language}>
-                 {item.paid} / {item.total} {language === "te" ? "చెల్లించినది" : "Paid"}
-                </AppText>
-              </View>
-
+              <AppText style={styles.emptySub} language={language}>
+                {search.length > 0
+                  ? (language === "te"
+                      ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు"
+                      : "No results match your search")
+                  : (language === "te"
+                      ? "మీరు చేసిన చెల్లింపులు ఇక్కడ కనిపిస్తాయి"
+                      : "Your completed payments will appear here")}
+              </AppText>
             </View>
+          }
 
-            {/* RIGHT */}
-            <View style={styles.rightSection}>
+          renderItem={({ item }) => {
+            const status = getStatus(item.paid, item.total);
 
-              <ProgressCircle percent={item.percent || 0} />
-
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: status.color + "20" }
-                ]}
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.7}
+                onPress={() => {
+                  router.push({
+                    pathname: "/farmer/payment-detail-history",
+                    params: {
+                      mestriId: item.id,
+                      name: item.name,
+                      village: item.village
+                    }
+                  });
+                }}
               >
-                <AppText
-                  style={[styles.statusText, { color: status.color }]}
-                  language={language}
-                >
-                  {language === "te"
-                    ? status.label === "Cleared"
-                      ? "చెల్లింపు పూర్తి"
-                      : status.label === "Pending"
-                      ? "చెల్లింపు పెండింగ్"
-                      : "చెల్లించలేదు"
-                    : status.label}
-                </AppText>
-              </View>
+                <View style={styles.mainRow}>
 
-            </View>
+                  {/* LEFT */}
+                  <View style={styles.leftSection}>
+                    <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
+                      <AppText style={styles.avatarText} language={language}>
+                        {item.name?.charAt(0)?.toUpperCase()}
+                      </AppText>
+                    </View>
 
-          </View>
+                    <View style={styles.details}>
+                      <AppText style={styles.name} language={language}>
+                        {item.name}
+                      </AppText>
 
-        </TouchableOpacity>
-      );
-    }}
-  />
-)}
+                      <AppText style={styles.sub} language={language}>
+                        {item.village || "----"}
+                      </AppText>
+
+                      <AppText style={styles.paidText} language={language}>
+                       {item.paid} / {item.total} {language === "te" ? "చెల్లించినది" : "Paid"}
+                      </AppText>
+                    </View>
+                  </View>
+
+                  {/* RIGHT */}
+                  <View style={styles.rightSection}>
+                    <ProgressCircle percent={item.percent || 0} />
+
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: status.color + "20" }
+                      ]}
+                    >
+                      <AppText
+                        style={[styles.statusText, { color: status.color }]}
+                        language={language}
+                      >
+                        {language === "te"
+                          ? status.label === "Cleared"
+                            ? "చెల్లింపు పూర్తి"
+                            : status.label === "Pending"
+                            ? "చెల్లింపు పెండింగ్"
+                            : "చెల్లించలేదు"
+                          : status.label}
+                      </AppText>
+                    </View>
+                  </View>
+
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -464,6 +444,37 @@ keyExtractor={(i, index) => i.id || index.toString()}
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
+
+  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    marginHorizontal: 20,
+    marginTop: 15,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    height: 50,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  searchFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+  },
+  searchInput: {
+    flex: 1,
+    height: "100%",
+    marginLeft: 10,
+    fontSize: 15,
+    paddingTop: 0,
+    paddingBottom: 0,
+    textAlignVertical: "center",
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    includeFontPadding: false,
+  },
 
   row: {
     flexDirection: "row",
@@ -478,150 +489,129 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB"
   },
 
-
   searchWrapper: {
     paddingHorizontal: 20,
     marginTop: 10,
     alignItems: "flex-end"
   },
-card: {
-  marginHorizontal: 20,
-  marginVertical: 8,
-  padding: 16,
-  borderRadius: 16,
-  backgroundColor: "#ffffff",
-  borderWidth: 1,
-  borderColor: "#E5E7EB"
-},
-searchContainer: {
+  card: {
+    marginHorizontal: 20,
+    marginVertical: 8,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#E5E7EB"
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center"
+  },
+
+  avatarText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600"
+  },
+
+  details: {
+    marginLeft: 12,
+    flex: 1
+  },
+  mainRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  input: {
+    fontSize: 14,
+    color: "#111827"
+  },
+  leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 20,
+    flex: 1
+  },
+
+  rightSection: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10
+  },
+
+  name: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827"
+  },
+  emptyBox: {
+    marginTop: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 30
+  },
+
+  emptyTitle: {
     marginTop: 12,
-    paddingHorizontal: 14,
-    height: 50, // కొంచెం హైట్ పెంచితే బాగుంటుంది
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1,
-    elevation: 1 // నీట్‌గా కనిపిస్తుంది
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1F2937"
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: "#111827",
-    paddingVertical: 0,
-    height: '100%'
+
+  emptySub: {
+    marginTop: 6,
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 18
   },
-topRow: {
-  flexDirection: "row",
-  alignItems: "center"
-},
+  sub: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2
+  },
 
-avatar: {
-  width: 48,
-  height: 48,
-  borderRadius: 24,
-  justifyContent: "center",
-  alignItems: "center"
-},
+  paidText: {
+    fontSize: 12,
+    color: "#374151",
+    marginTop: 4
+  },
 
-avatarText: {
-  color: "#fff",
-  fontSize: 16,
-  fontWeight: "600"
-},
+  centerCircle: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14
+  },
 
-details: {
-  marginLeft: 12,
-  flex: 1
-},
-mainRow: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center"
-},
-input: {
-  fontSize: 14,
-  color: "#111827"
-},
-leftSection: {
-  flexDirection: "row",
-  alignItems: "center",
-  flex: 1
-},
+  statusBadge: {
+    marginTop: 12,
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12
+  },
 
-rightSection: {
-  alignItems: "center",
-  justifyContent: "center",
-  marginLeft: 10
-},
-
-name: {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#111827"
-},
-emptyBox: {
-  marginTop: 120,
-  alignItems: "center",
-  justifyContent: "center",
-  paddingHorizontal: 30
-},
-
-emptyTitle: {
-  marginTop: 12,
-  fontSize: 17,
-  fontWeight: "600",
-  color: "#1F2937"
-},
-
-emptySub: {
-  marginTop: 6,
-  fontSize: 13,
-  color: "#6B7280",
-  textAlign: "center",
-  lineHeight: 18
-},
-sub: {
-  fontSize: 13,
-  color: "#6B7280",
-  marginTop: 2
-},
-
-paidText: {
-  fontSize: 12,
-  color: "#374151",
-  marginTop: 4
-},
-
-centerCircle: {
-  alignItems: "center",
-  justifyContent: "center",
-  marginTop: 14
-},
-
-statusBadge: {
-  marginTop: 12,
-  alignSelf: "center",
-  paddingHorizontal: 12,
-  paddingVertical: 5,
-  borderRadius: 12
-},
-
-statusText: {
-  fontSize: 12,
-  fontWeight: "600"
-},
- placeholder: {
-  position: "absolute",
-  left: 4,
-  right: 0,
-  textAlignVertical: "center",
-  height: "100%",   // 🔥 important
-  fontSize: 14,
-  color: "#9CA3AF"
-},
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600"
+  },
+  placeholder: {
+    position: "absolute",
+    left: 4,
+    right: 0,
+    textAlignVertical: "center",
+    height: "100%",   // 🔥 important
+    fontSize: 14,
+    color: "#9CA3AF"
+  },
   searchBox: {
     borderWidth: 1.5,
     borderRadius: 14,
@@ -632,5 +622,4 @@ statusText: {
   },
 
   inputWrap: { flex: 1, marginLeft: 8 },
-
 });

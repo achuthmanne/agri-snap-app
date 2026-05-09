@@ -287,45 +287,42 @@ const handleDelete = (item: any) => {
         language={language}
       />
 
-     {/* SEARCH */}
-<View style={[
-  styles.searchContainer,
-  { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }
-]}>
-  <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+     {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
+      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
-  <TextInput
-    value={search}
-    onChangeText={setSearch}
-    placeholder={language === "te" ? "డ్రైవర్ను వెతకండి..." : "Search driver..."}
-    placeholderTextColor="#9CA3AF"
-    cursorColor={'green'}
-    selectionColor={'green'}
-    onFocus={() => setIsFocused(true)}
-    onBlur={() => setIsFocused(false)}
-    style={[styles.searchInput, { fontFamily: 'Mandali' }]}
-  />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={language === "te" ? "డ్రైవర్ను వెతకండి..." : "Search driver..."}
+          placeholderTextColor="#9CA3AF"
+          cursorColor="#16A34A"
+          selectionColor="#16A34A40"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          style={styles.searchInput}
+        />
 
-  {search.length > 0 ? (
-    <TouchableOpacity onPress={() => setSearch("")} >
-      <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-    </TouchableOpacity>
-  ) : (
-    <TouchableOpacity 
-      onPress={handleVoiceSearch}   style={{
-      marginLeft: 10,
-      padding: 5,
-      borderRadius: 50,
-      backgroundColor: "#f0f9f3"
-    }}>
-      <MaterialCommunityIcons 
-        name={isListening ? "microphone" : "microphone-outline"} 
-        size={20} 
-        color={isListening ? "#EF4444" : "#16A34A"} 
-      />
-    </TouchableOpacity>
-  )}
-</View>
+        {search.trim().length > 0 ? (
+          <TouchableOpacity 
+            onPress={() => setSearch("")} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            onPress={handleVoiceSearch} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons 
+              name={isListening ? "microphone" : "microphone-outline"} 
+              size={22} 
+              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+            />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* LIST */}
       {loading ? (
@@ -338,6 +335,7 @@ const handleDelete = (item: any) => {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
           contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
 
           
@@ -525,26 +523,37 @@ const styles = StyleSheet.create({
 
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
 
-searchContainer: {
+  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#F9FAFB",
     marginHorizontal: 20,
-    marginTop: 12,
-    paddingHorizontal: 14,
-    height: 50, // కొంచెం హైట్ పెంచితే బాగుంటుంది
-    backgroundColor: "#fff",
-    borderRadius: 14,
+    marginTop: 15,
+    marginBottom: 0,
+    paddingHorizontal: 12,
+    height: 50, 
+    borderRadius: 8, 
     borderWidth: 1,
-    elevation: 1 // నీట్‌గా కనిపిస్తుంది
+    borderColor: "#E5E7EB",
+  },
+  searchFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
+    height: "100%",
+    marginLeft: 10,
     fontSize: 15,
-    color: "#111827",
-    paddingVertical: 0,
-    height: '100%'
+    paddingTop: 0,
+    paddingBottom: 0,
+    textAlignVertical: "center",
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    includeFontPadding: false,
   },
+
   row: {
     flexDirection: "row",
     alignItems: "center",

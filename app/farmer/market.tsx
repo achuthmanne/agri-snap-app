@@ -291,7 +291,6 @@ export default function MarketScreen() {
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Date.now() - parsed.timestamp < CACHE_TIME) {
-            // 🔥 ఇక్కడ ట్రాన్స్‌లేటర్ యాడ్ చేశాం
             const finalData = await applyMarketTranslations(parsed.data, language);
             setPrices(finalData);
             applyFilters(finalData, searchQuery, activeTab);
@@ -307,7 +306,6 @@ export default function MarketScreen() {
 
       const data = await response.json();
       
-      // 🔥 ఇక్కడ కూడా ట్రాన్స్‌లేటర్ యాడ్ చేశాం
       const finalData = await applyMarketTranslations(data, language);
       
       setPrices(finalData);
@@ -334,7 +332,7 @@ export default function MarketScreen() {
   useSpeechRecognitionEvent("result", (event) => {
     if (!isScreenFocused || !isListening) return;
     if (event.results && event.results.length > 0) {
-      setSearchQuery(event.results[0].transcript); // ఇక్కడ searchQuery అని మార్చాను
+      setSearchQuery(event.results[0].transcript);
     }
   });
 
@@ -414,7 +412,7 @@ export default function MarketScreen() {
     </View>
   );
 
- const renderPriceCard = ({ item }: { item: any }) => {
+  const renderPriceCard = ({ item }: { item: any }) => {
     const cropName = getTranslatedCropName(item.commodity);
     const trend = item.modal_price > item.prevPrice ? "up" : item.modal_price < item.prevPrice ? "down" : "same";
 
@@ -438,7 +436,6 @@ export default function MarketScreen() {
               {trend === "up" && <Ionicons name="arrow-up" size={16} color="#16A34A" style={styles.trendIcon} />}
               {trend === "down" && <Ionicons name="arrow-down" size={16} color="#DC2626" style={styles.trendIcon} />}
             </View>
-            {/* 🔥 క్వింటాల్ టెక్స్ట్ తెలుగు/ఇంగ్లీష్ ని బట్టి మారుతుంది */}
             <AppText style={styles.quintalText} language={language}>
               {language === "te" ? "/ క్వింటాల్" : "/ Quintal"}
             </AppText>
@@ -460,6 +457,7 @@ export default function MarketScreen() {
       </View>
     );
   };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -484,12 +482,10 @@ export default function MarketScreen() {
             <AppText style={[styles.tabText, activeTab === "TS" && styles.activeTabText]} language={language}>{t.ts}</AppText>
           </TouchableOpacity>
         </View>
-{/* SEARCH BAR */}
-        <View style={[
-          styles.searchContainer,
-          { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }
-        ]}>
-          <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+
+        {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
           <TextInput
             style={styles.searchInput}
@@ -497,31 +493,35 @@ export default function MarketScreen() {
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            cursorColor={'green'}
-            selectionColor={'green'}
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
           />
 
           {searchQuery.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearchQuery("")} >
+            <TouchableOpacity 
+              onPress={() => setSearchQuery("")} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Ionicons name="close-circle" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity 
               onPress={handleVoiceSearch} 
-              style={styles.micBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <MaterialCommunityIcons 
                 name={isListening ? "microphone" : "microphone-outline"} 
-                size={20} 
-                color={isListening ? "#EF4444" : "#16A34A"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
               />
             </TouchableOpacity>
           )}
         </View>
-        </View>
-{/* 🔥 CONTENT AREA */}
+      </View>
+
+      {/* 🔥 CONTENT AREA */}
       {loading && !refreshing ? (
         <ShimmerSkeleton />
       ) : error ? (
@@ -537,7 +537,6 @@ export default function MarketScreen() {
       ) : filteredPrices.length === 0 ? (
         <View style={styles.centerContainer}>
           <Ionicons 
-            // 🔥 సెర్చ్ చేసినప్పుడు దొరకకపోతే Search ఐకాన్, అసలు డేటా లేకపోతే Calendar ఐకాన్
             name={searchQuery.trim().length > 0 ? "search-outline" : "calendar-outline"} 
             size={50} 
             color="#D1D5DB" 
@@ -557,6 +556,7 @@ export default function MarketScreen() {
           renderItem={renderPriceCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2E7D32"]} />}
         />
       )}
@@ -590,42 +590,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   activeTabBtn: {
-    backgroundColor: "#1B5E20", // 👈 గ్రీన్ బ్యాక్‌గ్రౌండ్ పెట్టాను
+    backgroundColor: "#1B5E20", 
   },
   tabText: {
     fontSize: 14,
     color: "#6B7280",
     fontWeight: "600",
   },
- activeTabText: {
-    color: "#ffffff", // 👈 వైట్ టెక్స్ట్ పెట్టాను
+  activeTabText: {
+    color: "#ffffff", 
     fontWeight: "600",
   },
- // SEARCH
+
+  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 12,
+    height: 50, 
+    borderRadius: 8, 
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    height: 50,
-    elevation: 1, // 🔥 నీట్ షాడో
+    borderColor: "#E5E7EB",
+  },
+  searchFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: "#111827",
-    paddingVertical: 0,
-    height: '100%',
-    fontFamily: "Mandali",
-  },
-  micBtn: {
+    height: "100%",
     marginLeft: 10,
-    padding: 5,
-    borderRadius: 50,
-    backgroundColor: "#f0f9f3", // 🔥 లైట్ గ్రీన్ బ్యాక్ గ్రౌండ్
+    fontSize: 15,
+    paddingTop: 0,
+    paddingBottom: 0,
+    textAlignVertical: "center",
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    includeFontPadding: false,
   },
 
   // LIST & CARDS

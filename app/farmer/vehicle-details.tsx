@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
+
 export default function VehicleDetails() {
 
   const router = useRouter();
@@ -36,19 +37,19 @@ export default function VehicleDetails() {
 
   const [search, setSearch] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-const [deleteItem, setDeleteItem] = useState<any>(null);
-const [showDeleteModal, setShowDeleteModal] = useState(false);
-const [isListening, setIsListening] = useState(false);
-const isScreenFocused = useIsFocused();
+  const [deleteItem, setDeleteItem] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const isScreenFocused = useIsFocused();
 
-useSpeechRecognitionEvent("result", (event) => {
-  // 🔥 ONLY THIS SCREEN ACTIVE UNTE MATRAM
-  if (!isScreenFocused) return;
+  useSpeechRecognitionEvent("result", (event) => {
+    // 🔥 ONLY THIS SCREEN ACTIVE UNTE MATRAM
+    if (!isScreenFocused) return;
 
-  if (event.results && event.results.length > 0) {
-    setSearch(event.results[0].transcript);
-  }
-});
+    if (event.results && event.results.length > 0) {
+      setSearch(event.results[0].transcript);
+    }
+  });
 
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
@@ -62,12 +63,14 @@ useSpeechRecognitionEvent("result", (event) => {
       interimResults: true,
     });
   };
+
   useEffect(() => {
-  return () => {
-    ExpoSpeechRecognitionModule.stop(); // 🔥 stop when leaving screen
-  };
-}, []);
-/* ---------------- LOAD ---------------- */
+    return () => {
+      ExpoSpeechRecognitionModule.stop(); // 🔥 stop when leaving screen
+    };
+  }, []);
+
+  /* ---------------- LOAD ---------------- */
 
   useFocusEffect(
     useCallback(() => {
@@ -100,7 +103,6 @@ useSpeechRecognitionEvent("result", (event) => {
             .doc(id as string)
             .collection("farmers")
             .where("session", "==", activeSession) // 🔥 సెషన్ ఫిల్టర్
-            // ❌ .orderBy తీసేశాను (Index ఇష్యూ రాకుండా ఉండటానికి)
             .onSnapshot(
               (snap) => {
                 if (!snap || !snap.docs) {
@@ -145,120 +147,6 @@ useSpeechRecognitionEvent("result", (event) => {
       };
     }, [id])
   );
-  // 🔥 useEffect బదులు useFocusEffect వాడుతున్నాం
-  useFocusEffect(
-    useCallback(() => {
-      let unsub: any;
-
-      const load = async () => {
-        const phone = await AsyncStorage.getItem("USER_PHONE");
-        if (!phone) return;
-
-        setLoading(true);
-
-        const userDoc = await firestore()
-          .collection("users")
-          .doc(phone)
-          .get();
-
-        const activeSession = userDoc.data()?.activeSession;
-
-        if (!activeSession) {
-          setLoading(false);
-          return;
-        }
-
-        unsub = firestore()
-          .collection("users")
-          .doc(phone)
-          .collection("vehicles")
-          .doc(id as string)
-          .collection("farmers")
-          .where("session", "==", activeSession) 
-          .orderBy("createdAt", "desc")
-          .onSnapshot((snap) => {
-
-            if (!snap || !snap.docs) {
-              setLoading(false);
-              return;
-            }
-
-            const list: any[] = [];
-
-            snap.forEach(doc => {
-              const d = doc.data();
-              if (!d) return;
-              list.push({ id: doc.id, ...d });
-            });
-
-            setData(list);
-            setLoading(false);
-          });
-      };
-
-      load();
-
-      // స్క్రీన్ నుండి బయటకి వెళ్లగానే listener ఆగిపోయేలా
-      return () => {
-        if (unsub) unsub();
-      };
-
-    }, [id]) // id మారినా కూడా మళ్లీ ఫ్రెష్ గా డేటా తెస్తుంది
-  );
-
-  useEffect(() => {
-    let unsub: any;
-
-    const load = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
-
-      setLoading(true);
-
-     const userDoc = await firestore()
-  .collection("users")
-  .doc(phone)
-  .get();
-
-const activeSession = userDoc.data()?.activeSession;
-
-if (!activeSession) {
-  setLoading(false);
-  return;
-}
-
-unsub = firestore()
-  .collection("users")
-  .doc(phone)
-  .collection("vehicles")
-  .doc(id as string)
-  .collection("farmers")
-  .where("session", "==", activeSession) // 🔥 ADD THIS
-  .orderBy("createdAt", "desc")
-  .onSnapshot((snap) => {
-
-    if (!snap || !snap.docs) {
-      setLoading(false);
-      return;
-    }
-
-    const list: any[] = [];
-
-    snap.forEach(doc => {
-      const d = doc.data();
-      if (!d) return;
-      list.push({ id: doc.id, ...d });
-    });
-
-    setData(list);
-    setLoading(false);
-  });
-    };
-
-    load();
-    return () => unsub && unsub();
-
-  }, []);
 
   /* ---------------- FILTER ---------------- */
 
@@ -281,50 +169,51 @@ unsub = firestore()
     Linking.openURL(`tel:${phone}`);
   };
 
-const handleEdit = (item: any) => {
-  router.push({
-    pathname: "/farmer/vehicle-farmers",
-    params: {
-      vehicleId: id,
-      editId: item.id,
-      name: item.farmerName,
-      phone: item.phone,
-      village: item.village
+  const handleEdit = (item: any) => {
+    router.push({
+      pathname: "/farmer/vehicle-farmers",
+      params: {
+        vehicleId: id,
+        editId: item.id,
+        name: item.farmerName,
+        phone: item.phone,
+        village: item.village
+      }
+    });
+  };
+
+  const handleDelete = (item: any) => {
+    setDeleteItem(item);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteItem) return;
+
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
+
+    // 🔥 INSTANT UI REMOVE
+    setData(prev => prev.filter(item => item.id !== deleteItem.id));
+
+    setShowDeleteModal(false);
+
+    try {
+      await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("vehicles")
+        .doc(id as string)
+        .collection("farmers")
+        .doc(deleteItem.id)
+        .delete();
+    } catch (e) {
+      console.log(e);
     }
-  });
-};
 
-const handleDelete = (item: any) => {
-  setDeleteItem(item);
-  setShowDeleteModal(true);
-};
+    setDeleteItem(null);
+  };
 
-const confirmDelete = async () => {
-  if (!deleteItem) return;
-
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-  if (!phone) return;
-
-  // 🔥 INSTANT UI REMOVE
-  setData(prev => prev.filter(item => item.id !== deleteItem.id));
-
-  setShowDeleteModal(false);
-
-  try {
-    await firestore()
-      .collection("users")
-      .doc(phone)
-      .collection("vehicles")
-      .doc(id as string)
-      .collection("farmers")
-      .doc(deleteItem.id)
-      .delete();
-  } catch (e) {
-    console.log(e);
-  }
-
-  setDeleteItem(null);
-};
   /* ---------------- SHIMMER ---------------- */
 
   const ShimmerRow = () => (
@@ -344,46 +233,48 @@ const confirmDelete = async () => {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-     <AppHeader
+      <AppHeader
         title={language === "te" ? "రైతుల జాబితా" : "Farmers List"}
         subtitle={
           vehicleNumber && vehicleNumber.trim() !== ""
-            ? `${name || vehicleType} | ${vehicleNumber}` // ఉదాహరణకి: Mahindra Tractor • AP 39 AB 1234
+            ? `${name || vehicleType} | ${vehicleNumber}` 
             : `${name || vehicleType || (language === "te" ? "వాహన వివరాలు" : "Vehicle Details")}`
         }
         language={language}
       />
 
-      {/* SEARCH */}
-     <View style={[styles.searchContainer, { borderColor: isFocused ? "#16A34A" : "#E5E7EB" }]}>
-        <Ionicons name="search" size={18} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+      {/* 🔥 MINIMAL & CLEAN SEARCH BAR */}
+      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
         <TextInput
           value={search}
           onChangeText={setSearch}
           placeholder={language === "te" ? "రైతును వెతకండి..." : "Search farmer..."}
           placeholderTextColor="#9CA3AF"
-          cursorColor={'green'}
+          cursorColor="#16A34A"
+          selectionColor="#16A34A40"
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          style={[styles.searchInput, { fontFamily: 'Mandali' }]}
+          style={styles.searchInput}
         />
 
-        {search.length > 0 ? (
-          <TouchableOpacity onPress={() => setSearch("")}>
+        {search.trim().length > 0 ? (
+          <TouchableOpacity 
+            onPress={() => setSearch("")} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Ionicons name="close-circle" size={20} color="#9CA3AF" />
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity onPress={handleVoiceSearch}  style={{
-      marginLeft: 10,
-      padding: 5,
-      borderRadius: 50,
-      backgroundColor: "#f0f9f3"
-    }}>
+          <TouchableOpacity 
+            onPress={handleVoiceSearch} 
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <MaterialCommunityIcons 
               name={isListening ? "microphone" : "microphone-outline"} 
-              size={20} 
-              color={isListening ? "#EF4444" : "#16A34A"} 
+              size={22} 
+              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
             />
           </TouchableOpacity>
         )}
@@ -400,10 +291,10 @@ const confirmDelete = async () => {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
           contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
 
-          
-           ListEmptyComponent={
+          ListEmptyComponent={
             <View style={styles.emptyBox}>
           
               <Ionicons
@@ -439,21 +330,21 @@ const confirmDelete = async () => {
 
                 {/* LEFT */}
                 <TouchableOpacity
-  style={styles.left}
-  activeOpacity={0.8}
-  onPress={() => {
-    router.push({
-      pathname: "/farmer/vfarmer-work",
-      params: {
-        vehicleId: id,
-        farmerId: item.id,
-        name: item.farmerName,
-        phone: item.phone,
-        village: item.village
-      }
-    });
-  }}
->
+                  style={styles.left}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/farmer/vfarmer-work",
+                      params: {
+                        vehicleId: id,
+                        farmerId: item.id,
+                        name: item.farmerName,
+                        phone: item.phone,
+                        village: item.village
+                      }
+                    });
+                  }}
+                >
                   <View style={[styles.avatar, { backgroundColor: color }]}>
                     <AppText style={styles.avatarText}>
                       {item.farmerName?.charAt(0)?.toUpperCase()}
@@ -489,22 +380,20 @@ const confirmDelete = async () => {
                     </MenuTrigger>
 
                     <MenuOptions>
+                      <MenuOption onSelect={() => handleEdit(item)}>
+                        <View style={styles.menuItem}>
+                          <Ionicons name="create-outline" size={16} color="#2563EB" />
+                          <AppText>{language === "te" ? "మార్చు" : "Edit"}</AppText>
+                        </View>
+                      </MenuOption>
 
-  <MenuOption onSelect={() => handleEdit(item)}>
-    <View style={styles.menuItem}>
-      <Ionicons name="create-outline" size={16} color="#2563EB" />
-      <AppText>{language === "te" ? "మార్చు" : "Edit"}</AppText>
-    </View>
-  </MenuOption>
-
-  <MenuOption onSelect={() => handleDelete(item)}>
-    <View style={styles.menuItem}>
-      <Ionicons name="trash-outline" size={16} color="#DC2626" />
-      <AppText>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
-    </View>
-  </MenuOption>
-
-</MenuOptions>
+                      <MenuOption onSelect={() => handleDelete(item)}>
+                        <View style={styles.menuItem}>
+                          <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                          <AppText>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
+                        </View>
+                      </MenuOption>
+                    </MenuOptions>
                   </Menu>
 
                 </View>
@@ -526,55 +415,57 @@ const confirmDelete = async () => {
         }
       >
         <LinearGradient
-                       colors={["#16A34A","#166534"]}
-                       style={styles.addGradient}
-                     >
-                       <Ionicons name="add" size={30} color="#fff" />
-                     </LinearGradient>
+           colors={["#16A34A","#166534"]}
+           style={styles.addGradient}
+         >
+           <Ionicons name="add" size={30} color="#fff" />
+         </LinearGradient>
       </TouchableOpacity>
-{showDeleteModal && (
-  <View style={styles.overlay}>
 
-    <View style={styles.modalBox}>
+      {/* DELETE MODAL */}
+      {showDeleteModal && (
+        <View style={styles.overlay}>
 
-      <View style={styles.iconBg}>
-        <Ionicons name="trash-outline" size={36} color="#DC2626" />
-      </View>
+          <View style={styles.modalBox}>
 
-      <AppText style={styles.modalTitle} language={language}>
-        {language === "te" ? "తొలగించాలా?" : "Delete Entry?"}
-      </AppText>
+            <View style={styles.iconBg}>
+              <Ionicons name="trash-outline" size={36} color="#DC2626" />
+            </View>
 
-      <AppText style={styles.modalSub} language={language}>
-        {language === "te"
-          ? "ఈ వివరాన్ని తొలగించాలా?"
-          : "Are you sure you want to delete this record?"}
-      </AppText>
+            <AppText style={styles.modalTitle} language={language}>
+              {language === "te" ? "తొలగించాలా?" : "Delete Entry?"}
+            </AppText>
 
-      <View style={styles.modalBtns}>
+            <AppText style={styles.modalSub} language={language}>
+              {language === "te"
+                ? "ఈ వివరాన్ని తొలగించాలా?"
+                : "Are you sure you want to delete this record?"}
+            </AppText>
 
-        <TouchableOpacity
-          style={styles.cancelBtn}
-          onPress={() => setShowDeleteModal(false)}
-        >
-          <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
-        </TouchableOpacity>
+            <View style={styles.modalBtns}>
 
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={confirmDelete}
-        >
-          <AppText style={{ color: "#fff" }}>
-            {language === "te" ? "తొలగించు" : "Delete"}
-          </AppText>
-        </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setShowDeleteModal(false)}
+              >
+                <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
+              </TouchableOpacity>
 
-      </View>
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={confirmDelete}
+              >
+                <AppText style={{ color: "#fff" }}>
+                  {language === "te" ? "తొలగించు" : "Delete"}
+                </AppText>
+              </TouchableOpacity>
 
-    </View>
+            </View>
 
-  </View>
-)}
+          </View>
+
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -584,26 +475,38 @@ const confirmDelete = async () => {
 const styles = StyleSheet.create({
 
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-searchContainer: {
+
+  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#F9FAFB",
     marginHorizontal: 20,
-    marginTop: 12,
-    paddingHorizontal: 14,
-    height: 50, // కొంచెం హైట్ పెంచితే బాగుంటుంది
-    backgroundColor: "#fff",
-    borderRadius: 14,
+    marginTop: 15,
+    marginBottom: 0,
+    paddingHorizontal: 12,
+    height: 50, 
+    borderRadius: 8, 
     borderWidth: 1,
-    elevation: 1 // నీట్‌గా కనిపిస్తుంది
+    borderColor: "#E5E7EB",
+  },
+  searchFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
+    height: "100%",
+    marginLeft: 10,
     fontSize: 15,
-    color: "#111827",
-    paddingVertical: 0,
-    height: '100%'
+    paddingTop: 0,
+    paddingBottom: 0,
+    textAlignVertical: "center",
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    includeFontPadding: false,
   },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -678,7 +581,7 @@ searchContainer: {
     color: "#6B7280"
   },
 
-   addBtn: { position: "absolute", bottom: 30, right: 20 },
+  addBtn: { position: "absolute", bottom: 30, right: 20 },
 
   addGradient: {
     width: 60,
@@ -687,75 +590,76 @@ searchContainer: {
     justifyContent: "center",
     alignItems: "center"
   },
+  
   overlay: {
-  position: "absolute",
-  top: 0,
-  bottom: 0,
-  left: 0,
-  right: 0,
-  backgroundColor: "rgba(0,0,0,0.5)",
-  justifyContent: "center",
-  alignItems: "center"
-},
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
 
-modalBox: {
-  width: "80%",
-  backgroundColor: "#fff",
-  borderRadius: 20,
-  padding: 24,
-  alignItems: "center"
-},
+  modalBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center"
+  },
 
-iconBg: {
-  width: 60,
-  height: 60,
-  borderRadius: 30,
-  backgroundColor: "#FEE2E2",
-  justifyContent: "center",
-  alignItems: "center",
-  marginBottom: 10
-},
+  iconBg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10
+  },
 
-modalTitle: {
-  fontSize: 16,
-  fontWeight: "600",
-  marginTop: 10
-},
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 10
+  },
 
-modalSub: {
-  fontSize: 13,
-  color: "#6B7280",
-  textAlign: "center",
-  marginTop: 6
-},
+  modalSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 6
+  },
 
-modalBtns: {
-  flexDirection: "row",
-  marginTop: 20,
-  gap: 10
-},
+  modalBtns: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 10
+  },
 
-cancelBtn: {
-  flex: 1,
-  padding: 12,
-  borderRadius: 12,
-  backgroundColor: "#F1F5F9",
-  alignItems: "center"
-},
+  cancelBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center"
+  },
 
-deleteBtn: {
-  flex: 1,
-  padding: 12,
-  borderRadius: 12,
-  backgroundColor: "#DC2626",
-  alignItems: "center"
-},
+  deleteBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
+    alignItems: "center"
+  },
 
-menuItem: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 8,
-  padding: 10
-}
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10
+  }
 
 });
