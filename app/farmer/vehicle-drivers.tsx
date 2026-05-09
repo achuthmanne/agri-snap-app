@@ -4,15 +4,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 import AgriLoader from "@/components/AgriLoader";
@@ -20,7 +20,6 @@ import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 
 export default function AddWork() {
-
   const router = useRouter();
   const { vehicleId, editId } = useLocalSearchParams();
 
@@ -29,7 +28,7 @@ export default function AddWork() {
   const [village, setVillage] = useState("");
 
   const [activeInput, setActiveInput] = useState<string | null>(null);
-  const [showAlert, setShowAlert] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({}); // 🔥 Inline Errors State
   const [loading, setLoading] = useState(false);
 
   const [language, setLanguage] = useState<"te" | "en">("te");
@@ -39,26 +38,32 @@ export default function AddWork() {
   const villageRef = useRef<TextInput>(null);
 
   const placeholders = {
-  en: {
-    name: "Full Name*",
-    phone: "Phone Number*",
-    village: "Village Name*"
-  },
-  te: {
-    name: "డ్రైవర్ పూర్తి పేరు*",
-    phone: "ఫోన్ నంబర్*",
-    village: "గ్రామం పేరు*"
-  }
-};
+    en: {
+      name: "Full Name*",
+      phone: "Phone Number*",
+      village: "Village Name*"
+    },
+    te: {
+      name: "డ్రైవర్ పూర్తి పేరు*",
+      phone: "ఫోన్ నంబర్*",
+      village: "గ్రామం పేరు*"
+    }
+  };
 
-const t = placeholders[language] || placeholders.en;
-const [isListening, setIsListening] = useState(false);
+  const t = placeholders[language] || placeholders.en;
+  const [isListening, setIsListening] = useState(false);
 
   useSpeechRecognitionEvent("result", (event) => {
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
-      if (activeInput === "name") setName(transcript);
-      else if (activeInput === "village") setVillage(transcript);
+      if (activeInput === "name") {
+        setName(transcript);
+        if (errors.name) setErrors({ ...errors, name: "" });
+      }
+      else if (activeInput === "village") {
+        setVillage(transcript);
+        if (errors.village) setErrors({ ...errors, village: "" });
+      }
     }
   });
 
@@ -74,101 +79,13 @@ const [isListening, setIsListening] = useState(false);
       interimResults: true,
     });
   };
-  /* ---------------- LOAD ---------------- */
 
+  /* ---------------- LOAD ---------------- */
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
       if (l) setLanguage(l as any);
     });
   }, []);
-
-  /* ---------------- SAVE ---------------- */
-
- /* ---------------- SAVE ---------------- */
-
-  const handleSave = async () => {
-    // ముందుగా స్పేసెస్ లేకుండా క్లీన్ చేసుకుందాం
-    const cleanName = name.trim();
-    const cleanPhone = phone.trim();
-    const cleanVillage = village.trim();
-
-    // 🔥 STEP 1: BASIC VALIDATION (మూడు ఫీల్డ్స్ కచ్చితంగా ఉండాలి)
-    if (!cleanName || !cleanPhone || !cleanVillage) {
-      setShowAlert(true);
-      return;
-    }
-
-    // 🔥 STEP 2: PHONE VALIDATION (6-9 తో స్టార్ట్ అవ్వాలి, 10 అంకెలు ఉండాలి)
-    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
-      setShowAlert(true);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // 🔥 FORCE UI RENDER
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      const userPhone = await AsyncStorage.getItem("USER_PHONE");
-      if (!userPhone || !vehicleId) {
-        setLoading(false);
-        return;
-      }
-
-      // 🔥 URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా
-      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
-      const eId = editId ? (Array.isArray(editId) ? editId[0] : editId) : null;
-
-      // 🔥 FETCH ACTIVE SESSION (Session based checking)
-      const userDoc = await firestore()
-        .collection("users")
-        .doc(userPhone)
-        .get();
-
-      const activeSession = userDoc.data()?.activeSession;
-
-      if (!activeSession) {
-        setLoading(false);
-        return;
-      }
-
-      const ref = firestore()
-        .collection("users")
-        .doc(userPhone)
-        .collection("vehicles")
-        .doc(vId)
-        .collection("drivers");
-
-      if (eId) {
-        // ఎడిట్ చేసేటప్పుడు
-        await ref.doc(eId).update({
-          driverName: cleanName,
-          phone: cleanPhone,
-          village: cleanVillage
-        });
-      } else {
-        // కొత్తగా యాడ్ చేసేటప్పుడు
-        await ref.add({
-          driverName: cleanName,
-          phone: cleanPhone,
-          village: cleanVillage,
-          session: activeSession, // 🔥 SESSION ADDED
-          createdAt: firestore.FieldValue.serverTimestamp()
-        });
-      }
-
-      // స్మూత్ గా వెనక్కి వెళ్ళడానికి
-      setTimeout(() => {
-        setLoading(false);
-        router.back();
-      }, 400);
-
-    } catch (e) {
-      console.log(e);
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     const loadEditData = async () => {
@@ -177,7 +94,6 @@ const [isListening, setIsListening] = useState(false);
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
       if (!userPhone) return;
 
-      // Params fix
       const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
       const eId = Array.isArray(editId) ? editId[0] : editId;
 
@@ -185,14 +101,14 @@ const [isListening, setIsListening] = useState(false);
         .collection("users")
         .doc(userPhone)
         .collection("vehicles")
-        .doc(vId)
+        .doc(vId as string)
         .collection("drivers")
-        .doc(eId)
+        .doc(eId as string)
         .get();
 
       const data = doc.data();
 
-      // 🔥 SESSION SECURITY CHECK (పాత సెషన్ డేటా ఓపెన్ అవ్వకుండా)
+      // 🔥 SESSION SECURITY CHECK
       const userDoc = await firestore().collection("users").doc(userPhone).get();
       const activeSession = userDoc.data()?.activeSession;
 
@@ -211,195 +127,231 @@ const [isListening, setIsListening] = useState(false);
     loadEditData();
   }, [editId]);
 
-  useEffect(() => {
-  const loadEditData = async () => {
-    if (!editId) return;
+  /* ---------------- SAVE ---------------- */
+  const handleSave = async () => {
+    if (loading) return;
 
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+    const cleanVillage = village.trim();
 
-    const doc = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("vehicles")
-      .doc(vehicleId as string)
-      .collection("drivers")
-      .doc(editId as string)
-      .get();
+    // 🔥 INLINE VALIDATION LOGIC
+    const newErrors: any = {};
+    if (!cleanName) newErrors.name = language === "te" ? "డ్రైవర్ పేరు నమోదు చేయండి*" : "Enter driver name*";
+    
+    if (!cleanPhone) {
+      newErrors.phone = language === "te" ? "ఫోన్ నంబర్ నమోదు చేయండి*" : "Enter phone number*";
+    } else if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      newErrors.phone = language === "te" ? "సరైన ఫోన్ నంబర్ ఇవ్వండి*" : "Enter valid phone number*";
+    }
 
-    const data = doc.data();
+    if (!cleanVillage) newErrors.village = language === "te" ? "గ్రామం పేరు నమోదు చేయండి*" : "Enter village name*";
 
-    if (data) {
-      setName(data.driverName || "");
-      setPhone(data.phone || "");
-      setVillage(data.village || "");
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    setErrors({});
+
+    try {
+      setLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone || !vehicleId) {
+        setLoading(false);
+        return;
+      }
+
+      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
+      const eId = editId ? (Array.isArray(editId) ? editId[0] : editId) : null;
+
+      const userDoc = await firestore().collection("users").doc(userPhone).get();
+      const activeSession = userDoc.data()?.activeSession;
+
+      if (!activeSession) {
+        setLoading(false);
+        return;
+      }
+
+      const ref = firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("drivers");
+
+      if (eId) {
+        await ref.doc(eId).update({
+          driverName: cleanName,
+          phone: cleanPhone,
+          village: cleanVillage
+        });
+      } else {
+        await ref.add({
+          driverName: cleanName,
+          phone: cleanPhone,
+          village: cleanVillage,
+          session: activeSession, 
+          createdAt: firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+      setTimeout(() => {
+        setLoading(false);
+        router.back();
+      }, 400);
+
+    } catch (e) {
+      console.log(e);
+      setLoading(false);
     }
   };
 
-  loadEditData();
-}, [editId]);
-
   /* ---------------- UI ---------------- */
-
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
       <AppHeader
-  title={
-    editId
-      ? (language === "te" ? "డ్రైవర్ వివరాలు మార్చండి" : "Edit Driver")
-      : (language === "te" ? "డ్రైవర్ వివరాలు" : "Add Driver")
-  }
-  subtitle={
-    editId
-      ? (language === "te" ? "సవరించండి" : "Update Details")
-      : (language === "te" ? "డ్రైవర్ నమోదు చేయండి" : "Add Driver Details")
-  }
-  language={language}
-/>
+        title={
+          editId
+            ? (language === "te" ? "డ్రైవర్ వివరాలు మార్చండి" : "Edit Driver")
+            : (language === "te" ? "డ్రైవర్ వివరాలు" : "Add Driver")
+        }
+        subtitle={
+          editId
+            ? (language === "te" ? "సవరించండి" : "Update Details")
+            : (language === "te" ? "డ్రైవర్ నమోదు చేయండి" : "Add Driver Details")
+        }
+        language={language}
+      />
 
       <View style={styles.container}>
 
-       {/* 👤 NAME */}
-<TouchableOpacity
-  style={[styles.inputBox, activeInput === "name" && styles.inputFocused]}
-  activeOpacity={1}
-  onPress={() => nameRef.current?.focus()}
->
-  <Ionicons 
-    name="person-outline" 
-    size={18} 
-    color={activeInput === "name" ? "#2E7D32" : "#9CA3AF"} 
-  />
-  <View style={styles.inputWrapper}>
-    {/* Custom AppText Placeholder */}
-    {!name && activeInput !== "name" && (
-      <AppText style={styles.customPlaceholder}>{t.name}</AppText>
-    )}
-    <TextInput
-      ref={nameRef}
-      value={name}
-      onChangeText={setName}
-      cursorColor={'green'}
-      selectionColor={'green'}
-      style={[
-  styles.input,
-  {
-    fontFamily: "Mandali"   // 🔥 SAME AS AppText
-  }
-]}
-      onFocus={() => setActiveInput("name")}
-      onBlur={() => setActiveInput(null)}
-      returnKeyType="next"
-      onSubmitEditing={() => phoneRef.current?.focus()}
-    />
-  </View>
-  {/* 👤 NAME Input లోపల చివరన */}
-<TouchableOpacity onPress={() => handleVoiceInput("name")}  style={{
-      marginLeft: 10,
-      padding: 6,
-      borderRadius: 50,
-      backgroundColor: "#f0f9f3"
-    }}>
-  <MaterialCommunityIcons 
-    name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
-    size={22} 
-    // ఇక్కడ మార్పు: Listening లో ఉండాలి మరియు యాక్టివ్ ఇన్‌పుట్ 'name' అయి ఉండాలి
-    color={isListening && activeInput === "name" ? "#EF4444" : "#2E7D32"} 
-  />
-</TouchableOpacity>
-</TouchableOpacity>
+        {/* 👤 NAME */}
+        <TouchableOpacity
+          style={[styles.inputBox, activeInput === "name" && styles.inputFocused, errors.name && styles.inputError]}
+          activeOpacity={1}
+          onPress={() => { setActiveInput("name"); nameRef.current?.focus(); }}
+        >
+          <Ionicons 
+            name="person-outline" 
+            size={20} 
+            color={name || activeInput === "name" ? "#16A34A" : "#9CA3AF"} 
+          />
+          <View style={styles.inputWrapper}>
+            {!name && activeInput !== "name" && (
+              <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>{t.name}</AppText>
+            )}
+            <TextInput
+              ref={nameRef}
+              value={name}
+              onChangeText={(txt) => {
+                setName(txt);
+                if (errors.name) setErrors({ ...errors, name: "" });
+              }}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              style={[styles.input, { display: (name || activeInput === "name") ? "flex" : "none" }]}
+              onFocus={() => setActiveInput("name")}
+              onBlur={() => setActiveInput(null)}
+              returnKeyType="next"
+              onSubmitEditing={() => phoneRef.current?.focus()}
+            />
+          </View>
+          <TouchableOpacity onPress={() => handleVoiceInput("name")} style={styles.micBtn}>
+            <MaterialCommunityIcons 
+              name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
+              size={24} 
+              color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+        {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
 
-{/* 📞 PHONE */}
-<TouchableOpacity
-  style={[styles.inputBox, activeInput === "phone" && styles.inputFocused]}
-  activeOpacity={1}
-  onPress={() => phoneRef.current?.focus()}
->
-  <Ionicons 
-    name="call-outline" 
-    size={18} 
-    color={activeInput === "phone" ? "#2E7D32" : "#9CA3AF"} 
-  />
-  <View style={styles.inputWrapper}>
-    {!phone && activeInput !== "phone" && (
-      <AppText style={styles.customPlaceholder}>{t.phone}</AppText>
-    )}
-    <TextInput
-      ref={phoneRef}
-      value={phone}
-      onChangeText={setPhone}
-      keyboardType="number-pad"
-      maxLength={10}
-       cursorColor={'green'}
-      selectionColor={'green'}
-      style={[
-  styles.input,
-  {
-    fontFamily: "Mandali"   // 🔥 SAME AS AppText
-  }
-]}
-      onFocus={() => setActiveInput("phone")}
-      onBlur={() => setActiveInput(null)}
-      returnKeyType="next"
-      onSubmitEditing={() => villageRef.current?.focus()}
-    />
-  </View>
-</TouchableOpacity>
+        {/* 📞 PHONE */}
+        <TouchableOpacity
+          style={[styles.inputBox, activeInput === "phone" && styles.inputFocused, errors.phone && styles.inputError]}
+          activeOpacity={1}
+          onPress={() => { setActiveInput("phone"); phoneRef.current?.focus(); }}
+        >
+          <Ionicons 
+            name="call-outline" 
+            size={20} 
+            color={phone || activeInput === "phone" ? "#16A34A" : "#9CA3AF"} 
+          />
+          <View style={styles.inputWrapper}>
+            {!phone && activeInput !== "phone" && (
+              <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>{t.phone}</AppText>
+            )}
+            <TextInput
+              ref={phoneRef}
+              value={phone}
+              onChangeText={(txt) => {
+                setPhone(txt);
+                if (errors.phone) setErrors({ ...errors, phone: "" });
+              }}
+              keyboardType="number-pad"
+              maxLength={10}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              style={[styles.input, { display: (phone || activeInput === "phone") ? "flex" : "none" }]}
+              onFocus={() => setActiveInput("phone")}
+              onBlur={() => setActiveInput(null)}
+              returnKeyType="next"
+              onSubmitEditing={() => villageRef.current?.focus()}
+            />
+          </View>
+        </TouchableOpacity>
+        {errors.phone && <AppText style={styles.errorText} language={language}>{errors.phone}</AppText>}
 
-{/* 📍 VILLAGE */}
-<TouchableOpacity
-  style={[styles.inputBox, activeInput === "village" && styles.inputFocused]}
-  activeOpacity={1}
-  onPress={() => villageRef.current?.focus()}
->
-  <Ionicons 
-    name="location-outline" 
-    size={18} 
-    color={activeInput === "village" ? "#2E7D32" : "#9CA3AF"} 
-  />
-  <View style={styles.inputWrapper}>
-    {!village && activeInput !== "village" && (
-      <AppText style={styles.customPlaceholder}>{t.village}</AppText>
-    )}
-    <TextInput
-      ref={villageRef}
-      value={village}
-      onChangeText={setVillage}
-      style={[
-  styles.input,
-  {
-    fontFamily: "Mandali"   // 🔥 SAME AS AppText
-  }
-]}
-      cursorColor={'green'}
-      selectionColor={'green'}
-      onFocus={() => setActiveInput("village")}
-      onBlur={() => setActiveInput(null)}
-      returnKeyType="done"
-    />
-  </View>
-  <TouchableOpacity onPress={() => handleVoiceInput("village")}  style={{
-      marginLeft: 10,
-      padding: 6,
-      borderRadius: 50,
-      backgroundColor: "#f0f9f3"
-    }}>
-  <MaterialCommunityIcons 
-    name={isListening && activeInput === "village" ? "microphone" : "microphone-outline"} 
-    size={22} 
-    // ఇక్కడ మార్పు: Listening లో ఉండాలి మరియు యాక్టివ్ ఇన్‌పుట్ 'village' అయి ఉండాలి
-    color={isListening && activeInput === "village" ? "#EF4444" : "#2E7D32"} 
-  />
-</TouchableOpacity>
-</TouchableOpacity>
+        {/* 📍 VILLAGE */}
+        <TouchableOpacity
+          style={[styles.inputBox, activeInput === "village" && styles.inputFocused, errors.village && styles.inputError]}
+          activeOpacity={1}
+          onPress={() => { setActiveInput("village"); villageRef.current?.focus(); }}
+        >
+          <Ionicons 
+            name="location-outline" 
+            size={20} 
+            color={village || activeInput === "village" ? "#16A34A" : "#9CA3AF"} 
+          />
+          <View style={styles.inputWrapper}>
+            {!village && activeInput !== "village" && (
+              <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>{t.village}</AppText>
+            )}
+            <TextInput
+              ref={villageRef}
+              value={village}
+              onChangeText={(txt) => {
+                setVillage(txt);
+                if (errors.village) setErrors({ ...errors, village: "" });
+              }}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              style={[styles.input, { display: (village || activeInput === "village") ? "flex" : "none" }]}
+              onFocus={() => setActiveInput("village")}
+              onBlur={() => setActiveInput(null)}
+              returnKeyType="done"
+            />
+          </View>
+          <TouchableOpacity onPress={() => handleVoiceInput("village")} style={styles.micBtn}>
+            <MaterialCommunityIcons 
+              name={isListening && activeInput === "village" ? "microphone" : "microphone-outline"} 
+              size={24} 
+              color={isListening && activeInput === "village" ? "#EF4444" : (activeInput === "village" ? "#16A34A" : "#6B7280")} 
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+        {errors.village && <AppText style={styles.errorText} language={language}>{errors.village}</AppText>}
 
         {/* SAVE */}
         <TouchableOpacity
           style={styles.saveBtn}
           onPress={handleSave}
           activeOpacity={0.9}
+          disabled={loading}
         >
           <LinearGradient
             colors={["#2E7D32", "#1B5E20"]}
@@ -415,157 +367,90 @@ const [isListening, setIsListening] = useState(false);
 
       </View>
 
-      {/* ALERT */}
-      {showAlert && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-
-            <View style={styles.iconBg}>
-              <Ionicons name="warning" size={36} color="#1B5E20" />
-            </View>
-
-            <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "లోపం" : "Error"}
-            </AppText>
-
-            <AppText style={styles.modalText} language={language}>
-              {language === "te"
-                ? "అవసరమైన వివరాలు నమోదు చేయండి"
-                : "Please fill required fields"}
-            </AppText>
-
-            <TouchableOpacity activeOpacity={0.8}
-              style={styles.modalBtn}
-              onPress={() => setShowAlert(false)}
-            >
-             <AppText style={styles.modalBtnText}>
-  {language === "te" ? "సరే" : "OK"}
-</AppText>
-            </TouchableOpacity>
-
-          </View>
-        </View>
-      )}
-
       <AgriLoader visible={loading} type="saving" language={language} />
 
     </SafeAreaView>
   );
 }
+
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
-
   safe: {
     flex: 1,
     backgroundColor: "#F6F7F6"
   },
-
   container: {
     padding: 20
   },
-inputBox: {
+
+  // 🔥 STANDARD PATTERN INPUT STYLES
+  inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 18,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     paddingHorizontal: 15,
-    height: 60, // Fixed height for consistency
+    height: 55,
     marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#D1D5DB"
   },
   inputFocused: {
-    borderColor: "#2E7D32",
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontFamily: "Mandali",
+    marginTop: -10,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  micBtn: {
+    marginLeft: 10,
+    padding: 4,
   },
   inputWrapper: {
     flex: 1,
-    marginLeft: 10,
-    justifyContent: 'center',
+    marginLeft: 12,
+    justifyContent: 'center'
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: "#1E293B",
-    paddingVertical: 0,
-    // Note: Don't add fontFamily here, it will take from TextInput default. 
-    // If you have a custom font for TextInput, add it here.
-  },
-  customPlaceholder: {
-    position: 'absolute',
-    left: 0,
-    fontSize: 16,
-    color: "#9CA3AF",
-    // It will automatically use the font style from your AppText component!
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   
+  // ORIGINAL BUTTON STYLES
   saveBtn: {
-    marginTop: 25,
+    marginTop: 10,
     borderRadius: 18,
-    overflow: "hidden"
+    overflow: "hidden",
+    elevation: 6,
+    shadowColor: "#1B5E20",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
-modalOverlay: {
-  flex: 1,
-  position: "absolute",
-  width: "100%",
-  height: "100%",
-  backgroundColor: "rgba(0,0,0,0.6)",
-  justifyContent: "center",
-  alignItems: "center"
-},
-
-modalBox: {
-  width: "80%",
-  backgroundColor: "white",
-  borderRadius: 20,
-  padding: 20,
-  alignItems: "center"
-},
-
-modalTitle: {
-  fontSize: 18,
-  fontWeight: "600",
-  marginTop: 10,
-  color: "#1F2937"
-},
-iconBg: {
-  width: 60,
-  height: 60,
-  borderRadius: 30,
-  backgroundColor: "#E8F5E9",
-  justifyContent: "center",
-  alignItems: "center",
-  marginBottom: 10
-},
-
-modalText: {
-  marginTop: 8,
-  textAlign: "center",
-  color: "#6B7280"
-},
-
-modalBtn: {
-  marginTop: 20,
-  backgroundColor: "#2E7D32",
-  paddingHorizontal: 30,
-  paddingVertical: 10,
-  borderRadius: 10
-},
-
-modalBtnText: {
-  color: "white",
-  fontWeight: "600"
-},
   saveGradient: {
-    height: 52,
+    height: 56,
     justifyContent: "center",
     alignItems: "center"
   },
-
   saveText: {
     color: "white",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600"
   }
-
 });

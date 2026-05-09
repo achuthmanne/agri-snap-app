@@ -3,18 +3,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 import AppHeader from '@/components/AppHeader';
@@ -26,6 +25,10 @@ export default function InterestCalculator() {
 
   // Active Tab State
   const [activeTab, setActiveTab] = useState<'village' | 'bank' | 'emi'>('village');
+
+  // 🔥 STANDARD PATTERN STATES
+  const [activeInput, setActiveInput] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   // Shared States
   const [principal, setPrincipal] = useState('');
@@ -42,15 +45,16 @@ export default function InterestCalculator() {
   const [emiRate, setEmiRate] = useState('11'); 
   const [emiMonths, setEmiMonths] = useState('24'); 
 
+  // Refs for standard focus behavior
+  const principalRef = useRef<TextInput>(null);
+  const villageRateRef = useRef<TextInput>(null);
+  const bankRateRef = useRef<TextInput>(null);
+  const emiRateRef = useRef<TextInput>(null);
+  const emiMonthsRef = useRef<TextInput>(null);
+
   // Modals
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-
-  // 🔥 Custom Alert State
-  const [alertData, setAlertData] = useState<{ visible: boolean; message: string }>({
-    visible: false,
-    message: ''
-  });
 
   // Result State
   const [result, setResult] = useState<any>(null);
@@ -63,6 +67,7 @@ export default function InterestCalculator() {
 
   useEffect(() => {
     setResult(null);
+    setErrors({});
   }, [activeTab]);
 
   const formatCurrency = (amount: number) => {
@@ -77,88 +82,96 @@ export default function InterestCalculator() {
     return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
   };
 
-  // 🔥 కస్టమ్ అలర్ట్ చూపించడానికి ఫంక్షన్
-  const showAlert = (msg: string) => {
-    setAlertData({ visible: true, message: msg });
-  };
-
-  const calculateVillage = (P: number) => {
-    const R = parseFloat(villageRate);
-    if (isNaN(R) || R <= 0) return showAlert(language === 'te' ? 'దయచేసి సరైన వడ్డీ రేటు ఇవ్వండి' : 'Please enter a valid rate');
-    if (startDate > endDate) return showAlert(language === 'te' ? 'తిరిగి ఇచ్చే తేదీ, తీసుకున్న తేదీ కంటే ముందు ఉండకూడదు!' : 'Invalid dates selected');
-
-    let d1 = startDate.getDate(), m1 = startDate.getMonth(), y1 = startDate.getFullYear();
-    let d2 = endDate.getDate(), m2 = endDate.getMonth(), y2 = endDate.getFullYear();
-    
-    let days = d2 - d1;
-    let months = m2 - m1;
-    let years = y2 - y1;
-
-    if (days < 0) { months -= 1; days += 30; }
-    if (months < 0) { years -= 1; months += 12; }
-
-    const totalMonths = (years * 12) + months;
-    const interestPerMonth = (P * R) / 100;
-    const interestPerDay = interestPerMonth / 30;
-
-    const totalInterest = (interestPerMonth * totalMonths) + (interestPerDay * days);
-    
-    setResult({
-      type: 'village',
-      months: totalMonths,
-      days: days,
-      interest: totalInterest,
-      total: P + totalInterest
-    });
-  };
-
-  const calculateBank = (P: number) => {
-    const R = parseFloat(bankRate);
-    if (isNaN(R) || R <= 0) return showAlert(language === 'te' ? 'దయచేసి సరైన వడ్డీ రేటు ఇవ్వండి' : 'Please enter a valid rate');
-    if (startDate > endDate) return showAlert(language === 'te' ? 'తిరిగి ఇచ్చే తేదీ, తీసుకున్న తేదీ కంటే ముందు ఉండకూడదు!' : 'Invalid dates selected');
-
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-    const totalInterest = (P * R * (diffDays / 365)) / 100;
-
-    setResult({
-      type: 'bank',
-      days: diffDays,
-      interest: totalInterest,
-      total: P + totalInterest
-    });
-  };
-
-  const calculateEMI = (P: number) => {
-    const R = parseFloat(emiRate);
-    const N = parseInt(emiMonths);
-    if (isNaN(R) || R <= 0) return showAlert(language === 'te' ? 'దయచేసి సరైన వడ్డీ రేటు ఇవ్వండి' : 'Please enter a valid rate');
-    if (isNaN(N) || N <= 0) return showAlert(language === 'te' ? 'నెలల సంఖ్య సరైనది కాదు' : 'Please enter valid months');
-
-    const r = R / (12 * 100); 
-    const emi = (P * r * Math.pow(1 + r, N)) / (Math.pow(1 + r, N) - 1);
-    const totalAmount = emi * N;
-    const totalInterest = totalAmount - P;
-
-    setResult({
-      type: 'emi',
-      emi: emi,
-      interest: totalInterest,
-      total: totalAmount,
-      months: N
-    });
-  };
-
   const handleCalculate = () => {
+    // 🔥 INLINE VALIDATION LOGIC
+    let newErrors: any = {};
     const P = parseFloat(principal);
+    
     if (isNaN(P) || P <= 0) {
-      return showAlert(language === 'te' ? 'దయచేసి సరైన అసలు మొత్తం ఇవ్వండి' : 'Please enter a valid principal amount');
+      newErrors.principal = language === 'te' ? 'దయచేసి సరైన అసలు మొత్తం ఇవ్వండి*' : 'Please enter valid principal amount*';
     }
 
-    if (activeTab === 'village') calculateVillage(P);
-    else if (activeTab === 'bank') calculateBank(P);
-    else if (activeTab === 'emi') calculateEMI(P);
+    if (activeTab === 'village') {
+      const R = parseFloat(villageRate);
+      if (isNaN(R) || R <= 0) newErrors.villageRate = language === 'te' ? 'సరైన వడ్డీ రేటు ఇవ్వండి*' : 'Enter valid rate*';
+      if (startDate > endDate) newErrors.date = language === 'te' ? 'తేదీలు సరిగ్గా ఎంచుకోండి*' : 'Invalid dates selected*';
+    } 
+    else if (activeTab === 'bank') {
+      const R = parseFloat(bankRate);
+      if (isNaN(R) || R <= 0) newErrors.bankRate = language === 'te' ? 'సరైన వడ్డీ రేటు ఇవ్వండి*' : 'Enter valid rate*';
+      if (startDate > endDate) newErrors.date = language === 'te' ? 'తేదీలు సరిగ్గా ఎంచుకోండి*' : 'Invalid dates selected*';
+    } 
+    else if (activeTab === 'emi') {
+      const R = parseFloat(emiRate);
+      const N = parseInt(emiMonths);
+      if (isNaN(R) || R <= 0) newErrors.emiRate = language === 'te' ? 'సరైన రేటు ఇవ్వండి*' : 'Enter valid rate*';
+      if (isNaN(N) || N <= 0) newErrors.emiMonths = language === 'te' ? 'నెలలు సరిగ్గా ఇవ్వండి*' : 'Enter valid months*';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setResult(null);
+      return;
+    }
+    
+    setErrors({});
+
+    // Calculations
+    if (activeTab === 'village') {
+      const R = parseFloat(villageRate);
+      let d1 = startDate.getDate(), m1 = startDate.getMonth(), y1 = startDate.getFullYear();
+      let d2 = endDate.getDate(), m2 = endDate.getMonth(), y2 = endDate.getFullYear();
+      
+      let days = d2 - d1;
+      let months = m2 - m1;
+      let years = y2 - y1;
+
+      if (days < 0) { months -= 1; days += 30; }
+      if (months < 0) { years -= 1; months += 12; }
+
+      const totalMonths = (years * 12) + months;
+      const interestPerMonth = (P * R) / 100;
+      const interestPerDay = interestPerMonth / 30;
+
+      const totalInterest = (interestPerMonth * totalMonths) + (interestPerDay * days);
+      
+      setResult({
+        type: 'village',
+        months: totalMonths,
+        days: days,
+        interest: totalInterest,
+        total: P + totalInterest
+      });
+    } 
+    else if (activeTab === 'bank') {
+      const R = parseFloat(bankRate);
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      const totalInterest = (P * R * (diffDays / 365)) / 100;
+
+      setResult({
+        type: 'bank',
+        days: diffDays,
+        interest: totalInterest,
+        total: P + totalInterest
+      });
+    } 
+    else if (activeTab === 'emi') {
+      const R = parseFloat(emiRate);
+      const N = parseInt(emiMonths);
+      const r = R / (12 * 100); 
+      const emi = (P * r * Math.pow(1 + r, N)) / (Math.pow(1 + r, N) - 1);
+      const totalAmount = emi * N;
+      const totalInterest = totalAmount - P;
+
+      setResult({
+        type: 'emi',
+        emi: emi,
+        interest: totalInterest,
+        total: totalAmount,
+        months: N
+      });
+    }
   };
 
   return (
@@ -189,103 +202,227 @@ export default function InterestCalculator() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
+          {/* 💰 PRINCIPAL INPUT */}
           <View style={styles.inputGroup}>
             <AppText style={styles.label}>{activeTab === 'emi' ? (language === 'te' ? 'లోన్ మొత్తం (రూపాయల్లో)' : 'Loan Amount (₹)') : (language === 'te' ? 'అసలు మొత్తం (రూపాయల్లో)' : 'Principal Amount (₹)')}</AppText>
-            <View style={styles.inputWrapper}>
-              <MaterialCommunityIcons name="currency-inr" size={20} color="#16A34A" style={styles.inputIcon} />
-              <TextInput style={styles.input} value={principal} onChangeText={setPrincipal} keyboardType="numeric" placeholder="ఉదా: 100000" placeholderTextColor="#9CA3AF" cursorColor="#16A34A" />
-            </View>
+            <TouchableOpacity 
+              activeOpacity={1} 
+              onPress={() => { setActiveInput("principal"); principalRef.current?.focus(); }}
+              style={[styles.inputBox, activeInput === "principal" && styles.inputFocused, errors.principal && styles.inputError]}
+            >
+              <MaterialCommunityIcons name="currency-inr" size={20} color={principal || activeInput === "principal" ? "#16A34A" : "#9CA3AF"} />
+              <View style={styles.inputWrapper}>
+                {!principal && activeInput !== "principal" && (
+                  <AppText style={styles.placeholder}>{language === 'te' ? 'ఉదా: 100000' : 'Ex: 100000'}</AppText>
+                )}
+                <TextInput 
+                  ref={principalRef}
+                  style={[styles.input, { display: (principal || activeInput === "principal") ? "flex" : "none" }]} 
+                  value={principal} 
+                  onChangeText={(txt) => { setPrincipal(txt); if(errors.principal) setErrors({...errors, principal: ""}); }} 
+                  keyboardType="numeric" 
+                  cursorColor="#16A34A" 
+                  selectionColor="#16A34A40"
+                  onFocus={() => setActiveInput("principal")}
+                  onBlur={() => setActiveInput(null)}
+                />
+              </View>
+            </TouchableOpacity>
+            {errors.principal && <AppText style={styles.errorText} language={language}>{errors.principal}</AppText>}
           </View>
 
+          {/* 🏘️ VILLAGE RATE INPUT */}
           {activeTab === 'village' && (
             <View style={styles.inputGroup}>
               <AppText style={styles.label}>{language === 'te' ? 'వడ్డీ రేటు (నూరుకి నెలకు)' : 'Interest Rate (Per 100/Month)'}</AppText>
-              <View style={styles.inputWrapper}>
-                <MaterialCommunityIcons name="brightness-percent" size={20} color="#EA580C" style={styles.inputIcon} />
-                <TextInput style={styles.input} value={villageRate} onChangeText={setVillageRate} keyboardType="numeric" placeholder="ఉదా: 2" placeholderTextColor="#9CA3AF" cursorColor="#16A34A" />
+              <TouchableOpacity 
+                activeOpacity={1} 
+                onPress={() => { setActiveInput("villageRate"); villageRateRef.current?.focus(); }}
+                style={[styles.inputBox, activeInput === "villageRate" && styles.inputFocused, errors.villageRate && styles.inputError]}
+              >
+                <MaterialCommunityIcons name="brightness-percent" size={20} color={villageRate || activeInput === "villageRate" ? "#EA580C" : "#9CA3AF"} />
+                <View style={styles.inputWrapper}>
+                  {!villageRate && activeInput !== "villageRate" && (
+                    <AppText style={styles.placeholder}>{language === 'te' ? 'ఉదా: 2' : 'Ex: 2'}</AppText>
+                  )}
+                  <TextInput 
+                    ref={villageRateRef}
+                    style={[styles.input, { display: (villageRate || activeInput === "villageRate") ? "flex" : "none" }]} 
+                    value={villageRate} 
+                    onChangeText={(txt) => { setVillageRate(txt); if(errors.villageRate) setErrors({...errors, villageRate: ""}); }} 
+                    keyboardType="numeric" 
+                    cursorColor="#16A34A" 
+                    selectionColor="#16A34A40"
+                    onFocus={() => setActiveInput("villageRate")}
+                    onBlur={() => setActiveInput(null)}
+                  />
+                </View>
                 <AppText style={styles.suffixText}>{language === 'te' ? 'రూపాయలు' : 'Rupees'}</AppText>
-              </View>
+              </TouchableOpacity>
+              {errors.villageRate && <AppText style={styles.errorText} language={language}>{errors.villageRate}</AppText>}
             </View>
           )}
 
+          {/* 🏦 BANK RATE INPUT */}
           {activeTab === 'bank' && (
             <View style={styles.inputGroup}>
               <AppText style={styles.label}>{language === 'te' ? 'వడ్డీ రేటు (% సంవత్సరానికి)' : 'Interest Rate (% Per Annum)'}</AppText>
-              <View style={styles.inputWrapper}>
-                <MaterialCommunityIcons name="brightness-percent" size={20} color="#EA580C" style={styles.inputIcon} />
-                <TextInput style={styles.input} value={bankRate} onChangeText={setBankRate} keyboardType="numeric" placeholder="ఉదా: 9" placeholderTextColor="#9CA3AF" cursorColor="#16A34A" />
+              <TouchableOpacity 
+                activeOpacity={1} 
+                onPress={() => { setActiveInput("bankRate"); bankRateRef.current?.focus(); }}
+                style={[styles.inputBox, activeInput === "bankRate" && styles.inputFocused, errors.bankRate && styles.inputError]}
+              >
+                <MaterialCommunityIcons name="brightness-percent" size={20} color={bankRate || activeInput === "bankRate" ? "#EA580C" : "#9CA3AF"} />
+                <View style={styles.inputWrapper}>
+                  {!bankRate && activeInput !== "bankRate" && (
+                    <AppText style={styles.placeholder}>{language === 'te' ? 'ఉదా: 9' : 'Ex: 9'}</AppText>
+                  )}
+                  <TextInput 
+                    ref={bankRateRef}
+                    style={[styles.input, { display: (bankRate || activeInput === "bankRate") ? "flex" : "none" }]} 
+                    value={bankRate} 
+                    onChangeText={(txt) => { setBankRate(txt); if(errors.bankRate) setErrors({...errors, bankRate: ""}); }} 
+                    keyboardType="numeric" 
+                    cursorColor="#16A34A" 
+                    selectionColor="#16A34A40"
+                    onFocus={() => setActiveInput("bankRate")}
+                    onBlur={() => setActiveInput(null)}
+                  />
+                </View>
                 <AppText style={styles.suffixText}>%</AppText>
-              </View>
+              </TouchableOpacity>
+              {errors.bankRate && <AppText style={styles.errorText} language={language}>{errors.bankRate}</AppText>}
             </View>
           )}
 
+          {/* 🗓️ EMI INPUTS */}
           {activeTab === 'emi' && (
             <View style={styles.row}>
               <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
                 <AppText style={styles.label}>{language === 'te' ? 'వడ్డీ రేటు (% / ఏడాడికి)' : 'Interest Rate (%)'}</AppText>
-                <View style={styles.inputWrapper}>
-                  <TextInput style={styles.input} value={emiRate} onChangeText={setEmiRate} keyboardType="numeric" placeholder="11" placeholderTextColor="#9CA3AF" cursorColor="#16A34A" />
+                <TouchableOpacity 
+                  activeOpacity={1} 
+                  onPress={() => { setActiveInput("emiRate"); emiRateRef.current?.focus(); }}
+                  style={[styles.inputBox, activeInput === "emiRate" && styles.inputFocused, errors.emiRate && styles.inputError]}
+                >
+                  <View style={[styles.inputWrapper, { marginLeft: 0 }]}>
+                    {!emiRate && activeInput !== "emiRate" && (
+                      <AppText style={styles.placeholder}>11</AppText>
+                    )}
+                    <TextInput 
+                      ref={emiRateRef}
+                      style={[styles.input, { display: (emiRate || activeInput === "emiRate") ? "flex" : "none" }]} 
+                      value={emiRate} 
+                      onChangeText={(txt) => { setEmiRate(txt); if(errors.emiRate) setErrors({...errors, emiRate: ""}); }} 
+                      keyboardType="numeric" 
+                      cursorColor="#16A34A" 
+                      selectionColor="#16A34A40"
+                      onFocus={() => setActiveInput("emiRate")}
+                      onBlur={() => setActiveInput(null)}
+                    />
+                  </View>
                   <AppText style={styles.suffixText}>%</AppText>
-                </View>
+                </TouchableOpacity>
+                {errors.emiRate && <AppText style={styles.errorText} language={language}>{errors.emiRate}</AppText>}
               </View>
+
               <View style={[styles.inputGroup, { flex: 1 }]}>
                 <AppText style={styles.label}>{language === 'te' ? 'సమయం (నెలల్లో)' : 'Tenure (Months)'}</AppText>
-                <View style={styles.inputWrapper}>
-                  <TextInput style={styles.input} value={emiMonths} onChangeText={setEmiMonths} keyboardType="numeric" placeholder="24" placeholderTextColor="#9CA3AF" cursorColor="#16A34A" />
+                <TouchableOpacity 
+                  activeOpacity={1} 
+                  onPress={() => { setActiveInput("emiMonths"); emiMonthsRef.current?.focus(); }}
+                  style={[styles.inputBox, activeInput === "emiMonths" && styles.inputFocused, errors.emiMonths && styles.inputError]}
+                >
+                  <View style={[styles.inputWrapper, { marginLeft: 0 }]}>
+                    {!emiMonths && activeInput !== "emiMonths" && (
+                      <AppText style={styles.placeholder}>24</AppText>
+                    )}
+                    <TextInput 
+                      ref={emiMonthsRef}
+                      style={[styles.input, { display: (emiMonths || activeInput === "emiMonths") ? "flex" : "none" }]} 
+                      value={emiMonths} 
+                      onChangeText={(txt) => { setEmiMonths(txt); if(errors.emiMonths) setErrors({...errors, emiMonths: ""}); }} 
+                      keyboardType="numeric" 
+                      cursorColor="#16A34A" 
+                      selectionColor="#16A34A40"
+                      onFocus={() => setActiveInput("emiMonths")}
+                      onBlur={() => setActiveInput(null)}
+                    />
+                  </View>
                   <AppText style={styles.suffixText}>{language === 'te' ? 'నెలలు' : 'Mo'}</AppText>
+                </TouchableOpacity>
+                {errors.emiMonths && <AppText style={styles.errorText} language={language}>{errors.emiMonths}</AppText>}
+              </View>
+            </View>
+          )}
+
+          {/* 📅 DATES (VILLAGE & BANK) */}
+          {activeTab !== 'emi' && (
+            <View>
+              <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 10, marginBottom: 0 }]}>
+                  <AppText style={styles.label}>{language === 'te' ? 'తీసుకున్న తేదీ' : 'Start Date'}</AppText>
+                  <TouchableOpacity 
+                    activeOpacity={0.8} 
+                    style={[styles.inputBox, errors.date && styles.inputError]} 
+                    onPress={() => { setShowStartPicker(true); if(errors.date) setErrors({...errors, date: ""}); }}
+                  >
+                    <Ionicons name="calendar-outline" size={20} color="#16A34A" />
+                    <View style={styles.inputWrapper}>
+                      <AppText style={styles.dateText}>{formatDate(startDate)}</AppText>
+                    </View>
+                  </TouchableOpacity>
+                  {showStartPicker && (
+                    <DateTimePicker 
+                      value={startDate} 
+                      mode="date" 
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'} 
+                      themeVariant="light"
+                      accentColor="#16A34A"
+                      textColor="#1F2937"
+                      onChange={(event, date) => { setShowStartPicker(Platform.OS === 'ios'); if (date) setStartDate(date); }} 
+                    />
+                  )}
+                </View>
+                
+                <View style={[styles.inputGroup, { flex: 1, marginBottom: 0 }]}>
+                  <AppText style={styles.label}>{language === 'te' ? 'తిరిగి ఇచ్చే తేదీ' : 'End Date'}</AppText>
+                  <TouchableOpacity 
+                    activeOpacity={0.8} 
+                    style={[styles.inputBox, errors.date && styles.inputError]} 
+                    onPress={() => { setShowEndPicker(true); if(errors.date) setErrors({...errors, date: ""}); }}
+                  >
+                    <Ionicons name="calendar-outline" size={20} color="#16A34A" />
+                    <View style={styles.inputWrapper}>
+                      <AppText style={styles.dateText}>{formatDate(endDate)}</AppText>
+                    </View>
+                  </TouchableOpacity>
+                  {showEndPicker && (
+                    <DateTimePicker 
+                      value={endDate} 
+                      mode="date" 
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      themeVariant="light"
+                      accentColor="#16A34A"
+                      textColor="#1F2937" 
+                      onChange={(event, date) => { setShowEndPicker(Platform.OS === 'ios'); if (date) setEndDate(date); }} 
+                    />
+                  )}
                 </View>
               </View>
+              {errors.date && <AppText style={[styles.errorText, { marginTop: 4, marginBottom: 16 }]} language={language}>{errors.date}</AppText>}
             </View>
           )}
 
-          {activeTab !== 'emi' && (
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
-                <AppText style={styles.label}>{language === 'te' ? 'తీసుకున్న తేదీ' : 'Start Date'}</AppText>
-                <TouchableOpacity activeOpacity={0.8} style={styles.datePickerBtn} onPress={() => setShowStartPicker(true)}>
-                  <Ionicons name="calendar-outline" size={20} color="#4B5563" />
-                  <AppText style={styles.dateText}>{formatDate(startDate)}</AppText>
-                </TouchableOpacity>
-                {showStartPicker && (
-                  <DateTimePicker 
-                    value={startDate} 
-                    mode="date" 
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'} 
-                    themeVariant="light"
-                    accentColor="#16A34A"
-                    textColor="#1F2937"
-                    onChange={(event, date) => { setShowStartPicker(Platform.OS === 'ios'); if (date) setStartDate(date); }} 
-                  />
-                )}
-              </View>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <AppText style={styles.label}>{language === 'te' ? 'తిరిగి ఇచ్చే తేదీ' : 'End Date'}</AppText>
-                <TouchableOpacity activeOpacity={0.8} style={styles.datePickerBtn} onPress={() => setShowEndPicker(true)}>
-                  <Ionicons name="calendar-outline" size={20} color="#4B5563" />
-                  <AppText style={styles.dateText}>{formatDate(endDate)}</AppText>
-                </TouchableOpacity>
-                {showEndPicker && (
-                  <DateTimePicker 
-                    value={endDate} 
-                    mode="date" 
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    themeVariant="light"
-                    accentColor="#16A34A"
-                    textColor="#1F2937" 
-                    onChange={(event, date) => { setShowEndPicker(Platform.OS === 'ios'); if (date) setEndDate(date); }} 
-                  />
-                )}
-              </View>
-            </View>
-          )}
-
-          <TouchableOpacity activeOpacity={0.8} style={styles.calculateBtn} onPress={handleCalculate}>
+          {/* CALCULATE BUTTON */}
+          <TouchableOpacity activeOpacity={0.8} style={[styles.calculateBtn, activeTab !== 'emi' && !errors.date && { marginTop: 20 }]} onPress={handleCalculate}>
             <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.btnGradient}>
               <Ionicons name="calculator" size={22} color="#fff" />
               <AppText style={styles.btnText}>{language === 'te' ? 'లెక్కించు' : 'Calculate'}</AppText>
             </LinearGradient>
           </TouchableOpacity>
 
+          {/* RESULT CARD */}
           {result && (
             <View style={styles.resultCard}>
               <View style={styles.resultHeader}>
@@ -328,34 +465,13 @@ export default function InterestCalculator() {
 
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* 🔥 CUSTOM ALERT MODAL */}
-      <Modal visible={alertData.visible} transparent animationType="fade">
-        <View style={styles.statusOverlay}>
-          <View style={styles.statusContent}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="alert-circle" size={50} color="#F59E0B" />
-            </View>
-            <AppText style={styles.statusTitle}>{language === 'te' ? 'గమనిక!' : 'Attention!'}</AppText>
-            <AppText style={styles.statusDescription}>{alertData.message}</AppText>
-            <TouchableOpacity 
-              activeOpacity={0.8}
-              style={styles.statusActionBtn} 
-              onPress={() => setAlertData({ ...alertData, visible: false })}
-            >
-              <AppText style={styles.statusActionText}>{language === 'te' ? 'సరే, అర్థమైంది' : 'OK, Got it'}</AppText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F6F7F6' },
-  scrollContainer: { padding: 20, paddingBottom: 40 },
+  scrollContainer: { padding: 20, paddingBottom: 60 },
   
   tabContainer: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 14, padding: 4, marginHorizontal: 20, marginTop: 10, marginBottom: 20 },
   tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 6 },
@@ -363,21 +479,75 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '600', color: '#4B5563', fontFamily: 'Mandali' },
   activeTabText: { color: '#fff' },
 
-  inputGroup: { marginBottom: 20 },
+  inputGroup: { marginBottom: 16 },
   label: { fontSize: 14, color: '#4B5563', marginBottom: 8, fontWeight: '600', fontFamily: 'Mandali' },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, height: 56, paddingHorizontal: 15 },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontSize: 18, fontFamily: 'Mandali', color: '#1F2937', fontWeight: '600' },
-  suffixText: { fontSize: 14, color: '#6B7280', fontFamily: 'Mandali', fontWeight: '600' },
-
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  datePickerBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, height: 56, paddingHorizontal: 15 },
-  dateText: { fontSize: 15, color: '#1F2937', fontWeight: '600', marginLeft: 10, fontFamily: 'Mandali' },
 
-  calculateBtn: { marginTop: 10, borderRadius: 16, overflow: 'hidden', elevation: 3, shadowColor: '#1B5E20', shadowOpacity: 0.3, shadowRadius: 8 },
+  // 🔥 STANDARD PATTERN INPUT STYLES
+  inputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 55,
+    borderWidth: 1,
+    borderColor: "#D1D5DB"
+  },
+  inputFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontFamily: "Mandali",
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  inputWrapper: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center'
+  },
+  input: {
+    flex: 1,
+    fontSize: 18,
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    fontWeight: "600",
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+  placeholder: {
+    position: "absolute",
+    fontSize: 16,
+    color: "#9CA3AF",
+    fontFamily: "Mandali"
+  },
+  suffixText: { 
+    fontSize: 14, 
+    color: '#6B7280', 
+    fontFamily: 'Mandali', 
+    fontWeight: '600',
+    marginLeft: 8
+  },
+
+  dateText: { fontSize: 15, color: '#1F2937', fontWeight: '600', fontFamily: 'Mandali' },
+
+  // Calculate Button
+  calculateBtn: { borderRadius: 16, overflow: 'hidden', elevation: 3, shadowColor: '#1B5E20', shadowOpacity: 0.3, shadowRadius: 8 },
   btnGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 56, gap: 10 },
   btnText: { color: '#fff', fontSize: 18, fontWeight: '600', fontFamily: 'Mandali' },
 
+  // Result Card
   resultCard: { marginTop: 30, backgroundColor: '#EFF6FF', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#BFDBFE' },
   resultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 15 },
   resultTitle: { fontSize: 18, fontWeight: '600', color: '#1E40AF', fontFamily: 'Mandali' },
@@ -390,13 +560,4 @@ const styles = StyleSheet.create({
   
   totalLabel: { fontSize: 18, color: '#1E40AF', fontWeight: '600', fontFamily: 'Mandali' },
   totalValue: { fontSize: 24, color: '#1B5E20', fontWeight: '600', fontFamily: 'Mandali' },
-
-  // 🔥 CUSTOM ALERT STYLES
-  statusOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 20 },
-  statusContent: { width: "100%", maxWidth: 340, backgroundColor: "#fff", borderRadius: 30, padding: 25, alignItems: "center", elevation: 10 },
-  iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#FFFBEB", justifyContent: "center", alignItems: "center", marginBottom: 20 },
-  statusTitle: { fontSize: 22, fontWeight: "600", color: "#1F2937", marginBottom: 10, fontFamily: "Mandali" },
-  statusDescription: { fontSize: 16, textAlign: "center", color: "#6B7280", lineHeight: 24, marginBottom: 25, fontFamily: "Mandali" },
-  statusActionBtn: { width: "100%", height: 55, borderRadius: 18, justifyContent: "center", alignItems: "center", backgroundColor: "#F59E0B" },
-  statusActionText: { color: "#fff", fontSize: 16, fontWeight: "600", fontFamily: "Mandali" },
 });

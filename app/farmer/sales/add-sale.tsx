@@ -25,17 +25,23 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-spe
 export default function AddSale() {
   const router = useRouter();
   const { editId } = useLocalSearchParams();
-const [modalType, setModalType] = useState<"crop" | null>(null);
-const [searchText, setSearchText] = useState("");
+  const [modalType, setModalType] = useState<"crop" | null>(null);
+  const [searchText, setSearchText] = useState("");
   const [crop, setCrop] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("kg");
   const [rate, setRate] = useState("");
-const [showValidationModal, setShowValidationModal] = useState(false);
   const [unitOpen, setUnitOpen] = useState(false);
+  
+  // 🔥 STANDARD PATTERN STATES
+  const [activeInput, setActiveInput] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   const [isListening, setIsListening] = useState(false);
-const [voiceTarget, setVoiceTarget] = useState<"crop" | null>(null);
+  const [voiceTarget, setVoiceTarget] = useState<"crop" | null>(null);
+  
   const [userCrops, setUserCrops] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [language, setLanguage] = useState<"te" | "en">("te");
 
   const unitMapping: any = {
     "gm": "గ్రాములు",
@@ -45,89 +51,82 @@ const [voiceTarget, setVoiceTarget] = useState<"crop" | null>(null);
   };
 
   const unitOptions = ["gm", "kg", "quintal", "ton"];
-  const [loading, setLoading] = useState(false);
-  const [language, setLanguage] = useState<"te" | "en">("te");
-  const [activeInput, setActiveInput] = useState<string | null>(null);
 
-useEffect(() => {
-  const loadUserCrops = async () => {
-    const phone = await AsyncStorage.getItem("USER_PHONE");
-    if (!phone) return;
-
-    // 🔥 1. ముందుగా యూజర్ యొక్క ఆక్టివ్ సెషన్ ఏంటో తెలుసుకుందాం
-    const userDoc = await firestore().collection("users").doc(phone).get();
-    const activeSession = userDoc.data()?.activeSession;
-
-    if (!activeSession) return; // ఆక్టివ్ సెషన్ లేకపోతే రిటర్న్
-
-    // 🔥 2. ఆ ఆక్టివ్ సెషన్ కు సంబంధించిన పంటలను మాత్రమే ఫిల్టర్ చేద్దాం
-    const snap = await firestore()
-      .collection("users")
-      .doc(phone)
-      .collection("fields")
-      .where("session", "==", activeSession) // 👉 ఇక్కడే అసలైన మ్యాజిక్
-      .get();
-
-    const set = new Set<string>();
-
-    snap.forEach(doc => {
-      if (!doc.exists) return;
-      const data = doc.data();
-      if (data.crop) set.add(data.crop);
-    });
-
-    setUserCrops(Array.from(set));
-  };
-
-  loadUserCrops();
-}, []);
-  const cropRef = useRef<TextInput>(null);
   const qtyRef = useRef<TextInput>(null);
   const rateRef = useRef<TextInput>(null);
 
-const startVoice = async () => {
-  try {
-    ExpoSpeechRecognitionModule.stop(); // 🔥 clear previous
+  useEffect(() => {
+    const loadUserCrops = async () => {
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone) return;
 
-    const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!res.granted) return;
+      const userDoc = await firestore().collection("users").doc(phone).get();
+      const activeSession = userDoc.data()?.activeSession;
 
-    setVoiceTarget("crop");
-    setIsListening(true);
+      if (!activeSession) return; 
 
-    ExpoSpeechRecognitionModule.start({
-      lang: language === "te" ? "te-IN" : "en-US",
-      interimResults: true,
-    });
+      const snap = await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("fields")
+        .where("session", "==", activeSession) 
+        .get();
 
-  } catch (e) {
-    console.log("voice error", e);
-  }
-};
+      const set = new Set<string>();
 
-useSpeechRecognitionEvent("result", (event) => {
-  if (!isListening) return;
-  if (!event.results?.length) return;
+      snap.forEach(doc => {
+        if (!doc.exists) return;
+        const data = doc.data();
+        if (data.crop) set.add(data.crop);
+      });
 
-  const text = event.results[0].transcript;
+      setUserCrops(Array.from(set));
+    };
 
-  // 🔥 ONLY THIS MODAL
-  if (voiceTarget === "crop" && modalType === "crop") {
-    setSearchText(text);
-    setCrop(text); // 🔥 live update
-  }
-});
+    loadUserCrops();
+  }, []);
 
-useSpeechRecognitionEvent("end", () => {
-  setIsListening(false);
-  setVoiceTarget(null);
-});
+  const startVoice = async () => {
+    try {
+      ExpoSpeechRecognitionModule.stop(); 
+      const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!res.granted) return;
 
-useEffect(() => {
-  return () => {
-    ExpoSpeechRecognitionModule.stop();
+      setVoiceTarget("crop");
+      setIsListening(true);
+
+      ExpoSpeechRecognitionModule.start({
+        lang: language === "te" ? "te-IN" : "en-US",
+        interimResults: true,
+      });
+
+    } catch (e) {
+      console.log("voice error", e);
+    }
   };
-}, []);
+
+  useSpeechRecognitionEvent("result", (event) => {
+    if (!isListening) return;
+    if (!event.results?.length) return;
+
+    const text = event.results[0].transcript;
+
+    if (voiceTarget === "crop" && modalType === "crop") {
+      setSearchText(text);
+      setCrop(text); 
+    }
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    setIsListening(false);
+    setVoiceTarget(null);
+  });
+
+  useEffect(() => {
+    return () => {
+      ExpoSpeechRecognitionModule.stop();
+    };
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
@@ -135,14 +134,13 @@ useEffect(() => {
     });
   }, []);
 
-
-const filteredCrops = userCrops.filter(c =>
-  c.toLowerCase().includes(searchText.toLowerCase().trim())
-);
+  const filteredCrops = userCrops.filter(c =>
+    c.toLowerCase().includes(searchText.toLowerCase().trim())
+  );
 
   useEffect(() => {
     if (!editId) return;
-if (loading) return; // 🔥 ADD FIRST LINE
+    if (loading) return; 
     const load = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone) return;
@@ -165,75 +163,79 @@ if (loading) return; // 🔥 ADD FIRST LINE
     load();
   }, [editId]);
 
-  const total =
-  (Number(quantity) || 0) * (Number(rate) || 0);
+  const total = (Number(quantity) || 0) * (Number(rate) || 0);
 
- const handleSave = async () => {
-  if (loading) return;
+  const handleSave = async () => {
+    if (loading) return;
+    Keyboard.dismiss();
 
-  Keyboard.dismiss();
+    // 🔥 INLINE VALIDATION
+    const newErrors: any = {};
+    if (!crop.trim()) newErrors.crop = language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop Name*";
+    if (!quantity) newErrors.quantity = language === "te" ? "పరిమాణం నమోదు చేయండి*" : "Enter Quantity*";
+    if (!rate) newErrors.rate = language === "te" ? "ధర నమోదు చేయండి*" : "Enter Rate*";
 
-  if (!crop.trim() || !quantity || !rate) {
-    setShowValidationModal(true);
-    return;
-  }
-
-  const phone = await AsyncStorage.getItem("USER_PHONE");
-  if (!phone) return;
-
-  setLoading(true);
-
-  try {
-    const userDoc = await firestore()
-      .collection("users")
-      .doc(phone)
-      .get();
-
-    const activeSession = userDoc.data()?.activeSession;
-
-    if (!activeSession) {
-      setLoading(false);
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
+    setErrors({});
 
-    const total =
-      (Number(quantity) || 0) * (Number(rate) || 0);
+    const phone = await AsyncStorage.getItem("USER_PHONE");
+    if (!phone) return;
 
-    const data = {
-      crop: crop.trim(),
-      quantity: Number(quantity),
-      unit,
-      rate: Number(rate),
-      total,
-      session: activeSession, // 🔥 IMPORTANT
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      localCreatedAt: Date.now()
-    };
+    setLoading(true);
 
-    if (editId) {
-      await firestore()
+    try {
+      const userDoc = await firestore()
         .collection("users")
         .doc(phone)
-        .collection("sales")
-        .doc(editId as string)
-        .update(data);
-    } else {
-      await firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("sales")
-        .add(data);
+        .get();
+
+      const activeSession = userDoc.data()?.activeSession;
+
+      if (!activeSession) {
+        setLoading(false);
+        return;
+      }
+
+      const totalVal = (Number(quantity) || 0) * (Number(rate) || 0);
+
+      const data = {
+        crop: crop.trim(),
+        quantity: Number(quantity),
+        unit,
+        rate: Number(rate),
+        total: totalVal,
+        session: activeSession, 
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        localCreatedAt: Date.now()
+      };
+
+      if (editId) {
+        await firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("sales")
+          .doc(editId as string)
+          .update(data);
+      } else {
+        await firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("sales")
+          .add(data);
+      }
+
+      router.back();
+
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    router.back();
-
-  } catch (e) {
-    console.log(e);
-    setShowValidationModal(true);
-  } finally {
-    setLoading(false);
-  }
-};
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -247,68 +249,87 @@ if (loading) return; // 🔥 ADD FIRST LINE
       />
 
       <View style={styles.container}>
+        
         {/* 🌾 CROP */}
-       <TouchableOpacity
-  style={[styles.inputBox, activeInput === "crop" && styles.inputFocused]}
-  onPress={() => {
-    setModalType("crop");
-    setActiveInput("crop");
-  }}
->
-  <Ionicons name="leaf-outline" size={18} color={crop? "#2E7D32" : "#9CA3AF"} />
+        <TouchableOpacity
+          style={[styles.inputBox, activeInput === "crop" && styles.inputFocused, errors.crop && styles.inputError]}
+          activeOpacity={1}
+          onPress={() => {
+            setModalType("crop");
+            setActiveInput("crop");
+            if (errors.crop) setErrors({ ...errors, crop: "" });
+          }}
+        >
+          <Ionicons name="leaf-outline" size={20} color={crop ? "#16A34A" : "#9CA3AF"} />
+          <View style={styles.inputWrapper}>
+            <AppText style={{ color: crop ? "#1F2937" : "#9CA3AF", fontFamily: "Mandali" }}>
+              {crop || (language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop*")}
+            </AppText>
+          </View>
+          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+        </TouchableOpacity>
+        {errors.crop && <AppText style={styles.errorText} language={language}>{errors.crop}</AppText>}
 
-  <View style={{ flex: 1, marginLeft: 10 }}>
-    <AppText style={{ color: crop ? "#1F2937" : "#9CA3AF" }}>
-      {crop || (language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop*")}
-    </AppText>
-  </View>
+        {/* 🔥 CROP HELP INFO */}
+        <View style={styles.cropHintBox}>
+          <View style={styles.hintHeader}>
+            <Ionicons name="bulb" size={18} color="#059669" />
+            <AppText style={styles.hintTitle}>
+              {language === "te" ? "సూచన:" : "Tip:"}
+            </AppText>
+          </View>
+          <AppText style={styles.cropHintText}>
+            {language === "te"
+              ? "పంటకు సంబంధించిన ఇతర రకాలు (ఉదా: తాలు కాయ, మిర్చి) అమ్మినప్పుడు కూడా అదే పంట పేరునే ఎంచుకోండి."
+              : "For related variants (e.g., Mirchi Thalu, Chilli), please select the main crop name."}
+          </AppText>
+          <View style={styles.exampleBadge}>
+            <AppText style={styles.exampleText}>
+              {language === "te" ? "ఉదాహరణ: వరి (వరి తాలు)" : "Eg: Paddy (Paddy Variants)"}
+            </AppText>
+          </View>
+        </View>
 
-  <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
-</TouchableOpacity>
-{/* 🔥 CROP HELP INFO - Enhanced UX */}
-<View style={styles.cropHintBox}>
-  <View style={styles.hintHeader}>
-    <Ionicons name="bulb" size={18} color="#059669" />
-    <AppText style={styles.hintTitle}>
-      {language === "te" ? "సూచన:" : "Tip:"}
-    </AppText>
-  </View>
-
-  <AppText style={styles.cropHintText}>
-    {language === "te"
-      ? "పంటకు సంబంధించిన ఇతర రకాలు (ఉదా: తాలు కాయ, మిర్చి) అమ్మినప్పుడు కూడా అదే పంట పేరునే ఎంచుకోండి."
-      : "For related variants (e.g., Mirchi Thalu, Chilli), please select the main crop name."}
-  </AppText>
-  
-  {/* Adding a subtle example line */}
-  <View style={styles.exampleBadge}>
-    <AppText style={styles.exampleText}>
-      {language === "te" ? "ఉదాహరణ: వరి (వరి తాలు)" : "Eg: Paddy (Paddy Variants)"}
-    </AppText>
-  </View>
-</View>
         {/* 📦 QUANTITY & UNIT */}
-        <View style={{ zIndex: 10 }}> 
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-            <TouchableOpacity
-              style={[styles.inputBox, { flex: 1, marginBottom: 0 }, activeInput === "qty" && styles.inputFocused]}
-              activeOpacity={1}
-              onPress={() => qtyRef.current?.focus()}
-            >
-              <Ionicons name="cube-outline" size={18} color={quantity? "#2E7D32" : "#9CA3AF"} />
-              <TextInput
-                ref={qtyRef}
-                placeholder={language === "te" ? "పరిమాణం*" : "Quantity*"}
-                value={quantity}
-                onChangeText={setQuantity}
-                style={styles.input}
-                cursorColor="#16A34A"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric"
-                onFocus={() => { setActiveInput("qty"); setUnitOpen(false); }}
-                onBlur={() => setActiveInput(null)}
-              />
-            </TouchableOpacity>
+        <View style={{ zIndex: 10, marginTop: 10 }}> 
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            
+            <View style={{ flex: 1 }}>
+              <TouchableOpacity
+                style={[styles.inputBox, { marginBottom: 0 }, activeInput === "qty" && styles.inputFocused, errors.quantity && styles.inputError]}
+                activeOpacity={1}
+                // 🔥 BUG FIX: Added setActiveInput("qty") here so it renders "flex" BEFORE focusing
+                onPress={() => {
+                  setActiveInput("qty");
+                  setUnitOpen(false);
+                  setTimeout(() => qtyRef.current?.focus(), 50); // Small delay ensures display: flex is applied
+                }}
+              >
+                <Ionicons name="cube-outline" size={20} color={quantity ? "#16A34A" : "#9CA3AF"} />
+                <View style={styles.inputWrapper}>
+                  {!quantity && activeInput !== "qty" && (
+                    <AppText style={styles.placeholder}>
+                      {language === "te" ? "పరిమాణం*" : "Quantity*"}
+                    </AppText>
+                  )}
+                  <TextInput
+                    ref={qtyRef}
+                    value={quantity}
+                    onChangeText={(txt) => {
+                      setQuantity(txt);
+                      if (errors.quantity) setErrors({ ...errors, quantity: "" });
+                    }}
+                    style={[styles.input, { display: (quantity || activeInput === "qty") ? "flex" : "none" }]}
+                    cursorColor="#16A34A"
+                    selectionColor="#16A34A40"
+                    keyboardType="numeric"
+                    onFocus={() => { setActiveInput("qty"); setUnitOpen(false); }}
+                    onBlur={() => setActiveInput(null)}
+                  />
+                </View>
+              </TouchableOpacity>
+              {errors.quantity && <AppText style={[styles.errorText, { marginTop: 4, marginBottom: 0 }]} language={language}>{errors.quantity}</AppText>}
+            </View>
 
             <TouchableOpacity
               style={styles.unitBox}
@@ -317,14 +338,14 @@ if (loading) return; // 🔥 ADD FIRST LINE
                 setUnitOpen(!unitOpen);
               }}
             >
-              <AppText style={{fontSize: 14, color: "#1F2937"}}>
+              <AppText style={{fontSize: 15, color: "#1F2937", fontFamily: "Mandali"}}>
                   {language === "te" ? unitMapping[unit] : unit}
               </AppText>
               <Ionicons name="chevron-down" size={16} color="#4B5563" />
             </TouchableOpacity>
           </View>
 
-          {/* 🔥 FLOATING DROPDOWN (Doesn't push inputs) */}
+          {/* 🔥 FLOATING DROPDOWN */}
           {unitOpen && (
             <View style={styles.dropdown}>
               {unitOptions.map((u) => (
@@ -343,33 +364,41 @@ if (loading) return; // 🔥 ADD FIRST LINE
           )}
         </View>
 
-    
-       {/* 💰 RATE */}
-<TouchableOpacity
-  style={[styles.inputBox, activeInput === "rate" && styles.inputFocused]}
-  activeOpacity={1}
-  onPress={() => rateRef.current?.focus()}
->
-  <Ionicons name="cash-outline" size={18} color={rate? "#2E7D32" : "#9CA3AF"} />
-  <TextInput
-    ref={rateRef}
-    // ఇక్కడ డైనమిక్ ప్లేస్‌హోల్డర్ బ్రో 👇
-    placeholder={
-      language === "te" 
-        ? `ధర (1 ${unitMapping[unit]} కు)*` 
-        : `Rate (per 1 ${unit})*`
-    }
-    value={rate}
-    onChangeText={setRate}
-    style={styles.input}
-    keyboardType="numeric"
-    cursorColor="#16A34A"
-    selectionColor="#16A34A"
-    placeholderTextColor="#9CA3AF"
-    onFocus={() => { setActiveInput("rate"); setUnitOpen(false); }}
-    onBlur={() => setActiveInput(null)}
-  />
-</TouchableOpacity>
+        {/* 💰 RATE */}
+        <TouchableOpacity
+          style={[styles.inputBox, { marginTop: errors.quantity ? 10 : 16 }, activeInput === "rate" && styles.inputFocused, errors.rate && styles.inputError]}
+          activeOpacity={1}
+          // 🔥 BUG FIX: Added setActiveInput("rate") here
+          onPress={() => {
+            setActiveInput("rate");
+            setUnitOpen(false);
+            setTimeout(() => rateRef.current?.focus(), 50);
+          }}
+        >
+          <Ionicons name="cash-outline" size={20} color={rate ? "#16A34A" : "#9CA3AF"} />
+          <View style={styles.inputWrapper}>
+            {!rate && activeInput !== "rate" && (
+              <AppText style={styles.placeholder}>
+                {language === "te" ? `ధర (1 ${unitMapping[unit]} కు)*` : `Rate (per 1 ${unit})*`}
+              </AppText>
+            )}
+            <TextInput
+              ref={rateRef}
+              value={rate}
+              onChangeText={(txt) => {
+                setRate(txt);
+                if (errors.rate) setErrors({ ...errors, rate: "" });
+              }}
+              style={[styles.input, { display: (rate || activeInput === "rate") ? "flex" : "none" }]}
+              keyboardType="numeric"
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              onFocus={() => { setActiveInput("rate"); setUnitOpen(false); }}
+              onBlur={() => setActiveInput(null)}
+            />
+          </View>
+        </TouchableOpacity>
+        {errors.rate && <AppText style={styles.errorText} language={language}>{errors.rate}</AppText>}
 
         {/* 🔥 TOTAL */}
         <View style={styles.totalBox}>
@@ -381,191 +410,104 @@ if (loading) return; // 🔥 ADD FIRST LINE
           </AppText>
         </View>
 
-       {/* SAVE / UPDATE BUTTON */}
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
-                    <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
-                        <AppText style={styles.saveText}>
-                            {editId 
-                                ? (language === "te" ? "సవరించండి" : "Update Sale") 
-                                : (language === "te" ? "భద్రపరచండి" : "Save Sale")}
-                        </AppText>
-                    </LinearGradient>
-                </TouchableOpacity>
+        {/* SAVE / UPDATE BUTTON */}
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
+            <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
+                <AppText style={styles.saveText}>
+                    {editId 
+                        ? (language === "te" ? "సవరించండి" : "Update Sale") 
+                        : (language === "te" ? "భద్రపరచండి" : "Save Sale")}
+                </AppText>
+            </LinearGradient>
+        </TouchableOpacity>
 
       </View>
-      {/* ⚠️ VALIDATION MODAL */}
-            <Modal
-                visible={showValidationModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowValidationModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.alertBox}>
-                        <View style={styles.alertIconBg}>
-                            <Ionicons name="warning-outline" size={30} color="#F59E0B" />
-                        </View>
-                        <AppText style={styles.alertTitle}>
-                            {language === "te" ? "వివరాలు అవసరం" : "Missing Details"}
-                        </AppText>
-                        <AppText style={styles.alertSub}>
-                            {language === "te" 
-                                ? "దయచేసి * గుర్తు ఉన్న అన్ని వివరాలను పూరించండి." 
-                                : "Please fill all the mandatory fields marked with *"}
-                        </AppText>
-                      <TouchableOpacity 
-                      activeOpacity={0.8}
-    style={styles.alertBtn} 
-    onPress={() => setShowValidationModal(false)}
->
-    <AppText style={styles.alertBtnText}>
-        {language === "te" ? "సరే" : "OK"}
-    </AppText>
-</TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
- {/* 🔥 MODAL WRAPPER - ఇది మిస్ అయింది బ్రో */}
 
+      {/* 🔥 CROP SELECTION MODAL */}
       <Modal visible={modalType === "crop"} transparent animationType="slide" onRequestClose={() => setModalType(null)}>
-
         <View style={styles.modalOverlay}>
-
           <View style={styles.modalContent}>
-
             <View style={styles.modalHeader}>
-
-              <AppText style={{ fontSize: 18, fontWeight: "600" }}>
-
+              <AppText style={{ fontSize: 18, fontWeight: "600", fontFamily: "Mandali" }}>
                  {language === "te" ? "పంటను ఎంచుకోండి" : "Select Crop"}
-
               </AppText>
-
               <TouchableOpacity onPress={() => { setModalType(null); setActiveInput(null); }}>
-
                 <Ionicons name="close-circle" size={30} color="#9CA3AF" />
-
               </TouchableOpacity>
-
             </View>
-
-
 
             <View style={styles.searchBar}>
-
               <TextInput
-
                 autoFocus
-
                 value={searchText}
-
-                onChangeText={(text) => {
-  setSearchText(text);
-}}
+                onChangeText={(text) => setSearchText(text)}
                 placeholder={language === "te" ? "పంట పేరు టైప్ చేయండి..." : "Search or Type crop..."}
-
                 placeholderTextColor={'#9CA3AF'}
-
-                cursorColor={'green'}
-
+                cursorColor={'#16A34A'}
                 style={[styles.searchInput, { fontFamily: 'Mandali' }]}
-
-                
               />
-              <TouchableOpacity onPress={startVoice} style={{
-    marginLeft: 8,
-    padding: 6,
-    borderRadius: 10,
-    backgroundColor: "#eaedf2"
-  }}
->
-
+              <TouchableOpacity onPress={startVoice} style={{ marginLeft: 8, padding: 6, borderRadius: 10, backgroundColor: "#eaedf2" }}>
                 <Ionicons name={isListening ? "mic" : "mic-outline"} size={24} color={isListening ? "#EF4444" : "#16A34A"} />
-
               </TouchableOpacity>
-
             </View>
 
+            <FlatList
+              data={filteredCrops}
+              ListEmptyComponent={() => (
+                <View style={{ padding: 20, alignItems: "center" }}>
+                 <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Ionicons name="information-circle-outline" size={24} color="#6B7280" style={{ marginBottom: 10 }} />
+                  
+                  <AppText style={{ color: "#4B5563", textAlign: "center", fontSize: 15, fontWeight: '500', lineHeight: 22 }}>
+                    {language === "te"
+                      ? "మొదట 'పొలాలు' విభాగంలో\nపంట వివరాలను నమోదు చేయండి."
+                      : "First, register your crop details in the\n'Fields' section."}
+                  </AppText>
 
-
-        <FlatList
-  data={filteredCrops}
-  ListEmptyComponent={() => (
-    <View style={{ padding: 20, alignItems: "center" }}>
-     <View style={{ padding: 20, alignItems: 'center' }}>
-  <Ionicons name="information-circle-outline" size={24} color="#6B7280" style={{ marginBottom: 10 }} />
-  
-  <AppText style={{ 
-    color: "#4B5563", 
-    textAlign: "center", 
-    fontSize: 15, 
-    fontWeight: '500',
-    lineHeight: 22 
-  }}>
-    {language === "te"
-      ? "మొదట 'పొలాలు' విభాగంలో\nపంట వివరాలను నమోదు చేయండి."
-      : "First, register your crop details in the\n'Fields' section."}
-  </AppText>
-
-  <AppText style={{ 
-    color: "#9CA3AF", 
-    textAlign: "center", 
-    fontSize: 13, 
-    marginTop: 8 
-  }}>
-    {language === "te"
-      ? "అక్కడ జోడించిన పంటలు మాత్రమే ఇక్కడ కనిపిస్తాయి."
-      : "Only crops added there will appear here for selection."}
-  </AppText>
-      {/* 🔥 ADD BUTTON */}
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={() => {
-        setModalType(null); // close modal
-        router.push("/farmer/fields"); // 👉 navigate
-      }}
-      style={{
-        marginTop: 16,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-        backgroundColor: "#16A34A",
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 12
-      }}
-    >
-      <Ionicons name="add-circle-outline" size={18} color="#fff" />
-      <AppText style={{ color: "#fff", fontWeight: "600" }}>
-        {language === "te" ? "పంట జోడించండి" : "Add Crop"}
-      </AppText>
-    </TouchableOpacity>
-
-</View>
-
-    </View>
-  )}
-  renderItem={({ item }) => (
-    <TouchableOpacity
-      style={styles.item}
-      onPress={() => {
-        setCrop(item); // ✅ correct
-        setModalType(null);
-        setSearchText("");
-        setActiveInput(null);
-      }}
-    >
-      <AppText style={styles.itemText}>
-        {item}
-      </AppText>
-    </TouchableOpacity>
-  )}
-/>
-
+                  <AppText style={{ color: "#9CA3AF", textAlign: "center", fontSize: 13, marginTop: 8 }}>
+                    {language === "te"
+                      ? "అక్కడ జోడించిన పంటలు మాత్రమే ఇక్కడ కనిపిస్తాయి."
+                      : "Only crops added there will appear here for selection."}
+                  </AppText>
+                  
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setModalType(null); 
+                      router.push("/farmer/fields"); 
+                    }}
+                    style={{
+                      marginTop: 16, flexDirection: "row", alignItems: "center", gap: 6,
+                      backgroundColor: "#16A34A", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                    <AppText style={{ color: "#fff", fontWeight: "600" }}>
+                      {language === "te" ? "పంట జోడించండి" : "Add Crop"}
+                    </AppText>
+                  </TouchableOpacity>
+                </View>
+                </View>
+              )}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.item}
+                  onPress={() => {
+                    setCrop(item); 
+                    setModalType(null);
+                    setSearchText("");
+                    setActiveInput(null);
+                    if (errors.crop) setErrors({ ...errors, crop: "" });
+                  }}
+                >
+                  <AppText style={styles.itemText}>
+                    {item}
+                  </AppText>
+                </TouchableOpacity>
+              )}
+            />
           </View>
-
         </View>
-
       </Modal>
       <AgriLoader visible={loading} type="saving" language={language} />
     </SafeAreaView>
@@ -575,25 +517,64 @@ if (loading) return; // 🔥 ADD FIRST LINE
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   container: { padding: 20 },
+
+  // 🔥 STANDARD PATTERN INPUT STYLES
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
-    borderRadius: 18,
+    borderRadius: 12,
     paddingHorizontal: 15,
-    height: 58,
+    height: 55,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: "#D1D5DB"
   },
-  inputFocused: { borderColor: "#2E7D32", elevation: 2 },
-  input: { flex: 1, marginLeft: 10, fontSize: 16, color: "#1F2937", fontFamily: "Mandali" },
+  inputFocused: { 
+    borderColor: "#16A34A", 
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontFamily: "Mandali",
+    marginTop: -12,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  inputWrapper: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center'
+  },
+  input: { 
+    flex: 1, 
+    fontSize: 16, 
+    color: "#1F2937", 
+    fontFamily: "Mandali",
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+  placeholder: {
+    position: "absolute",
+    fontSize: 16,
+    color: "#9CA3AF",
+    fontFamily: "Mandali"
+  },
+  
   unitBox: {
-    width: 100,
-    height: 58,
-    borderRadius: 18,
+    width: 110,
+    height: 55,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#D1D5DB",
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
@@ -602,7 +583,7 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     position: "absolute",
-    top: 62,
+    top: 60,
     right: 0,
     width: 120,
     backgroundColor: "#fff",
@@ -613,123 +594,84 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 10,
-    zIndex: 1000, // కచ్చితంగా పైన రావడానికి
+    zIndex: 1000, 
   },
   dropdownItem: { paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 0.5, borderBottomColor: "#F3F4F6" },
   totalBox: {
     marginTop: 10,
     padding: 16,
     backgroundColor: "#fff",
-    borderRadius: 18,
+    borderRadius: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#D1D5DB"
+  },
+  totalLabel: { fontSize: 13, color: "#6B7280", fontFamily: "Mandali", fontWeight: "600" },
+  totalValue: { fontSize: 24, fontWeight: "800", color: "#16A34A", marginTop: 4 },
+  
+  // ORIGINAL SAVE BTN
+  saveBtn: { marginTop: 30, borderRadius: 16, overflow: "hidden", elevation: 4, shadowColor: "#1B5E20", shadowOpacity: 0.3, shadowRadius: 8 },
+  saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
+  saveText: { color: "white", fontSize: 16, fontWeight: "600" },
+  
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: "#fff", height: "70%", borderTopLeftRadius: 25, borderTopRightRadius: 25 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', alignItems: "center" },
+  
+  searchBar: {
+    flexDirection: "row",
+    margin: 20,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 16,
+    paddingHorizontal: 12,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#E5E7EB"
   },
-  totalLabel: { fontSize: 12, color: "#6B7280" },
-  totalValue: { fontSize: 22, fontWeight: "800", color: "#16A34A", marginTop: 4 },
-  saveBtn: { marginTop: 30, borderRadius: 18, overflow: "hidden" },
-  saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
-  saveText: { color: "white", fontSize: 16, fontWeight: "600" },
-  label: {
-        fontSize: 13,
-        fontWeight: "600",
-        color: "#4B5563",
-        marginBottom: 6,
-        marginLeft: 4
-    },
-   
-    alertBox: {
-        width: '100%',
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 24,
-        alignItems: 'center',
-        elevation: 10
-    },
-    alertIconBg: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#FFFBEB',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16
-    },
-    alertTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
-    alertSub: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20 },
-    alertBtn: {
-        backgroundColor: '#2E7D32',
-        paddingVertical: 12,
-        paddingHorizontal: 40,
-        borderRadius: 12
-    },
-    alertBtnText: { color: '#fff', fontWeight: '600' },
-     modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: "#fff", height: "70%", borderTopLeftRadius: 25, borderTopRightRadius: 25 },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  searchBar: {
-  flexDirection: "row",
-  margin: 20,
-  backgroundColor: "#F3F4F6",
-  borderRadius: 18,
-  paddingHorizontal: 12,
-  alignItems: "center",
-  borderWidth: 1,
-  borderColor: "#E5E7EB"
-},
   searchInput: { flex: 1, height: 54, fontSize: 16, fontFamily: 'Mandali' },
   item: { padding: 20, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  itemText: { fontSize: 17 },
+  itemText: { fontSize: 17, fontFamily: "Mandali" },
 
-modalTitleText: {
-  fontSize: 18,
-  fontWeight: "600",
-  color: "#1F2937"
-},
-categoryItem: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  padding: 20,
-  borderBottomWidth: 1,
-  borderBottomColor: "#F9FAFB"
-},
-cropHintBox: {
-  backgroundColor: "#F0FDF4", // Light mint green
-  borderRadius: 16,
-  padding: 14,
-  marginTop: -4,
-  marginVertical: 12,
-  borderWidth: 1,
-  borderColor: "#DCFCE7",
-  borderStyle: 'dashed', // Dashed border looks like a "tip" or "note"
-},
-hintHeader: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 6,
-  marginBottom: 6
-},
-hintTitle: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: '#065F46',
-},
-cropHintText: {
-  fontSize: 13,
-  color: "#166534",
-  lineHeight: 18,
-  marginBottom: 8
-},
-exampleBadge: {
-  backgroundColor: 'rgba(5, 150, 105, 0.1)',
-  paddingHorizontal: 10,
-  paddingVertical: 4,
-  borderRadius: 8,
-  alignSelf: 'flex-start'
-},
-exampleText: {
-  fontSize: 11,
-  color: '#059669',
-  fontWeight: '600'
-},
+  // CROP HINT BOX
+  cropHintBox: {
+    backgroundColor: "#F0FDF4", 
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#DCFCE7",
+    borderStyle: 'dashed', 
+  },
+  hintHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6
+  },
+  hintTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#065F46',
+    fontFamily: "Mandali"
+  },
+  cropHintText: {
+    fontSize: 13,
+    color: "#166534",
+    lineHeight: 20,
+    marginBottom: 8,
+    fontFamily: "Mandali"
+  },
+  exampleBadge: {
+    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start'
+  },
+  exampleText: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
+    fontFamily: "Mandali"
+  },
 });

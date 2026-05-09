@@ -30,27 +30,33 @@ import {
 } from "expo-speech-recognition";
 
 export default function AddMachine() {
-
   const router = useRouter();
   const { machineId } = useLocalSearchParams(); 
   const isEditing = !!machineId; 
   const [language, setLanguage] = useState<"te" | "en">("en");
+  
+  // 🔥 STANDARD PATTERN STATES
   const [activeInput, setActiveInput] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   const [isListening, setIsListening] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<string | null>(null);
+  
   const [ownerName, setOwnerName] = useState("");
   const [phone, setPhone] = useState("");
   const [equipment, setEquipment] = useState("");
   const [operations, setOperations] = useState<string[]>([]);
+  
   const [modalType1, setModalType1] = useState<"operations" | null>(null);
   const [modalType, setModalType] = useState<"equipment" | null>(null);
   const [searchText, setSearchText] = useState("");
+  
   const [statusModal, setStatusModal] = useState<{
     visible: boolean;
     type: "success" | "error" | "warning";
     message: string;
   }>({ visible: false, type: "success", message: "" });
   const [successModal, setSuccessModal] = useState(false);
+  
   const [coords, setCoords] = useState<any>(null);
   const [locationText, setLocationText] = useState(
     language === "te" ? "స్థానాన్ని పొందుతోంది..." : "Fetching location..."
@@ -120,7 +126,6 @@ export default function AddMachine() {
   }, []);
 
   /* ---------------- LOCATION LOGIC ---------------- */
-  // 1. Coords నుండి Address తెచ్చే ఫంక్షన్ (Map డ్రాగ్ చేసినప్పుడు కూడా వాడతాం)
   const fetchAddressFromCoords = async (lat: number, lon: number) => {
     try {
       setLocationText(language === "te" ? "స్థానాన్ని పొందుతోంది..." : "Fetching location...");
@@ -151,7 +156,6 @@ export default function AddMachine() {
     }
   };
 
-  // 2. ప్రస్తుత GPS తెచ్చే ఫంక్షన్
   const fetchLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -168,15 +172,17 @@ export default function AddMachine() {
       const loc = await Location.getCurrentPositionAsync({});
       setCoords(loc.coords);
       fetchAddressFromCoords(loc.coords.latitude, loc.coords.longitude);
+      
+      if (errors.location) setErrors({ ...errors, location: "" });
     } catch (error) {
       setLocationText(language === "te" ? "లొకేషన్ దొరకలేదు" : "Location not found");
     }
   };
 
-  // 3. Map Dragging ఆపినప్పుడు
   const handleRegionChangeComplete = (region: any) => {
     setCoords({ latitude: region.latitude, longitude: region.longitude });
     fetchAddressFromCoords(region.latitude, region.longitude);
+    if (errors.location) setErrors({ ...errors, location: "" });
   };
 
   useEffect(() => {
@@ -185,13 +191,17 @@ export default function AddMachine() {
     }
   }, [language]);
 
+  /* ---------------- VOICE INPUT ---------------- */
   const startVoice = async (target: string) => {
     try {
       ExpoSpeechRecognitionModule.stop();
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!res.granted) return;
+      
       setVoiceTarget(target);
+      setActiveInput(target);
       setIsListening(true);
+      
       ExpoSpeechRecognitionModule.start({
         lang: language === "te" ? "te-IN" : "en-US",
         interimResults: true,
@@ -204,12 +214,23 @@ export default function AddMachine() {
   useSpeechRecognitionEvent("result", (event) => {
     if (!isListening) return;
     if (!event.results?.length) return;
+    
     const text = event.results[0].transcript;
     switch (voiceTarget) {
-      case "name": setOwnerName(text); break;
-      case "phone": setPhone(text.replace(/\D/g, "")); break;
-      case "equipment": setSearchText(text); break;
-      case "operations": setSearchText(text); break;
+      case "name": 
+        setOwnerName(text); 
+        if(errors.ownerName) setErrors({...errors, ownerName: ""});
+        break;
+      case "phone": 
+        setPhone(text.replace(/\D/g, "")); 
+        if(errors.phone) setErrors({...errors, phone: ""});
+        break;
+      case "equipment": 
+        setSearchText(text); 
+        break;
+      case "operations": 
+        setSearchText(text); 
+        break;
     }
   });
 
@@ -244,6 +265,7 @@ export default function AddMachine() {
     { en: "Chaff Cutter", te: "గడ్డి కత్తిరించే యంత్రం (చాఫ్ కట్టర్)" },
     { en: "Maize Sheller", te: "మొక్కజొన్న వొలిచే యంత్రం" },
   ];
+  
   const operationsOptions = [
     { en: "Ploughing / Tilling", te: "దున్నడం (దుక్కి)" },
     { en: "Puddling", te: "దమ్ము చేయడం" },
@@ -283,14 +305,28 @@ export default function AddMachine() {
 
   /* ---------------- SAVE ---------------- */
   const handleSave = async () => {
-    if (!ownerName || !phone || !equipment || operations.length === 0 || !coords) {
-      let errorMsg = language === "te" ? "దయచేసి అన్ని వివరాలను నింపండి" : "Please fill all details";
-      if (!coords) {
-        errorMsg = language === "te" ? "లొకేషన్ ఇంకా దొరకలేదు, దయచేసి ఆగండి!" : "Location not found, please wait!";
-      }
-      setStatusModal({ visible: true, type: "warning", message: errorMsg });
+    if (loading) return;
+
+    // 🔥 INLINE VALIDATION LOGIC
+    const newErrors: any = {};
+    
+    if (!ownerName.trim()) newErrors.ownerName = language === "te" ? "యజమాని పేరు నమోదు చేయండి*" : "Enter owner name*";
+    
+    if (!phone.trim()) {
+      newErrors.phone = language === "te" ? "ఫోన్ నంబర్ నమోదు చేయండి*" : "Enter phone number*";
+    } else if (!/^[6-9]\d{9}$/.test(phone.trim())) {
+      newErrors.phone = language === "te" ? "సరైన ఫోన్ నంబర్ ఇవ్వండి*" : "Enter valid phone number*";
+    }
+
+    if (!equipment) newErrors.equipment = language === "te" ? "యంత్రం ఎంచుకోండి*" : "Select equipment*";
+    if (operations.length === 0) newErrors.operations = language === "te" ? "కనీసం ఒక పని ఎంచుకోండి*" : "Select at least one operation*";
+    if (!coords) newErrors.location = language === "te" ? "లొకేషన్ దొరకలేదు, దయచేసి ఆగండి*" : "Location not found, please wait*";
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
+    setErrors({});
 
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone) return;
@@ -299,8 +335,8 @@ export default function AddMachine() {
 
     try {
       const machineData = {
-        ownerName,
-        phone,
+        ownerName: ownerName.trim(),
+        phone: phone.trim(),
         equipment,
         operations,
         latitude: coords.latitude,
@@ -366,82 +402,128 @@ export default function AddMachine() {
             {/* 👤 NAME INPUT */}
             <TouchableOpacity
               activeOpacity={1}
-              onPress={() => nameRef.current?.focus()}
-              style={[styles.inputBox, activeInput === "name" && styles.inputFocused]}
+              onPress={() => { setActiveInput("name"); nameRef.current?.focus(); }}
+              style={[
+                styles.inputBox, 
+                activeInput === "name" && styles.inputFocused,
+                errors.ownerName && styles.inputError
+              ]}
             >
-              <Ionicons name="person-outline" size={20} color={ownerName ? "#2E7D32" : "#9CA3AF"} />
+              <Ionicons name="person-outline" size={20} color={ownerName || activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
               <View style={styles.inputWrapper}>
                 {!ownerName && activeInput !== "name" && (
-                  <AppText style={styles.placeholder}>
+                  <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>
                     {language === "te" ? "యజమాని పేరు*" : "Owner Name*"}
                   </AppText>
                 )}
                 <TextInput
                   ref={nameRef}
                   value={ownerName}
-                  onChangeText={setOwnerName}
-                  style={styles.input}
-                  cursorColor={'green'}
+                  onChangeText={(txt) => {
+                    setOwnerName(txt);
+                    if (errors.ownerName) setErrors({ ...errors, ownerName: "" });
+                  }}
+                  style={[styles.input, { display: (ownerName || activeInput === "name") ? "flex" : "none" }]}
+                  cursorColor={'#16A34A'}
+                  selectionColor={'#16A34A40'}
                   onFocus={() => setActiveInput("name")}
                   onBlur={() => setActiveInput(null)}
                 />
               </View>
-              <TouchableOpacity onPress={() => startVoice("name")}  style={styles.voiceBtn}>
-                <MaterialCommunityIcons name={isListening && voiceTarget === "name" ? "microphone" : "microphone-outline"} size={20} color={isListening && voiceTarget === "name" ? "#EF4444" : "#2E7D32"} />
+              <TouchableOpacity onPress={() => startVoice("name")} style={styles.micBtn}>
+                <MaterialCommunityIcons 
+                  name={isListening && voiceTarget === "name" ? "microphone" : "microphone-outline"} 
+                  size={24} 
+                  color={isListening && voiceTarget === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
+                />
               </TouchableOpacity>
             </TouchableOpacity>
+            {errors.ownerName && <AppText style={styles.errorText} language={language}>{errors.ownerName}</AppText>}
 
             {/* 📞 PHONE INPUT */}
             <TouchableOpacity
               activeOpacity={1}
-              onPress={() => phoneRef.current?.focus()}
-              style={[styles.inputBox, activeInput === "phone" && styles.inputFocused]}
+              onPress={() => { setActiveInput("phone"); phoneRef.current?.focus(); }}
+              style={[
+                styles.inputBox, 
+                activeInput === "phone" && styles.inputFocused,
+                errors.phone && styles.inputError
+              ]}
             >
-              <Ionicons name="call-outline" size={20} color={phone ? "#2E7D32" : "#9CA3AF"} />
+              <Ionicons name="call-outline" size={20} color={phone || activeInput === "phone" ? "#16A34A" : "#9CA3AF"} />
               <View style={styles.inputWrapper}>
                 {!phone && activeInput !== "phone" && (
-                  <AppText style={styles.placeholder}>
+                  <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>
                     {language === "te" ? "ఫోన్ నంబర్*" : "Phone Number*"}
                   </AppText>
                 )}
                 <TextInput
                   ref={phoneRef}
                   value={phone}
-                  onChangeText={setPhone}
-                  cursorColor={'green'}
+                  onChangeText={(txt) => {
+                    setPhone(txt);
+                    if (errors.phone) setErrors({ ...errors, phone: "" });
+                  }}
+                  cursorColor={'#16A34A'}
+                  selectionColor={'#16A34A40'}
                   keyboardType="numeric"
                   maxLength={10}
-                  style={styles.input}
+                  style={[styles.input, { display: (phone || activeInput === "phone") ? "flex" : "none" }]}
                   onFocus={() => setActiveInput("phone")}
                   onBlur={() => setActiveInput(null)}
                 />
               </View>
+              <TouchableOpacity onPress={() => startVoice("phone")} style={styles.micBtn}>
+                <MaterialCommunityIcons 
+                  name={isListening && voiceTarget === "phone" ? "microphone" : "microphone-outline"} 
+                  size={24} 
+                  color={isListening && voiceTarget === "phone" ? "#EF4444" : (activeInput === "phone" ? "#16A34A" : "#6B7280")} 
+                />
+              </TouchableOpacity>
             </TouchableOpacity>
+            {errors.phone && <AppText style={styles.errorText} language={language}>{errors.phone}</AppText>}
 
             {/* 🚜 EQUIPMENT SELECT */}
             <TouchableOpacity
               activeOpacity={0.7}
-              style={[styles.inputBox, activeInput === "equipment" && styles.inputFocused]}
-              onPress={() => { setModalType("equipment"); setActiveInput("equipment"); }}
+              style={[
+                styles.inputBox, 
+                modalType === "equipment" && styles.inputFocused,
+                errors.equipment && styles.inputError
+              ]}
+              onPress={() => { 
+                setModalType("equipment"); 
+                setActiveInput("equipment"); 
+                if (errors.equipment) setErrors({ ...errors, equipment: "" }); 
+              }}
             >
-              <MaterialCommunityIcons name="tractor-variant" size={22} color={equipment || activeInput === "equipment" ? "#2E7D32" : "#9CA3AF"} />
+              <MaterialCommunityIcons name="tractor-variant" size={22} color={equipment || modalType === "equipment" ? "#16A34A" : "#9CA3AF"} />
               <View style={styles.inputWrapper}>
-                <AppText style={{ color: equipment ? "#1F2937" : "#9CA3AF" }}>
+                <AppText style={{ color: equipment ? "#1F2937" : "#9CA3AF", fontFamily: "Mandali" }}>
                   {equipment || (language === "te" ? "యంత్రం ఎంచుకోండి*" : "Select Equipment*")}
                 </AppText>
               </View>
               <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
             </TouchableOpacity>
+            {errors.equipment && <AppText style={styles.errorText} language={language}>{errors.equipment}</AppText>}
 
             {/* ⚙️ OPERATIONS */}
             <TouchableOpacity
               activeOpacity={0.7}
-              style={[styles.inputBox, activeInput === "operations" && styles.inputFocused]}
-              onPress={() => { setModalType1("operations"); setActiveInput("operations"); }}
+              style={[
+                styles.inputBox, 
+                modalType1 === "operations" && styles.inputFocused,
+                errors.operations && styles.inputError
+              ]}
+              onPress={() => { 
+                setModalType1("operations"); 
+                setActiveInput("operations"); 
+                if (errors.operations) setErrors({ ...errors, operations: "" }); 
+              }}
             >
-              <Ionicons name="options-outline" size={20} color={operations.length ? "#2E7D32" : "#9CA3AF"} />
+              <Ionicons name="options-outline" size={20} color={operations.length || modalType1 === "operations" ? "#16A34A" : "#9CA3AF"} />
               <View style={styles.inputWrapper}>
-                <AppText style={{ color: operations.length ? "#1F2937" : "#9CA3AF" }}>
+                <AppText style={{ color: operations.length ? "#1F2937" : "#9CA3AF", fontFamily: "Mandali" }}>
                   {operations.length
                     ? `${operations.length} ${language === "te" ? "ఎంపిక చేయబడ్డాయి" : "Selected"}`
                     : (language === "te" ? "పనులు ఎంచుకోండి*" : "Select Operations*")}
@@ -449,6 +531,7 @@ export default function AddMachine() {
               </View>
               <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
             </TouchableOpacity>
+            {errors.operations && <AppText style={styles.errorText} language={language}>{errors.operations}</AppText>}
 
             {/* SELECTED CHIPS */}
             {operations.length > 0 && (
@@ -472,12 +555,19 @@ export default function AddMachine() {
             {/* 📍 LOCATION (Blue Button for Map) */}
             <TouchableOpacity 
               activeOpacity={0.8}
-              onPress={() => setShowMapModal(true)}
-              style={[styles.inputBox, !coords && { borderColor: '#FCA5A5' }]}
+              onPress={() => { 
+                setShowMapModal(true); 
+                if (errors.location) setErrors({ ...errors, location: "" }); 
+              }}
+              style={[
+                styles.inputBox, 
+                !coords && { borderColor: '#FCA5A5' },
+                errors.location && styles.inputError
+              ]}
             >
               <Ionicons name="location" size={20} color={coords ? "#16A34A" : "#EF4444"} />
               <View style={styles.inputWrapper}>
-                <AppText style={{ color: coords ? "#1F2937" : "#EF4444", fontSize: 14 }} numberOfLines={1}>
+                <AppText style={{ color: coords ? "#1F2937" : "#EF4444", fontSize: 14, fontFamily: "Mandali" }} numberOfLines={1}>
                   {locationText}
                 </AppText>
               </View>
@@ -485,6 +575,7 @@ export default function AddMachine() {
                 <MaterialCommunityIcons name="map-marker-radius" size={20} color="#2563EB" />
               </View>
             </TouchableOpacity>
+            {errors.location && <AppText style={styles.errorText} language={language}>{errors.location}</AppText>}
 
             {/* ⚠️ LOCATION WARNING NOTE */}
             <View style={styles.locationNoteBox}>
@@ -571,7 +662,7 @@ export default function AddMachine() {
               <AppText style={styles.modalTitleText}>
                 {language === "te" ? "యంత్రం ఎంచుకోండి" : "Select Equipment"}
               </AppText>
-              <TouchableOpacity onPress={() => { setModalType(null); setSearchText(""); }}>
+              <TouchableOpacity onPress={() => { setModalType(null); setSearchText(""); setActiveInput(null); }}>
                 <Ionicons name="close-circle" size={28} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
@@ -581,12 +672,12 @@ export default function AddMachine() {
                 placeholder={language === "te" ? "వెతకండి..." : "Search equipment..."}
                 value={searchText}
                 placeholderTextColor="#9CA3AF"
-                cursorColor="#2E7D32"
+                cursorColor="#16A34A"
                 onChangeText={(text) => setSearchText(text)}
                 style={[styles.searchInput, { fontFamily: "Mandali", color: "#1F2937", fontSize: 15 }]}
               />
               <TouchableOpacity onPress={() => startVoice("equipment")} style={styles.voiceBtnSearch}>
-                <MaterialCommunityIcons name={isListening && voiceTarget === "equipment" ? "microphone" : "microphone-outline"} size={20} color={isListening && voiceTarget === "equipment" ? "#EF4444" : "#2E7D32"} />
+                <MaterialCommunityIcons name={isListening && voiceTarget === "equipment" ? "microphone" : "microphone-outline"} size={20} color={isListening && voiceTarget === "equipment" ? "#EF4444" : "#16A34A"} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -595,7 +686,7 @@ export default function AddMachine() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.categoryItem}
-                  onPress={() => { setEquipment(language === "te" ? item.te : item.en); setModalType(null); setSearchText(""); }}
+                  onPress={() => { setEquipment(language === "te" ? item.te : item.en); setModalType(null); setSearchText(""); setActiveInput(null); }}
                 >
                   <AppText>{language === "te" ? item.te : item.en}</AppText>
                 </TouchableOpacity>
@@ -616,7 +707,7 @@ export default function AddMachine() {
               <AppText style={styles.modalTitleText}>
                 {language === "te" ? "పనులు ఎంచుకోండి" : "Select Operations"}
               </AppText>
-              <TouchableOpacity onPress={() => setModalType1(null)}>
+              <TouchableOpacity onPress={() => { setModalType1(null); setActiveInput(null); }}>
                 <Ionicons name="close-circle" size={28} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
@@ -626,12 +717,12 @@ export default function AddMachine() {
                 placeholder={language === "te" ? "టైప్ చేయండి..." : "Type operation..."}
                 value={searchText}
                 placeholderTextColor="#9CA3AF"
-                cursorColor="#2E7D32"
+                cursorColor="#16A34A"
                 onChangeText={(text) => setSearchText(text)}
                 style={[styles.searchInput, { fontFamily: "Mandali", color: "#1F2937" }]}
               />
               <TouchableOpacity onPress={() => startVoice("operations")} style={styles.voiceBtnSearch}>
-                <MaterialCommunityIcons name={isListening && voiceTarget === "operations" ? "microphone" : "microphone-outline"} size={20} color={isListening && voiceTarget === "operations" ? "#EF4444" : "#2E7D32"} />
+                <MaterialCommunityIcons name={isListening && voiceTarget === "operations" ? "microphone" : "microphone-outline"} size={20} color={isListening && voiceTarget === "operations" ? "#EF4444" : "#16A34A"} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -715,26 +806,48 @@ export default function AddMachine() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  scrollContainer: { paddingBottom: 40 },
+  scrollContainer: { paddingBottom: 150 }, // 🔥 FIX FOR SCROLLING
   container: { padding: 20 },
   
+  // 🔥 STANDARD PATTERN INPUT STYLES
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 18,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     paddingHorizontal: 15,
-    height: 58,
+    height: 55,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: "#D1D5DB"
   },
-  inputFocused: { borderColor: "#2E7D32" },
+  inputFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontFamily: "Mandali",
+    marginTop: -10,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
   inputWrapper: { flex: 1, justifyContent: "center", marginLeft: 10 },
-  input: { fontSize: 16, fontFamily: "Mandali" },
-  placeholder: { position: "absolute", left: 0, fontSize: 16, color: "#9CA3AF" },
+  input: { flex: 1, fontSize: 16, fontFamily: "Mandali", textAlignVertical: "center", includeFontPadding: false },
+  
+  // 🔥 MIC & PLACEHOLDER STYLES
+  micBtn: { marginLeft: 10, padding: 4 },
+  placeholder: { color: "#9CA3AF", fontFamily: "Mandali" },
 
-  // 🔥 NEW BLUE MAP BTN STYLE
+  // 🔥 NEW BLUE MAP BTN STYLE (UNTOUCHED)
   blueMapBtn: {
     backgroundColor: '#EFF6FF',
     padding: 8,
@@ -742,12 +855,11 @@ const styles = StyleSheet.create({
     marginLeft: 10
   },
 
-  voiceBtn: { marginLeft: 10, padding: 6, borderRadius: 50, backgroundColor: "#f0f9f3" },
   voiceBtnSearch: { marginLeft: 10, padding: 6, borderRadius: 10, backgroundColor: "#E5E7EB" },
 
   saveBtn: { marginTop: 20, borderRadius: 18, overflow: "hidden" },
   saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
-  saveText: { color: "#fff", fontSize: 16 },
+  saveText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 
   selectedTitle: { fontSize: 13, color: "#6B7280", marginBottom: 6, marginLeft: 4 },
   chipsContainer: { flexDirection: "row", flexWrap: "wrap" },

@@ -1,10 +1,11 @@
 import { useLanguage } from "@/context/LanguageContext";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import firestore from "@react-native-firebase/firestore";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -37,11 +38,18 @@ export default function ProfileScreen() {
   const [selectedState, setSelectedState] = useState("AP");
   const [created, setCreated] = useState("");
   const [online, setOnline] = useState(true);
-  const [isFocused, setIsFocused] = useState(false);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
   const [loaderType, setLoaderType] = useState<"loading" | "updating">("loading");
+
+  // 🔥 STANDARD PATTERN STATES
+  const [activeInput, setActiveInput] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [isListening, setIsListening] = useState(false);
+  
+  const nameRef = useRef<TextInput>(null);
 
   // Backup state for cancelling edits
   const [backupData, setBackupData] = useState({ name: "", state: "", language: "" });
@@ -61,6 +69,30 @@ export default function ProfileScreen() {
     return require("../../../assets/images/default.jpg");
   };
 
+  // 🔥 MIC LOGIC
+  useSpeechRecognitionEvent("result", (event) => {
+    if (event.results && event.results.length > 0) {
+      const transcript = event.results[0].transcript;
+      if (activeInput === "name") {
+        setName(transcript);
+        if (errors.name) setErrors({ ...errors, name: "" });
+      }
+    }
+  });
+
+  useSpeechRecognitionEvent("end", () => setIsListening(false));
+
+  const handleVoiceInput = async (target: string) => {
+    setActiveInput(target);
+    const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!result.granted) return;
+    setIsListening(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: language === "te" ? "te-IN" : "en-US",
+      interimResults: true,
+    });
+  };
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -76,11 +108,11 @@ export default function ProfileScreen() {
           setRole(data.role || "");
           const dbState = (data.state || "ap").toLowerCase();
 
-if (dbState === "telangana") {
-  setSelectedState("Telangana");
-} else {
-  setSelectedState("AP");
-}
+          if (dbState === "telangana") {
+            setSelectedState("Telangana");
+          } else {
+            setSelectedState("AP");
+          }
           setCreated(data.createdAt?.toDate()?.toLocaleDateString() || "--/--/----");
 
           if (!data.name || data.name.trim().length < 3) {
@@ -122,22 +154,26 @@ if (dbState === "telangana") {
       if (backupData.language !== language) {
         changeLanguage(backupData.language as "en" | "te");
       }
+      setErrors({});
       setIsEditing(false);
     }
   };
 
   const handleSave = async () => {
+    // 🔥 INLINE VALIDATION
     if (!name || name.trim().length < 3) {
-      setShowAlert(true);
+      setErrors({ name: language === "te" ? "కనీసం 3 అక్షరాలు ఉండాలి*" : "Name must be at least 3 characters*" });
       return;
     }
+    setErrors({});
+
     setLoaderType("updating");
     setLoading(true);
     try {
       await firestore().collection("users").doc(phone).update({
         name: name.trim(),
         language: language,
-       state: selectedState.toLowerCase().trim(),
+        state: selectedState.toLowerCase().trim(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       });
       await AsyncStorage.setItem("APP_LANG", language);
@@ -212,31 +248,65 @@ if (dbState === "telangana") {
 
           {/* 📝 FORM SECTION */}
           <View style={styles.formCard}>
+            
             {/* FULL NAME */}
             <View style={styles.fieldGroup}>
               <AppText style={styles.fieldLabel} language={language}>
                 {language === "te" ? "పూర్తి పేరు" : "Full Name"}
               </AppText>
-              <View style={[
-                styles.inputContainer,
-                isEditing && styles.inputContainerActive,
-                isEditing && isFocused && styles.inputContainerFocused,
-                !isEditing && styles.inputContainerDisabled
-              ]}>
-                <Ionicons name="person-outline" size={20} color={isEditing ? "#1B5E20" : "#9CA3AF"} style={styles.inputIcon} />
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  editable={isEditing}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                  placeholder={language === "te" ? "మీ పేరు నమోదు చేయండి" : "Enter your name"}
-                  placeholderTextColor="#9CA3AF"
-                  style={[styles.textInput, language === "te" && { fontFamily: "Mandali" }]}
-                  selectionColor="#1B5E20"
+              <TouchableOpacity
+                activeOpacity={isEditing ? 1 : 0.9}
+                style={[
+                  styles.inputBox,
+                  isEditing && activeInput === "name" && styles.inputFocused,
+                  errors.name && styles.inputError,
+                  !isEditing && styles.inputBoxDisabled
+                ]}
+                onPress={() => {
+                  if (isEditing) {
+                    setActiveInput("name");
+                    nameRef.current?.focus();
+                  }
+                }}
+              >
+                <Ionicons 
+                  name="person-outline" 
+                  size={20} 
+                  color={name || (isEditing && activeInput === "name") ? (isEditing ? "#16A34A" : "#1F2937") : "#9CA3AF"} 
                 />
-                {!isEditing && <Ionicons name="lock-closed" size={14} color="#CBD5E1" />}
-              </View>
+                <View style={styles.inputWrapper}>
+                  {!name && (!isEditing || activeInput !== "name") && (
+                    <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>
+                      {language === "te" ? "మీ పేరు నమోదు చేయండి*" : "Enter your name*"}
+                    </AppText>
+                  )}
+                  <TextInput
+                    ref={nameRef}
+                    value={name}
+                    onChangeText={(txt) => {
+                      setName(txt);
+                      if (errors.name) setErrors({ ...errors, name: "" });
+                    }}
+                    editable={isEditing}
+                    cursorColor="#16A34A"
+                    selectionColor="#16A34A40"
+                    style={[styles.input, { display: (name || (isEditing && activeInput === "name")) ? "flex" : "none" }]}
+                    onFocus={() => setActiveInput("name")}
+                    onBlur={() => setActiveInput(null)}
+                  />
+                </View>
+                {isEditing ? (
+                  <TouchableOpacity onPress={() => handleVoiceInput("name")} style={styles.micBtn}>
+                    <MaterialCommunityIcons 
+                      name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
+                      size={24} color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <Ionicons name="lock-closed" size={16} color="#CBD5E1" style={{ marginRight: 4 }} />
+                )}
+              </TouchableOpacity>
+              {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
             </View>
 
             {/* STATE TOGGLE */}
@@ -279,10 +349,14 @@ if (dbState === "telangana") {
               <AppText style={styles.fieldLabel} language={language}>
                 {language === "te" ? "మొబైల్ సంఖ్య" : "Phone Number"}
               </AppText>
-              <View style={[styles.inputContainer, styles.inputContainerDisabled]}>
-                <Ionicons name="call-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <AppText style={styles.disabledValue} language={language}>+91 {phone}</AppText>
-                <Ionicons name="lock-closed" size={14} color="#CBD5E1" />
+              <View style={[styles.inputBox, styles.inputBoxDisabled]}>
+                <Ionicons name="call-outline" size={20} color="#9CA3AF" />
+                <View style={styles.inputWrapper}>
+                  <AppText style={{ fontSize: 16, color: "#6B7280", fontFamily: "Mandali" }} language={language}>
+                    +91 {phone}
+                  </AppText>
+                </View>
+                <Ionicons name="lock-closed" size={16} color="#CBD5E1" style={{ marginRight: 4 }} />
               </View>
             </View>
 
@@ -342,7 +416,7 @@ if (dbState === "telangana") {
 
       {/* --- MODALS --- */}
 
-      {/* Name Alert Modal */}
+      {/* Name Alert Modal (Used only if user tries to go back without a name) */}
       <Modal visible={showAlert} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -524,41 +598,59 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 8,
   },
-  inputContainer: {
+  
+  // 🔥 STANDARD PATTERN INPUT STYLES
+  inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    height: 56,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#E5E7EB",
-    paddingHorizontal: 16,
-    backgroundColor: "white",
-  },
-  inputContainerActive: {
-    borderColor: "#D1D5DB",
-  },
-  inputContainerFocused: {
-    borderColor: "#1B5E20",
-    backgroundColor: "#F0FDF4",
-  },
-  inputContainerDisabled: {
     backgroundColor: "#F9FAFB",
-    borderColor: "#F3F4F6",
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 55,
+    borderWidth: 1,
+    borderColor: "#D1D5DB"
   },
-  inputIcon: {
-    marginRight: 12,
+  inputBoxDisabled: {
+    backgroundColor: "#F3F4F6",
+    borderColor: "#E5E7EB",
   },
-  textInput: {
+  inputFocused: {
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontFamily: "Mandali",
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  micBtn: {
+    marginLeft: 10,
+    padding: 4,
+  },
+  inputWrapper: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center'
+  },
+  input: {
     flex: 1,
     fontSize: 16,
-    color: "#111827",
-    height: "100%",
+    color: "#1F2937",
+    fontFamily: "Mandali",
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
-  disabledValue: {
-    flex: 1,
-    fontSize: 16,
-    color: "#6B7280",
-  },
+
+  // 🔥 ORIGINAL TAB & BUTTON STYLES (UNTOUCHED)
   toggleRow: {
     flexDirection: "row",
     gap: 12,

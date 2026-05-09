@@ -546,3 +546,4 @@ export const notifyNewScheme = onDocumentCreated(
     }
   }
 );
+

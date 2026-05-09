@@ -73,6 +73,7 @@ const { vehicleId, driverId } = useLocalSearchParams(); // 👈 MUST
 
 const notesInputRef = useRef<TextInput>(null);
 const searchInputRef = useRef<TextInput>(null);
+const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
 // Automatic ga Calculation maragane Payable Amount update avvali
 useEffect(() => {
@@ -276,10 +277,16 @@ const validate = (lang: SupportedLang = 'en') => {
     const err = validate(language);
 
     if (err) {
-      setErrorMsg(err);
-      setErrorModal(true);
+      const newErrors: any = {};
+      if (!date) newErrors.date = language === "te" ? "తేదీని ఎంచుకోండి*" : "Select Date*";
+      if (!work) newErrors.work = language === "te" ? "పనిని ఎంచుకోండి*" : "Select Work*";
+      if (!payableAmount) newErrors.payableAmount = language === "te" ? "మొత్తం నమోదు చేయండి*" : "Enter Amount*";
+      
+      setErrors(newErrors);
+      // Removed Error Modal to follow inline pattern
       return;
     }
+    setErrors({});
 
     try {
       // 1. లోడర్ ఆన్ చేయడం
@@ -395,27 +402,31 @@ const filteredData = options.filter(item => {
           activeOpacity={0.8}
           style={[
             styles.inputBox,
-            activeInput === "date" && styles.inputFocused
+            activeInput === "date" && styles.inputFocused,
+            errors.date && styles.inputError
           ]}
           onPress={() => {
             setActiveInput("date");
             setShowDatePicker(true);
+            if (errors.date) setErrors({ ...errors, date: "" });
           }}
         >
           <Ionicons
             name="calendar-outline"
             size={20}
-            color={date || activeInput === "date" ? "#2E7D32" : "#9CA3AF"}
+            color={date || activeInput === "date" ? "#16A34A" : "#9CA3AF"}
           />
 
           <View style={styles.inputWrapper}>
             <AppText style={{
-              color: date ? "#1F2937" : "#9CA3AF"
+              color: date ? "#1F2937" : "#9CA3AF",
+              fontFamily: "Mandali"
             }}>
               {date || (language === "te" ? "తేదీ ఎంచుకోండి*" : "Select Date*")}
             </AppText>
           </View>
         </TouchableOpacity>
+        {errors.date && <AppText style={styles.errorText} language={language}>{errors.date}</AppText>}
 
        
 
@@ -424,23 +435,25 @@ const filteredData = options.filter(item => {
           activeOpacity={0.7}
           style={[
             styles.inputBox,
-            activeInput === "work" && styles.inputFocused
+            activeInput === "work" && styles.inputFocused,
+            errors.work && styles.inputError
           ]}
           onPress={() => {
             setModalType("work");
             setActiveInput("work");
+            if (errors.work) setErrors({ ...errors, work: "" });
           }}
         >
-         <MaterialCommunityIcons
-  name="tractor"
-  size={20}
-  color={work || activeInput === "work" ? "#2E7D32" : "#9CA3AF"}
-/>
-
+          <MaterialCommunityIcons
+            name="tractor"
+            size={20}
+            color={work || activeInput === "work" ? "#16A34A" : "#9CA3AF"}
+          />
 
           <View style={styles.inputWrapper}>
             <AppText style={{
-              color: work ? "#1F2937" : "#9CA3AF"
+              color: work ? "#1F2937" : "#9CA3AF",
+              fontFamily: "Mandali"
             }}>
               {work || (language === "te" ? "పని ఎంచుకోండి*" : "Select Work*")}
             </AppText>
@@ -448,6 +461,7 @@ const filteredData = options.filter(item => {
 
           <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
         </TouchableOpacity>
+        {errors.work && <AppText style={styles.errorText} language={language}>{errors.work}</AppText>}
 
 
  {/* 💳 SECTION 3: BILLING & SETTLEMENT */}
@@ -472,7 +486,12 @@ const filteredData = options.filter(item => {
       </AppText>
       <TouchableOpacity
         activeOpacity={1}
-        style={[styles.inputBox, { marginBottom: 0 }, activeInput === "payable" && styles.inputFocused]}
+        style={[
+          styles.inputBox,
+          { marginBottom: 5 }, // Added small margin for breathing room
+          activeInput === "payable" && styles.inputFocused,
+          errors.payableAmount && styles.inputError
+        ]}
         onPress={() => {
           setActiveInput("payable");
           payableInputRef.current?.focus();
@@ -481,16 +500,19 @@ const filteredData = options.filter(item => {
         <TextInput
           ref={payableInputRef}
           value={payableAmount}
-          onChangeText={setPayableAmount}
+          onChangeText={(txt) => {
+            setPayableAmount(txt);
+            if (errors.payableAmount) setErrors({ ...errors, payableAmount: "" });
+          }}
           keyboardType="numeric"
-          // 🔥 FIX: ఇక్కడ flex: 1, width, height 100% యాడ్ చేశాం. దీనివల్ల బాక్స్ మొత్తం ఎక్కడ క్లిక్ చేసినా కీబోర్డ్ ఓపెన్ అవుతుంది.
-          style={[styles.input, { flex: 1, width: "100%", height: "100%" }]} 
-          cursorColor="#2E7D32"
-          selectionColor="#2E7D32"
+          style={styles.input}
+          cursorColor="#16A34A"
+          selectionColor="#16A34A40"
           onFocus={() => setActiveInput("payable")}
           onBlur={() => setActiveInput(null)}
         />
       </TouchableOpacity>
+      {errors.payableAmount && <AppText style={[styles.errorText, { marginTop: 0, marginBottom: 5 }]} language={language}>{errors.payableAmount}</AppText>}
     </View>
 
     {/* MINUS SYMBOL */}
@@ -503,7 +525,11 @@ const filteredData = options.filter(item => {
       </AppText>
       <TouchableOpacity
         activeOpacity={1}
-        style={[styles.inputBox, { marginBottom: 0 }, activeInput === "advance" && styles.inputFocused]}
+        style={[
+          styles.inputBox,
+          { marginBottom: 5 }, // Added small margin for consistency
+          activeInput === "advance" && styles.inputFocused
+        ]}
         onPress={() => {
           setActiveInput("advance");
           advanceInputRef.current?.focus();
@@ -514,10 +540,9 @@ const filteredData = options.filter(item => {
           value={advanceAmount}
           onChangeText={setAdvanceAmount}
           keyboardType="numeric"
-          // 🔥 FIX: ఇక్కడ కూడా flex: 1, width, height 100% యాడ్ చేశాం.
-          style={[styles.input, { flex: 1, width: "100%", height: "100%" }]} 
-          cursorColor="#2E7D32"
-          selectionColor="#2E7D32"
+          style={styles.input}
+          cursorColor="#16A34A"
+          selectionColor="#16A34A40"
           onFocus={() => setActiveInput("advance")}
           onBlur={() => setActiveInput(null)}
         />
@@ -526,7 +551,7 @@ const filteredData = options.filter(item => {
   </View>
 
   {/* 🏆 FINAL SETTLEMENT BOX */}
-  <View style={styles.finalBox}>
+  <View style={[styles.finalBox, { marginTop: 25, marginBottom: 30 }]}>
     <View>
       <AppText style={{ color: "#fff", opacity: 0.9, fontSize: 13 }}>
         {language === "te" ? "నికర మొత్తం (ఫైనల్)" : "Net Final Amount"}
@@ -540,96 +565,82 @@ const filteredData = options.filter(item => {
 </View>
 {/* 📝 REMARKS / NOTES */}
 <View style={{ marginBottom: 20 }}>
- <AppText style={styles.label}>
-  {language === "te"
-    ? "ఇతర వివరాలు (అవసరమైతేనే)" 
-    : "Additional Remarks (Optional)"}
-</AppText>
-<TouchableOpacity
-  activeOpacity={1}
-  style={[
-    styles.inputBox,
-    {
-      minHeight: 100,
-      alignItems: "flex-start",
-      paddingVertical: 14,
-      marginBottom: 50
-    },
-    activeInput === "notes" && styles.inputFocused
-  ]}
-  onPress={() => {
-    setActiveInput("notes");
-    notesInputRef.current?.focus();
-  }}
->
-  <Ionicons
-    name="document-text-outline"
-    size={20}
-    color={notes || activeInput === "notes" ? "#2E7D32" : "#9CA3AF"}
-    style={{ marginTop: 4 }}
-  />
-
-  <View style={[styles.inputWrapper, { marginLeft: 12, flex: 1 }]}>
-
-  {/* 🔹 PLACEHOLDER */}
-  {!notes && activeInput !== "notes" && (
-    <AppText style={{ color: "#9CA3AF", lineHeight: 22 }}>
-      {language === "te"
-        ? "ఈ పనికి సంబంధించిన మరిన్ని వివరాలు ఇక్కడ రాయండి..."
-        : "Write additional details..."}
-    </AppText>
-  )}
-
-  {/* 🔹 TEXTINPUT (VISIBLE WHEN TYPING) */}
-  <TextInput
-    ref={notesInputRef}
-    value={notes}
-    onChangeText={setNotes}
-    multiline
+  <AppText style={styles.label}>
+    {language === "te"
+      ? "ఇతర వివరాలు (అవసరమైతేనే)" 
+      : "Additional Remarks (Optional)"}
+  </AppText>
+  <TouchableOpacity
+    activeOpacity={1}
     style={[
-      styles.input,
+      styles.inputBox,
       {
-        lineHeight: 22,
-        minHeight: 80,
-        textAlignVertical: "top",
-        padding: 0,
-        fontFamily: "Mandali", // 🔥 AppText feel
-        display:
-          notes || activeInput === "notes" ? "flex" : "none"
-      }
+        minHeight: 120,
+        alignItems: "flex-start",
+        paddingVertical: 14,
+        marginBottom: 40 // More space for the button
+      },
+      activeInput === "notes" && styles.inputFocused
     ]}
-    cursorColor="#2E7D32"
-    selectionColor="#2E7D32"
-    onFocus={() => setActiveInput("notes")}
-    onBlur={() => setActiveInput(null)}
-  />
+    onPress={() => {
+      setActiveInput("notes");
+      notesInputRef.current?.focus();
+    }}
+  >
+    <Ionicons
+      name="document-text-outline"
+      size={20}
+      color={notes || activeInput === "notes" ? "#16A34A" : "#9CA3AF"}
+      style={{ marginTop: 4 }}
+    />
 
+    <View style={[styles.inputWrapper, { marginLeft: 12, flex: 1 }]}>
+      {!notes && activeInput !== "notes" && (
+        <AppText style={{ color: "#9CA3AF", lineHeight: 22, fontFamily: "Mandali" }}>
+          {language === "te"
+            ? "ఈ పనికి సంబంధించిన మరిన్ని వివరాలు ఇక్కడ రాయండి..."
+            : "Write additional details..."}
+        </AppText>
+      )}
+
+      <TextInput
+        ref={notesInputRef}
+        value={notes}
+        onChangeText={setNotes}
+        multiline
+        placeholder={isListening && voiceTarget === "notes" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : ""}
+        placeholderTextColor="#EF4444"
+        style={[
+          styles.input,
+          {
+            lineHeight: 22,
+            minHeight: 80,
+            textAlignVertical: "top",
+            padding: 0,
+            display:
+              notes || activeInput === "notes" ? "flex" : "none"
+          }
+        ]}
+        cursorColor="#16A34A"
+        selectionColor="#16A34A40"
+        onFocus={() => setActiveInput("notes")}
+        onBlur={() => setActiveInput(null)}
+      />
+    </View>
+    <TouchableOpacity
+      onPress={() => handleVoiceInput("notes")}
+      style={styles.micBtn}
+    >
+      <Ionicons
+        name={isListening && voiceTarget === "notes" ? "mic" : "mic-outline"}
+        size={24}
+        color={isListening && voiceTarget === "notes" ? "#EF4444" : (activeInput === "notes" ? "#16A34A" : "#6B7280")}
+      />
+    </TouchableOpacity>
+  </TouchableOpacity>
 </View>
-<TouchableOpacity
-  onPress={() => handleVoiceInput("notes")}
-  style={{
-        marginLeft: 10,
-        padding: 6,
-        borderRadius: 50,
-        backgroundColor: "#ebf7f0",
-      }}
->
-  <MaterialCommunityIcons
-    name={
-      isListening && voiceTarget === "notes"
-        ? "microphone"
-        : "microphone-outline"
-    }
-    size={20}
-    color={
-      isListening && voiceTarget === "notes"
-        ? "#EF4444"
-        : "#2E7D32"
-    }
-  />
-</TouchableOpacity>
-</TouchableOpacity>
-</View>
+
+<View style={{ height: 10 }} /> 
 
 <TouchableOpacity 
   activeOpacity={0.85} 
@@ -816,42 +827,13 @@ const filteredData = options.filter(item => {
           </View>
         </View>
       </Modal>
-      <Modal visible={errorModal} transparent animationType="fade">
-  <View style={styles.overlay}>
-    <View style={styles.errorBox}>
-
-      <Ionicons name="alert-circle" size={40} color="#DC2626" />
-
-    <AppText style={styles.errorTitle}>
-  {language === "te" 
-    ? "(*) గుర్తు ఉన్న వివరాలన్నీ తప్పనిసరిగా నింపండి" 
-    : "Please fill all fields marked with (*)"}
-</AppText>
-
-      <AppText style={styles.errorMsg}>
-        {errorMsg}
-      </AppText>
-
-      <TouchableOpacity activeOpacity={0.8}
-        style={styles.okBtn}
-        onPress={() => setErrorModal(false)}
-      >
-       <AppText style={{ color: "#fff" }}>
-  {language === 'te' ? "సరే" : "OK"}
-</AppText>
-
-      </TouchableOpacity>
-
-    </View>
-  </View>
-</Modal>
-{saving && (
-  <AgriLoader 
-    visible 
-    type="saving" 
-    language={language} 
-  />
-)}
+      {saving && (
+        <AgriLoader 
+          visible 
+          type="saving" 
+          language={language} 
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -859,26 +841,39 @@ const filteredData = options.filter(item => {
 const styles = StyleSheet.create({
 
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-inputBox: {
+  inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 18,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     paddingHorizontal: 15,
-    height: 58,
+    height: 55,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: "#D1D5DB"
   },
   inputFocused: {
-    borderColor: "#2E7D32",
-    backgroundColor: "#fff",
-    // Adding subtle shadow for focus
-    elevation: 3,
-    shadowColor: "#2E7D32",
-    shadowOffset: { width: 0, height: 2 },
+    borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+  },
+  errorText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontFamily: "Mandali",
+    marginTop: -10,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  micBtn: {
+    marginLeft: 10,
+    padding: 4,
   },
   calcNote: {
     fontSize: 11,
@@ -894,10 +889,12 @@ inputBox: {
     justifyContent: 'center'
   },
   input: {
+    flex: 1,
     fontSize: 16,
     color: "#1F2937",
-    fontWeight: "500",
-    padding: 0,
+    fontFamily: "Mandali",
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
   unitText: {
     fontSize: 14,
@@ -1078,10 +1075,16 @@ label: {
     color: '#374151'
   },
   saveBtn: {
-  
-  borderRadius: 18,
-  overflow: "hidden"
-},
+    marginTop: 20,
+    marginBottom: 40,
+    borderRadius: 18,
+    overflow: "hidden",
+    elevation: 6,
+    shadowColor: "#1B5E20",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
 
 saveGradient: {
   height: 56,
