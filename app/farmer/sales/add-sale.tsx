@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // 🔥 Added KeyboardAwareScrollView
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
@@ -248,7 +249,13 @@ export default function AddSale() {
         language={language}
       />
 
-      <View style={styles.container}>
+      {/* 🔥 Changed to KeyboardAwareScrollView to fix Keyboard Issue */}
+      <KeyboardAwareScrollView 
+        enableOnAndroid={true}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 16, paddingBottom: 150 }} // 🔥 Added paddingBottom for keyboard clearance
+      >
         
         {/* 🌾 CROP */}
         <TouchableOpacity
@@ -298,11 +305,10 @@ export default function AddSale() {
               <TouchableOpacity
                 style={[styles.inputBox, { marginBottom: 0 }, activeInput === "qty" && styles.inputFocused, errors.quantity && styles.inputError]}
                 activeOpacity={1}
-                // 🔥 BUG FIX: Added setActiveInput("qty") here so it renders "flex" BEFORE focusing
                 onPress={() => {
                   setActiveInput("qty");
                   setUnitOpen(false);
-                  setTimeout(() => qtyRef.current?.focus(), 50); // Small delay ensures display: flex is applied
+                  setTimeout(() => qtyRef.current?.focus(), 50); 
                 }}
               >
                 <Ionicons name="cube-outline" size={20} color={quantity ? "#16A34A" : "#9CA3AF"} />
@@ -368,7 +374,6 @@ export default function AddSale() {
         <TouchableOpacity
           style={[styles.inputBox, { marginTop: errors.quantity ? 10 : 16 }, activeInput === "rate" && styles.inputFocused, errors.rate && styles.inputError]}
           activeOpacity={1}
-          // 🔥 BUG FIX: Added setActiveInput("rate") here
           onPress={() => {
             setActiveInput("rate");
             setUnitOpen(false);
@@ -421,7 +426,7 @@ export default function AddSale() {
             </LinearGradient>
         </TouchableOpacity>
 
-      </View>
+      </KeyboardAwareScrollView>
 
       {/* 🔥 CROP SELECTION MODAL */}
       <Modal visible={modalType === "crop"} transparent animationType="slide" onRequestClose={() => setModalType(null)}>
