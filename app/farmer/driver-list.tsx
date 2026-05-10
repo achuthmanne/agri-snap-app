@@ -1,55 +1,57 @@
 //drivers list
+import AppEmptyState from "@/components/AppEmptyState"; 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
-import { useFocusEffect } from "@react-navigation/native";
-import { useCallback } from "react";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    FlatList,
-    Linking,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  Linking,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 
 export default function VehicleDetails() {
 
   const router = useRouter();
-  const params = useLocalSearchParams();
-
   const { id, name, number, type } = useLocalSearchParams();
 
   const vehicleNumber = Array.isArray(number) ? number[0] : number;
   const vehicleType = Array.isArray(type) ? type[0] : type;
+  const vId = Array.isArray(id) ? id[0] : id;
 
   const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
+  const [activeSession, setActiveSession] = useState("");
 
   const [search, setSearch] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [deleteItem, setDeleteItem] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showTypeModal, setShowTypeModal] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const isScreenFocused = useIsFocused();
 
+  // 🔥 NEW STATES FOR LOCK LOGIC & MODERN UI
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
+
   useSpeechRecognitionEvent("result", (event) => {
     if (!isScreenFocused || !isListening) return;
-
     if (event.results && event.results.length > 0) {
       setSearch(event.results[0].transcript);
     }
@@ -60,7 +62,7 @@ export default function VehicleDetails() {
   const handleVoiceSearch = async () => {
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
-
+  
     setIsListening(true);
     ExpoSpeechRecognitionModule.start({
       lang: language === "te" ? "te-IN" : "en-US",
@@ -69,17 +71,10 @@ export default function VehicleDetails() {
   };
 
   useEffect(() => {
-    if (!isScreenFocused) {
-      ExpoSpeechRecognitionModule.stop();
-      setIsListening(false);
-    }
-
     return () => {
-      ExpoSpeechRecognitionModule.stop(); 
+      ExpoSpeechRecognitionModule.stop();
     };
-  }, [isScreenFocused]);
-
-  /* ---------------- LOAD ---------------- */
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then(l => {
@@ -87,114 +82,85 @@ export default function VehicleDetails() {
     });
   }, []);
 
+  /* ---------------- LOAD DATA ---------------- */
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
 
-      const load = async () => {
-        const phone = await AsyncStorage.getItem("USER_PHONE");
-        if (!phone) return;
+      const loadData = async () => {
+        try {
+          const phone = await AsyncStorage.getItem("USER_PHONE");
+          if (!phone || !vId) return;
 
-        setLoading(true);
+          setLoading(true);
 
-        const vId = Array.isArray(id) ? id[0] : id;
+          const userDoc = await firestore().collection("users").doc(phone).get();
+          const session = userDoc.data()?.activeSession;
 
-        const userDoc = await firestore()
-          .collection("users")
-          .doc(phone)
-          .get();
-
-        const activeSession = userDoc.data()?.activeSession;
-
-        if (!activeSession) {
-          setLoading(false);
-          return;
-        }
-
-        unsub = firestore()
-          .collection("users")
-          .doc(phone)
-          .collection("vehicles")
-          .doc(vId as string)
-          .collection("drivers")
-          .where("session", "==", activeSession) 
-          .onSnapshot(snap => {
-
-            if (!snap || !snap.docs) {
-              setLoading(false);
-              return;
-            }
-
-            const list: any[] = [];
-
-            snap.forEach(doc => {
-              const d = doc.data();
-              if (!d) return;
-              list.push({ id: doc.id, ...d });
-            });
-
-            list.sort((a, b) => {
-              const timeA = a.createdAt?.toMillis() || 0;
-              const timeB = b.createdAt?.toMillis() || 0;
-              return timeB - timeA;
-            });
-
-            setData(list);
+          if (!session) {
+            setData([]); 
             setLoading(false);
-          });
+            return;
+          }
+          
+          setActiveSession(session);
+
+          unsub = firestore()
+            .collection("users")
+            .doc(phone)
+            .collection("vehicles")
+            .doc(vId as string)
+            .collection("drivers")
+            .where("session", "==", session)
+            .onSnapshot(
+              (snap) => {
+                if (!snap || !snap.docs) {
+                  setData([]);
+                  setLoading(false);
+                  return;
+                }
+
+                const list: any[] = [];
+                snap.forEach(doc => {
+                  const d = doc.data();
+                  if (!d) return;
+                  list.push({ id: doc.id, ...d });
+                });
+
+                list.sort((a, b) => {
+                  const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                  const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                  return timeB - timeA;
+                });
+
+                setData(list);
+                setLoading(false);
+              },
+              (error) => {
+                console.log("Firestore Error: ", error);
+                setLoading(false);
+              }
+            );
+        } catch (error) {
+          console.log("Loading Error: ", error);
+          setLoading(false);
+        }
       };
 
-      load();
+      loadData();
 
       return () => {
         if (unsub) unsub();
       };
-    }, [id])
+    }, [vId])
   );
 
-  useEffect(() => {
-    let unsub: any;
-
-    const load = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
-
-      setLoading(true);
-
-      unsub = firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("vehicles")
-        .doc(id as string)
-        .collection("drivers")
-        .orderBy("createdAt", "desc")
-        .onSnapshot(snap => {
-
-          const list: any[] = [];
-
-          snap.forEach(doc => {
-            list.push({ id: doc.id, ...(doc.data() as any) });
-          });
-
-          setData(list);
-
-          setTimeout(() => setLoading(false), 300);
-        });
-    };
-
-    load();
-    return () => unsub && unsub();
-
-  }, []);
-
   /* ---------------- FILTER ---------------- */
-
   const filtered = data.filter(item =>
     item.driverName?.toLowerCase().includes(search.toLowerCase())
   );
 
   /* ---------------- COLORS ---------------- */
-
   const colors = ["#22C55E","#3B82F6","#F59E0B","#EF4444","#8B5CF6"];
 
   const getColor = (id: string) => {
@@ -202,28 +168,74 @@ export default function VehicleDetails() {
   };
 
   /* ---------------- CALL ---------------- */
-
   const handleCall = (phone: string) => {
     if (!phone) return;
     Linking.openURL(`tel:${phone}`);
   };
 
-  const handleEdit = (item: any) => {
+  // 🔥 THE FIX: CORRECT CHECK LOGIC FOR DRIVERS
+  const checkHasRecords = async (driverId: string) => {
+    try {
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone || !vId || !activeSession) return false;
+
+      // నీ డేటాబేస్ స్ట్రక్చర్: users -> phone -> vehicles -> vId -> drivers -> dId -> entries
+      const entriesSnap = await firestore()
+        .collection("users").doc(phone)
+        .collection("vehicles").doc(vId as string)
+        .collection("drivers").doc(driverId)
+        .collection("entries")
+        .where("session", "==", activeSession) // ఆక్టివ్ సెషన్ లో ఏమైనా వర్క్ ఉందా
+        .limit(1) // ఒక్కటి దొరికినా చాలు
+        .get();
+
+      // entries కలెక్షన్ ఎంప్టీ కాకపోతే రికార్డ్స్ ఉన్నట్టే
+      if (!entriesSnap.empty) {
+        return true;
+      }
+
+      // ఏ రికార్డ్స్ లేకపోతే false
+      return false;
+      
+    } catch (error) {
+      console.log("Error checking records", error);
+      // ఎర్రర్ వస్తే సేఫ్టీ కోసం true పంపి లాక్ చేస్తాం
+      return true; 
+    }
+  };
+
+  // 🔥 Edit Action (With Lock Flag)
+  const handleEditClick = async (item: any) => {
+    setActionLoading(true);
+    const hasRecords = await checkHasRecords(item.id);
+    setActionLoading(false);
+
     router.push({
       pathname: "/farmer/vehicle-drivers",
       params: {
-        vehicleId: id,
-        editId: item.id
+        vehicleId: vId,
+        editId: item.id,
+        name: item.driverName,
+        phone: item.phone,
+        village: item.village,
+        hasRecords: hasRecords ? "true" : "false" // 🔥 Flag పంపుతున్నాం
       }
     });
   };
 
-  const handleDelete = (item: any) => {
-    setDeleteItem(item);
-    setShowDeleteModal(true);
-  };
+  // 🔥 Delete Action (With Validation)
+  const handleDeleteClick = async (item: any) => {
+    setActionLoading(true);
+    const hasRecords = await checkHasRecords(item.id);
+    setActionLoading(false);
 
-  /* ---------------- DELETE ---------------- */
+    if (hasRecords) {
+      setShowCannotDeleteModal(true); // రికార్డ్స్ ఉంటే వార్నింగ్ 🔒
+    } else {
+      setDeleteItem(item);
+      setShowDeleteModal(true); // లేకపోతే డిలీట్ మోడల్ 🗑️
+    }
+  };
 
   const confirmDelete = async () => {
     if (!deleteItem) return;
@@ -231,9 +243,7 @@ export default function VehicleDetails() {
     const phone = await AsyncStorage.getItem("USER_PHONE");
     if (!phone) return;
 
-    const vId = Array.isArray(id) ? id[0] : id;
-
-    // 🔥 INSTANT UI REMOVE (Optimistic Update)
+    // 🔥 INSTANT UI REMOVE
     setData(prev => prev.filter(item => item.id !== deleteItem.id));
     setShowDeleteModal(false);
 
@@ -253,17 +263,30 @@ export default function VehicleDetails() {
     setDeleteItem(null);
   };
 
-  /* ---------------- SHIMMER ---------------- */
+  // 🔥 MODERN MENU STYLES
+  const optionsStyles = {
+    optionsContainer: {
+      borderRadius: 14,
+      paddingVertical: 5,
+      paddingHorizontal: 0,
+      width: 150,
+      backgroundColor: "#fff",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+      marginTop: 25, 
+    }
+  };
 
+  /* ---------------- SHIMMER ---------------- */
   const ShimmerRow = () => (
     <View style={styles.row}>
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ width: 42, height: 42, borderRadius: 21 }}
-      />
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 42, height: 42, borderRadius: 21 }} />
       <View style={{ flex: 1, marginLeft: 12 }}>
-        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "60%", height: 14 }} />
-        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "40%", height: 12, marginTop: 6 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "60%", height: 14, borderRadius: 6 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 6 }} />
       </View>
     </View>
   );
@@ -272,7 +295,14 @@ export default function VehicleDetails() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-     <AppHeader
+      {/* ACTION LOADING OVERLAY */}
+      {actionLoading && (
+        <View style={styles.actionLoadingOverlay}>
+          <ActivityIndicator size="large" color="#16A34A" />
+        </View>
+      )}
+
+      <AppHeader
         title={language === "te" ? "డ్రైవర్ల జాబితా" : "Drivers List"}
         subtitle={
           vehicleNumber && vehicleNumber.trim() !== ""
@@ -282,42 +312,36 @@ export default function VehicleDetails() {
         language={language}
       />
 
-     {/* 🔥 CLEAN & MINIMAL SEARCH BAR */}
-      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
-        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
-
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={language === "te" ? "డ్రైవర్ను వెతకండి..." : "Search driver..."}
-          placeholderTextColor="#9CA3AF"
-          cursorColor="#16A34A"
-          selectionColor="#16A34A40"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          style={styles.searchInput}
-        />
-
-        {search.trim().length > 0 ? (
-          <TouchableOpacity 
-            onPress={() => setSearch("")} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            onPress={handleVoiceSearch} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MaterialCommunityIcons 
-              name={isListening ? "microphone" : "microphone-outline"} 
-              size={22} 
-              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* SEARCH BAR */}
+      {(!loading && data.length === 0) ? null : (
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={language === "te" ? "డ్రైవర్ను వెతకండి..." : "Search driver..."}
+            placeholderTextColor="#9CA3AF"
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            style={styles.searchInput}
+          />
+          {search.trim().length > 0 ? (
+            <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={handleVoiceSearch} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <MaterialCommunityIcons 
+                name={isListening ? "microphone" : "microphone-outline"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* LIST */}
       {loading ? (
@@ -333,11 +357,8 @@ export default function VehicleDetails() {
           keyboardShouldPersistTaps="handled" 
           contentContainerStyle={[
             { padding: 20, paddingBottom: 100 },
-            // 🔥 డేటా లేనప్పుడు సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
             filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
-
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
@@ -355,12 +376,10 @@ export default function VehicleDetails() {
             />
           }
           renderItem={({ item }) => {
-
             const color = getColor(item.id);
 
             return (
               <View style={styles.row}>
-
                 {/* LEFT */}
                 <TouchableOpacity
                   style={styles.left}
@@ -369,7 +388,7 @@ export default function VehicleDetails() {
                     router.push({
                       pathname: "/farmer/vdriver-work",
                       params: {
-                        vehicleId: id,
+                        vehicleId: vId,
                         driverId: item.id,
                         name: item.driverName,
                         phone: item.phone,
@@ -386,51 +405,45 @@ export default function VehicleDetails() {
 
                   <View style={styles.details}>
                     <AppText style={styles.name}>{item.driverName}</AppText>
-
-                    <AppText style={styles.phone}>
-                      +91 - {item.phone || "----"}
-                    </AppText>
-
-                    <AppText style={styles.sub}>
-                      {item.village || "----"}
-                    </AppText>
+                    <AppText style={styles.phone}>+91 - {item.phone || "----"}</AppText>
+                    <AppText style={styles.sub}>{item.village || "----"}</AppText>
                   </View>
                 </TouchableOpacity>
 
                 {/* RIGHT */}
                 <View style={styles.right}>
-
-                  <TouchableOpacity
-                    style={styles.callBtn}
-                    onPress={() => handleCall(item.phone)}
-                  >
+                  <TouchableOpacity style={styles.callBtn} onPress={() => handleCall(item.phone)}>
                     <Ionicons name="call" size={16} color="#16A34A" />
                   </TouchableOpacity>
 
                   <Menu>
-                    <MenuTrigger>
-                      <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
+                    <MenuTrigger style={{ padding: 5 }}>
+                      <Ionicons name="ellipsis-vertical" size={20} color="#6B7280" />
                     </MenuTrigger>
 
-                    <MenuOptions>
-                      <MenuOption onSelect={() => handleEdit(item)}>
-                        <View style={styles.menuItem}>
-                          <Ionicons name="create-outline" size={16} color="#2563EB" />
-                          <AppText>{language === "te" ? "మార్చు" : "Edit"}</AppText>
+                    <MenuOptions customStyles={optionsStyles}>
+                      <MenuOption onSelect={() => handleEditClick(item)}>
+                        <View style={styles.modernMenuItem}>
+                          <Ionicons name="create-outline" size={18} color="#2563EB" />
+                          <AppText style={styles.menuTextEdit} language={language}>
+                            {language === "te" ? "మార్చు" : "Edit"}
+                          </AppText>
                         </View>
                       </MenuOption>
+                      
+                      <View style={styles.menuDivider} />
 
-                      <MenuOption onSelect={() => handleDelete(item)}>
-                        <View style={styles.menuItem}>
-                          <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                          <AppText>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
+                      <MenuOption onSelect={() => handleDeleteClick(item)}>
+                        <View style={styles.modernMenuItem}>
+                          <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                          <AppText style={styles.menuTextDelete} language={language}>
+                            {language === "te" ? "తొలగించు" : "Delete"}
+                          </AppText>
                         </View>
                       </MenuOption>
                     </MenuOptions>
                   </Menu>
-
                 </View>
-
               </View>
             );
           }}
@@ -443,56 +456,71 @@ export default function VehicleDetails() {
         onPress={() =>
           router.push({
             pathname: "/farmer/vehicle-drivers",
-            params: { vehicleId: id }
+            params: { vehicleId: vId }
           })
         }
       >
-        <LinearGradient
-           colors={["#16A34A","#166534"]}
-           style={styles.addGradient}
-         >
+        <LinearGradient colors={["#16A34A","#166534"]} style={styles.addGradient}>
            <Ionicons name="add" size={30} color="#fff" />
          </LinearGradient>
       </TouchableOpacity>
 
-      {/* DELETE MODAL */}
-      {showDeleteModal && (
+      {/* 🔴 STANDARD DELETE MODAL */}
+      <Modal visible={showDeleteModal} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
-            <View style={styles.iconBg}>
+            <View style={styles.iconBgWarning}>
               <Ionicons name="trash-outline" size={36} color="#DC2626" />
             </View>
-
             <AppText style={styles.modalTitle} language={language}>
               {language === "te" ? "తొలగించాలా?" : "Delete Entry?"}
             </AppText>
-
             <AppText style={styles.modalSub} language={language}>
-              {language === "te"
-                ? "ఈ వివరాన్ని తొలగించాలా?"
-                : "Are you sure you want to delete this record?"}
+              {language === "te" ? "ఈ డ్రైవర్ ని పూర్తిగా తొలగించాలా?" : "Are you sure you want to delete this record?"}
             </AppText>
-
             <View style={styles.modalBtns}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setShowDeleteModal(false)}
-              >
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDeleteModal(false)}>
                 <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={confirmDelete}
-              >
-                <AppText style={{ color: "#fff" }}>
+              <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
+                <AppText style={{ color: "#fff", fontWeight: '600' }}>
                   {language === "te" ? "తొలగించు" : "Delete"}
                 </AppText>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      )}
+      </Modal>
+
+      {/* 🔒 CANNOT DELETE WARNING MODAL */}
+      <Modal visible={showCannotDeleteModal} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <View style={[styles.iconBgWarning, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="lock-closed" size={36} color="#F59E0B" />
+            </View>
+            <AppText style={styles.modalTitle} language={language}>
+              {language === "te" ? "తొలగించడం కుదరదు" : "Cannot Delete"}
+            </AppText>
+            <AppText style={[styles.modalSub, { lineHeight: 22 }]} language={language}>
+              {language === "te"
+                ? "ఈ డ్రైవర్ కి సంబంధించి పని వివరాలు ఇప్పటికే రికార్డ్ అయ్యాయి. కావున వీరిని తొలగించడం కుదరదు."
+                : "This driver has existing work records. Therefore, they cannot be deleted."}
+            </AppText>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity activeOpacity={0.8}
+                style={[styles.cancelBtn, { flex: 1, backgroundColor: '#F59E0B' }]} 
+                onPress={() => setShowCannotDeleteModal(false)}
+              >
+                <AppText style={{ color: 'white', fontWeight: '600' }} language={language}>
+                  {language === "te" ? "అర్థమైంది" : "Got It"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -500,176 +528,37 @@ export default function VehicleDetails() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-
-  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F9FAFB",
-    marginHorizontal: 20,
-    marginTop: 15,
-    marginBottom: 0,
-    paddingHorizontal: 12,
-    height: 50, 
-    borderRadius: 8, 
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  searchFocused: {
-    borderColor: "#16A34A",
-    backgroundColor: "#FFFFFF",
-  },
-  searchInput: {
-    flex: 1,
-    height: "100%",
-    marginLeft: 10,
-    fontSize: 15,
-    paddingTop: 0,
-    paddingBottom: 0,
-    textAlignVertical: "center",
-    color: "#1F2937",
-    fontFamily: "Mandali",
-    includeFontPadding: false,
-  },
-
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    marginHorizontal: 20,
-    marginVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor:"#E5E7EB",
-    borderRadius: 12,
-    backgroundColor:"#ffffff",
-    justifyContent: "space-between"
-  },
-
-  left: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1
-  },
-
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12
-  },
-
-  avatarText: {
-    color: "#fff",
-    fontWeight: "600"
-  },
-
+  searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", marginHorizontal: 20, marginTop: 15, marginBottom: 0, paddingHorizontal: 12, height: 50, borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB" },
+  searchFocused: { borderColor: "#16A34A", backgroundColor: "#FFFFFF" },
+  searchInput: { flex: 1, height: "100%", marginLeft: 10, fontSize: 15, paddingTop: 0, paddingBottom: 0, textAlignVertical: "center", color: "#1F2937", fontFamily: "Mandali", includeFontPadding: false },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, marginHorizontal: 20, marginVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor:"#E5E7EB", borderRadius: 12, backgroundColor:"#ffffff", justifyContent: "space-between" },
+  left: { flexDirection: "row", alignItems: "center", flex: 1 },
+  avatar: { width: 42, height: 42, borderRadius: 21, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  avatarText: { color: "#fff", fontWeight: "600" },
   details: { flex: 1 },
-
   name: { fontSize: 15, fontWeight: "600" },
-
   phone: { fontSize: 12, color: "#16A34A" },
-
   sub: { fontSize: 12, color: "#6B7280" },
-
-  right: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10
-  },
-
-  callBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: "#ECFDF5",
-    justifyContent: "center",
-    alignItems: "center"
-  },
-
+  right: { flexDirection: "row", alignItems: "center", gap: 8 },
+  callBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#ECFDF5", justifyContent: "center", alignItems: "center" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
-
-  addGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center"
-  },
+  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset:{width:0, height:2}, shadowOpacity:0.2, shadowRadius:4 },
   
-  overlay: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center"
-  },
+  // MENU STYLES
+  modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
+  menuTextEdit: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
+  menuTextDelete: { fontSize: 14, color: "#EF4444", fontWeight: "500" },
+  menuDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 10 },
 
-  modalBox: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center"
-  },
-
-  iconBg: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#FEE2E2",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10
-  },
-
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 10
-  },
-
-  modalSub: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 6
-  },
-
-  modalBtns: {
-    flexDirection: "row",
-    marginTop: 20,
-    gap: 10
-  },
-
-  cancelBtn: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center"
-  },
-
-  deleteBtn: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#DC2626",
-    alignItems: "center"
-  },
-
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10
-  }
-
+  // MODAL STYLES
+  overlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 999 },
+  actionLoadingOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(255,255,255,0.7)", justifyContent: "center", alignItems: "center", zIndex: 1000 },
+  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center", elevation: 10 },
+  iconBgWarning: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  modalTitle: { fontSize: 18, fontWeight: "600", marginTop: 10, color: '#111827' },
+  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8 },
+  modalBtns: { flexDirection: "row", marginTop: 20, gap: 12 },
+  cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#F1F5F9", alignItems: "center", justifyContent: 'center' },
+  deleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#DC2626", alignItems: "center", justifyContent: 'center' }
 });

@@ -18,10 +18,10 @@ import {
   StatusBar,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
+import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; // 🔥 PREMIUM MENU
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
@@ -42,7 +42,8 @@ export default function FieldsScreen() {
   const [ownAcres, setOwnAcres] = useState(0);
   const [rentAcres, setRentAcres] = useState(0);
   const [cropStats, setCropStats] = useState<any[]>([]);
-  const [menuVisible, setMenuVisible] = useState(false);
+  
+  // 🔥 DELETED OLD MENU STATE, USING PREMIUM ONE
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [loading, setLoading] = useState(true); 
@@ -85,9 +86,7 @@ export default function FieldsScreen() {
               const d: any = doc.data();
               list.push({ id: doc.id, ...d });
 
-              // 🔥 FIX 1: ఎకరాలు String లా వచ్చినా Number కి మారుస్తున్నాం
               const acres = Number(d.acres) || 0; 
-
               total += acres;
 
               if (d.type === "own") {
@@ -134,7 +133,6 @@ export default function FieldsScreen() {
   }, [language]); 
   
   const PremiumDonutChart = ({ chartData, title }: any) => {
-    // 🔥 FIX 2: డేటా లేనప్పుడు క్రాష్ అవ్వకుండా Dummy Safe Data
     const totalPop = chartData.reduce((a: any, b: any) => a + Number(b.population), 0);
     const safeData = totalPop > 0 ? chartData : [{ name: "No Data", population: 1, color: "#E5E7EB" }];
 
@@ -197,12 +195,10 @@ export default function FieldsScreen() {
     { name: language === "te" ? "కౌలు (%)" : "Rent (%)", population: rentAcres, color: "#F59E0B", legendFontColor: "#475569", legendFontSize: 12 }
   ];
 
-  // 🔥 FIX 3: Safe data for the top ownership PieChart
   const safeOwnershipData = (ownAcres + rentAcres) > 0 
     ? ownershipData.map(d => ({ ...d, name: "" })) 
     : [{ population: 1, color: "#E5E7EB", name: "" }];
 
-  // 🔥 FIX 4: Safe data for the crop distribution PieChart
   const safeCropStats = totalAcres > 0 && cropStats.length > 0
     ? cropStats.map(d => ({ ...d, name: "" }))
     : [{ population: 1, color: "#E5E7EB", name: "" }];
@@ -225,6 +221,23 @@ export default function FieldsScreen() {
         ))}
       </View>
     );
+  };
+
+  // 🔥 MODERN MENU OPTIONS STYLE
+  const optionsStyles = {
+    optionsContainer: {
+      borderRadius: 14,
+      paddingVertical: 5,
+      paddingHorizontal: 0,
+      width: 150,
+      backgroundColor: "#fff",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+      marginTop: 25, 
+    }
   };
 
   return (
@@ -376,22 +389,59 @@ export default function FieldsScreen() {
                         </AppText>
                       </AppText>
                     </View>
+                    
                     <View style={styles.cardRightSection}>
                       {item.type === 'rent' && (
                         <View style={styles.priceContainer}>
-                          <AppText style={styles.rentPrice}>₹{item.rent.toLocaleString('en-IN')}</AppText>
+                          <AppText style={styles.rentPrice}>₹{item.rent?.toLocaleString('en-IN')}</AppText>
                           <AppText style={styles.rentUnit}>{language === 'te' ? 'సంవత్సరానికి' : 'PER YEAR'}</AppText>
                         </View>
                       )}
-                      <TouchableOpacity 
-                        style={styles.menuBtn} 
-                        onPress={() => {
-                          setSelectedItem(item);
-                          setMenuVisible(true);
-                        }}
-                      >
-                        <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
-                      </TouchableOpacity>
+
+                      {/* 🔥 NEW PREMIUM MENU */}
+                      <Menu>
+                        <MenuTrigger style={styles.menuBtn}>
+                          <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
+                        </MenuTrigger>
+
+                        <MenuOptions customStyles={optionsStyles}>
+                          <MenuOption onSelect={() => {
+                            router.push({ 
+                              pathname: "/farmer/fields/add-field", 
+                              params: { 
+                                editId: item.id,
+                                crop: item.crop || "",
+                                type: item.type || "",
+                                acres: item.acres?.toString() || "",
+                                rent: item.rent?.toString() || "",
+                                soilType: item.soilType || ""
+                              } 
+                            });
+                          }}>
+                            <View style={styles.modernMenuItem}>
+                              <Ionicons name="create-outline" size={18} color="#2563EB" />
+                              <AppText style={styles.menuTextEdit} language={language}>
+                                {language === "te" ? "సవరించు" : "Edit"}
+                              </AppText>
+                            </View>
+                          </MenuOption>
+                          
+                          <View style={styles.menuDivider} />
+
+                          <MenuOption onSelect={() => {
+                            setSelectedItem(item);
+                            setDeleteVisible(true);
+                          }}>
+                            <View style={styles.modernMenuItem}>
+                              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                              <AppText style={styles.menuTextDelete} language={language}>
+                                {language === "te" ? "తొలగించు" : "Delete"}
+                              </AppText>
+                            </View>
+                          </MenuOption>
+                        </MenuOptions>
+                      </Menu>
+                      
                     </View>
                   </Animated.View>
                 );
@@ -401,63 +451,16 @@ export default function FieldsScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={menuVisible} transparent animationType="none" onRequestClose={() => { setMenuVisible(false); setSelectedItem(null); }}>
-        <TouchableWithoutFeedback onPress={() => { setMenuVisible(false); setSelectedItem(null); }}>
-          <View style={styles.modalOverlay}>
-            {selectedItem ? (
-              <View style={styles.menuContent}>
-                <AppText style={styles.menuHeader}>
-                  {selectedItem.crop} - {selectedItem.category || "Field"}
-                </AppText>
-                
-                {/* 🔥 FIX 5: Modal Navigation Safety (setTimeout) */}
-                <TouchableOpacity 
-                  style={styles.menuItem} 
-                  onPress={() => {
-                    const id = selectedItem.id; 
-                    setMenuVisible(false);
-                    setSelectedItem(null);
-                    
-                    // మోడల్ క్లోజ్ అయ్యి రూటింగ్ స్మూత్ గా జరగడానికి చిన్న గ్యాప్
-                    setTimeout(() => {
-                      router.push({ 
-                        pathname: "/farmer/fields/add-field", 
-                        params: { editId: id } 
-                      });
-                    }, 100); 
-                  }}
-                >
-                  <Ionicons name="pencil-outline" size={20} color="#3B82F6" />
-                  <AppText style={styles.menuText}>
-                    {language === "te" ? "సవరించండి" : "Edit Record"}
-                  </AppText>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.menuItem, { borderBottomWidth: 0 }]} 
-                  onPress={() => {
-                    setMenuVisible(false);
-                    setDeleteVisible(true);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                  <AppText style={[styles.menuText, { color: '#EF4444' }]}>
-                    {language === "te" ? "తొలగించండి" : "Delete Record"}
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
+      {/* 🔥 PREMIUM DELETE MODAL */}
       <Modal visible={deleteVisible} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.deleteBox}>
             <View style={styles.iconBg}>
               <Ionicons name="trash-outline" size={32} color="#DC2626" />
             </View>
-            <AppText style={styles.deleteTitle}>{language === "te" ? "తొలగించాలా?" : "Delete Field?"}</AppText>
+            <AppText style={styles.deleteTitle}>
+              {language === "te" ? "తొలగించాలా?" : "Delete Field?"}
+            </AppText>
             <AppText style={styles.deleteSub}>
               {language === "te" ? "ఈ రికార్డ్ శాశ్వతంగా తొలగించబడుతుంది" : "This record will be permanently deleted"}
             </AppText>
@@ -476,7 +479,6 @@ export default function FieldsScreen() {
                   setSelectedItem(null);
                 }}
               >
-                <Ionicons name="trash-outline" size={16} color="#fff" />
                 <AppText style={styles.deleteText}>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
               </TouchableOpacity>
             </View>
@@ -522,22 +524,26 @@ const styles = StyleSheet.create({
   rentPrice: { fontSize: 16, fontWeight: '600', color: '#166534' },
   rentUnit: { fontSize: 9, color: '#94A3B8', fontWeight: '600' },
   cardRightSection: { flexDirection: 'row', alignItems: 'center', paddingRight: 8, gap: 10 },
+  
+  // NEW MENU STYLES
   menuBtn: { padding: 8, backgroundColor: '#F1F5F9', borderRadius: 10 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.25)", justifyContent: "center", alignItems: "center" },
-  menuContent: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 18, borderWidth: 1, borderColor: "#E5E7EB" },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "center", alignItems: "center" },
+  modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
+  menuTextEdit: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
+  menuTextDelete: { fontSize: 14, color: "#EF4444", fontWeight: "500" },
+  menuDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 10 },
+
+  // DELETE MODAL
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
   deleteBox: { width: "80%", backgroundColor: "#fff", borderRadius: 18, padding: 20, alignItems: "center" },
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
   deleteTitle: { fontSize: 16, fontWeight: "600" },
   deleteSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 6 },
-  menuHeader: { fontSize: 14, fontWeight: '600', color: '#64748b', marginBottom: 15, textAlign: 'center' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  menuText: { marginLeft: 12, fontSize: 16, fontWeight: '600', color: '#1e293b' },
   deleteBtns: { flexDirection: "row", marginTop: 20, gap: 10 },
   cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
   cancelText: { fontSize: 14, fontWeight: "600", color: "#374151" },
-  deleteBtn: { flex: 1, flexDirection: "row", gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center" },
+  deleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center" },
   deleteText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+
   fab: { position: "absolute", bottom: 30, right: 20 },
   fabGradient: { width: 64, height: 64, borderRadius: 35, justifyContent: "center", alignItems: "center" },
   shimmerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },

@@ -51,7 +51,8 @@ weather: "వాతావరణం",
 machine: "యంత్ర పని",
 calculator:"కాలిక్యులేటర్",
 booking: "అగ్రి కనెక్ట్",
-fields: "పొలాలు"
+fields: "పొలాలు",
+owners: "యంత్ర యజమానులు"
 },
 
 en:{
@@ -73,7 +74,8 @@ market:"Market",
 weather: "Weather",
 machine: "Machines",
 booking: "AgriConnect",
-fields: "Fields"
+fields: "Fields",
+owners: "Machine Owners"
 }
 
 };
@@ -138,7 +140,8 @@ const LOCATION_CACHE_TIME = 15 * 60 * 1000; // 15 mins
 machine:require("../../../assets/images/tractor.png"),
 calculator:require("../../../assets/images/calc.png"),
 booking:require("../../../assets/images/link.png"),
-fields:require("../../../assets/images/farm.png")
+fields:require("../../../assets/images/farm.png"),
+owners: require("../../../assets/images/key.png")
   };
 const fadeAnim = useRef(new Animated.Value(0)).current;
 const swipeAnim = useRef(new Animated.Value(0)).current;
@@ -164,7 +167,8 @@ const getServices = () => [
   { service: "market", title: t.market, icon: icons.market, screen: "/farmer/market" },
 
   // 4. Machinery & Services (ట్రాక్టర్ బుకింగ్స్ వంటివి)
-  { service: "machine", title: t.machine, icon: icons.machine, screen: "/farmer/vehicles" },
+  { service: "machine", title: t.machine, icon: icons.machine, screen: "/farmer/owners" },
+  { service: "owners", title: t.owners, icon: icons.owners, screen: "/farmer/vehicles" },
   { service: "booking", title: t.booking, icon: icons.booking, screen: "/farmer/bookings" },
 
   // 5. Intelligence & Knowledge (నాలెడ్జ్ కోసం)

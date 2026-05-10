@@ -25,6 +25,7 @@ export default function PaymentDetailHistory() {
 
   const [grouped, setGrouped] = useState<any>({});
   const [loading, setLoading] = useState(false);
+  const [activeSession, setActiveSession] = useState("");
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [openCrops, setOpenCrops] = useState<any>({});
   const [openWorks, setOpenWorks] = useState<any>({});
@@ -46,21 +47,35 @@ export default function PaymentDetailHistory() {
   }, []);
 
   const loadData = async () => {
-    const phone = await AsyncStorage.getItem("USER_PHONE");
-    if (!phone) return;
+     const userPhone = await AsyncStorage.getItem("USER_PHONE");
+    if (!userPhone) return;
+
     setLoading(true);
 
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
+
+    const session = userDoc.data()?.activeSession;
+
+    if (!session) {
+      setLoading(false);
+      return;
+    }
+
+    setActiveSession(session);
     try {
       const userDoc = await firestore()
         .collection("users")
-        .doc(phone)
+        .doc(userPhone)
         .get();
 
       const activeSession = userDoc.data()?.activeSession;
       if (!activeSession) return;
       const snap = await firestore()
         .collection("users")
-        .doc(phone)
+        .doc(userPhone)
         .collection("payments")
         .where("mestriId", "==", mestriId)
         .where("session", "==", activeSession) // 🔥 MUST ADD
@@ -76,7 +91,7 @@ export default function PaymentDetailHistory() {
 
       const attendanceSnap = await firestore()
         .collection("users")
-        .doc(phone)
+        .doc(userPhone)
         .collection("mestris")
         .doc(mestriId as string)
         .collection("attendance")
@@ -107,7 +122,7 @@ export default function PaymentDetailHistory() {
         const docPromises = ids.map((attId: string) =>
           firestore()
             .collection("users")
-            .doc(phone)
+            .doc(userPhone)
             .collection("mestris")
             .doc(mestriId as string)
             .collection("attendance")
@@ -252,8 +267,8 @@ export default function PaymentDetailHistory() {
         <StatusBar barStyle="light-content" />
 
         <AppHeader
-          title={language === "te" ? "చెల్లింపు చరిత్ర" : "Payment Details"}
-          subtitle={language === "te" ? "పని వివరాలు" : "Work History"}
+          title={language === "te" ? "చెల్లింపు వివరాలు" : "Payment Details"}
+          subtitle={language === "te" ? `సీజన్: ${activeSession}` : `Season: ${activeSession}`}
           language={language}
         />
 
@@ -282,8 +297,8 @@ export default function PaymentDetailHistory() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
       <AppHeader
-        title={language === "te" ? "చెల్లింపు చరిత్ర" : "Payment Details"}
-        subtitle={language === "te" ? "పని వివరాలు" : "Work History"}
+        title={language === "te" ? "చెల్లింపు వివరాలు" : "Payment Details"}
+        subtitle={language === "te" ? `సీజన్: ${activeSession}` : `Season: ${activeSession}`}
         language={language}
       />
 

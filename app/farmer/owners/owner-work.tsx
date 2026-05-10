@@ -1,6 +1,6 @@
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -36,16 +36,15 @@ type WorkItem = {
   createdAt?: any;
 };
 
-export default function FarmerHistory() {
+export default function OwnerWork() {
 
   const router = useRouter();
-  const { vehicleId, farmerId, name, phone } = useLocalSearchParams();
+  const { ownerId, name, phone } = useLocalSearchParams();
 
   // URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా
-  const fName = Array.isArray(name) ? name[0] : name;
-  const fPhone = Array.isArray(phone) ? phone[0] : phone;
-  const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
-  const fId = Array.isArray(farmerId) ? farmerId[0] : farmerId;
+  const oName = Array.isArray(name) ? name[0] : name;
+  const oPhone = Array.isArray(phone) ? phone[0] : phone;
+  const oId = Array.isArray(ownerId) ? ownerId[0] : ownerId;
 
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
@@ -68,7 +67,7 @@ export default function FarmerHistory() {
         if (lang) setLanguage(lang as any);
 
         const userPhone = await AsyncStorage.getItem("USER_PHONE");
-        if (!userPhone || !vId || !fId) return;
+        if (!userPhone || !oId) return;
 
         // 🔥 FETCH ACTIVE SESSION
         const userDoc = await firestore().collection("users").doc(userPhone).get();
@@ -80,15 +79,14 @@ export default function FarmerHistory() {
         }
 
         // 🔥 REALTIME SNAPSHOT WITH SESSION FILTER
+        // Path: users -> phone -> owners -> oId -> entries
         unsub = firestore()
           .collection("users")
           .doc(userPhone)
-          .collection("vehicles")
-          .doc(vId)
-          .collection("works")
-          .doc(fId)
+          .collection("owners")
+          .doc(oId)
           .collection("entries")
-          .where("session", "==", activeSession) // సెషన్ బేస్డ్ ఫిల్టర్
+          .where("session", "==", activeSession) 
           .onSnapshot(snap => {
             if (!snap || !snap.docs) {
               setLoading(false);
@@ -98,7 +96,7 @@ export default function FarmerHistory() {
             const list: WorkItem[] = [];
             snap.forEach(doc => list.push({ id: doc.id, ...(doc.data() as any) }));
 
-            // 🔥 Pro Trick: Firebase Index Error రాకుండా క్లయింట్ సైడ్ సార్టింగ్ (Latest first)
+            // 🔥 Client Side Sorting (Latest first)
             list.sort((a, b) => {
               const timeA = a.createdAt?.toMillis() || 0;
               const timeB = b.createdAt?.toMillis() || 0;
@@ -114,20 +112,18 @@ export default function FarmerHistory() {
       return () => {
         if (unsub) unsub();
       };
-    }, [vId, fId])
+    }, [oId])
   );
 
   const handleDelete = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone || !deleteId || !vId || !fId) return;
+    if (!userPhone || !deleteId || !oId) return;
 
     await firestore()
       .collection("users")
       .doc(userPhone)
-      .collection("vehicles")
-      .doc(vId)
-      .collection("works")
-      .doc(fId)
+      .collection("owners")
+      .doc(oId)
       .collection("entries")
       .doc(deleteId)
       .delete();
@@ -137,15 +133,13 @@ export default function FarmerHistory() {
 
   const handleStatusUpdate = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone || !statusId || !vId || !fId) return;
+    if (!userPhone || !statusId || !oId) return;
 
     await firestore()
       .collection("users")
       .doc(userPhone)
-      .collection("vehicles")
-      .doc(vId)
-      .collection("works")
-      .doc(fId)
+      .collection("owners")
+      .doc(oId)
       .collection("entries")
       .doc(statusId)
       .update({
@@ -158,8 +152,9 @@ export default function FarmerHistory() {
   /* ---------------- GROUP BY CROP ---------------- */
   const grouped = Object.values(
     data.reduce<Record<string, { crop: string; list: WorkItem[] }>>((acc, item) => {
-      if (!acc[item.crop]) acc[item.crop] = { crop: item.crop, list: [] };
-      acc[item.crop].list.push(item);
+      const cropName = item.crop || "పని వివరాలు (Others)";
+      if (!acc[cropName]) acc[cropName] = { crop: cropName, list: [] };
+      acc[cropName].list.push(item);
       return acc;
     }, {})
   );
@@ -199,10 +194,10 @@ export default function FarmerHistory() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      {/* 🔥 CLEAR HEADER (Screen Related) */}
+      {/* 🔥 CLEAR HEADER */}
       <AppHeader
         title={language === "te" ? "పనుల చరిత్ర" : "Work History"}
-        subtitle={language === "te" ? "ఖాతా వివరాలు" : "Account Details"}
+        subtitle={language === "te" ? "యజమాని ఖాతా" : "Owner Account"}
         language={language}
       />
 
@@ -220,9 +215,7 @@ export default function FarmerHistory() {
 
       {loading ? (
         <View style={{ paddingTop: 10 }}>
-          <ShimmerCard />
-          <ShimmerCard />
-          <ShimmerCard />
+          <ShimmerCard /><ShimmerCard /><ShimmerCard />
         </View>
       ) : (
         <FlatList
@@ -230,11 +223,10 @@ export default function FarmerHistory() {
           keyExtractor={(item: any) => item.crop}
           contentContainerStyle={[
             { padding: 16, paddingBottom: 120 },
-            // 🔥 సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
             grouped.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
           
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
+          /* 🔥 EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="clipboard-outline"
@@ -305,7 +297,7 @@ export default function FarmerHistory() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* 🔥 DETAILED GRID EXACTLY LIKE OWNER WORK */}
+                      {/* 🔥 DETAILED GRID (TIME/ACRES SPECIFIC) */}
                       <View style={styles.detailsGrid}>
                         
                         {/* ACRES (If available) */}
@@ -370,7 +362,7 @@ export default function FarmerHistory() {
                         </View>
                       </View>
 
-                      {/* FINAL + DELETE (🔥 LOGIC APPLIED HERE) */}
+                      {/* FINAL + DELETE */}
                       <View style={styles.bottomRow}>
                         <AppText style={[styles.finalAmount, isPaid && {color: "#16A34A"}]}>₹ {amount.toLocaleString("en-IN")}</AppText>
                         
@@ -407,8 +399,8 @@ export default function FarmerHistory() {
         style={styles.addBtn}
         onPress={() =>
           router.push({
-            pathname: "/farmer/add-farmer-work",
-            params: { vehicleId: vId, farmerId: fId }
+            pathname: "/farmer/owners/add-owner-work",
+            params: { ownerId: oId }
           })
         }
       >
@@ -474,10 +466,9 @@ export default function FarmerHistory() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },  
 
-  // 🔥 NEW INFO BANNER STYLE
   infoBanner: {
     flexDirection: "row",
-    backgroundColor: "#DBEAFE", // Light blue
+    backgroundColor: "#DBEAFE", 
     padding: 12,
     marginHorizontal: 16,
     marginTop: 12,

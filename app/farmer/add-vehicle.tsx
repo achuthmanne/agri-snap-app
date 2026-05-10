@@ -16,16 +16,30 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  TouchableWithoutFeedback
 } from "react-native";
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 
+// URL params helper
+const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
+
 export default function AddVehicle() {
   const router = useRouter();
-  const { vehicleId, name: paramName, type: paramType, number: paramNumber } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+
+  const vehicleId = getStr(params.vehicleId);
+  const paramName = getStr(params.name);
+  const paramType = getStr(params.type);
+  const paramNumber = getStr(params.number);
+  const hasRecords = getStr(params.hasRecords);
+
+  // 🔥 LOCK LOGIC
+  const isLocked = hasRecords === "true";
+
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
@@ -39,6 +53,9 @@ export default function AddVehicle() {
   const [errorType, setErrorType] = useState<"validation" | "duplicate" | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   
+  // 🔥 Lock Info Modal State
+  const [showLockInfo, setShowLockInfo] = useState(false);
+
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
 
@@ -71,47 +88,36 @@ export default function AddVehicle() {
 
   // 🔥 SMART NUMBER FORMATTER LOGIC
   const formatVehicleNumber = (text: string) => {
-    // Spaces తీసేసి ప్రాసెస్ చేస్తున్నాం
     let val = text.toUpperCase().replace(/\s/g, "");
     let result = "";
 
-    // 1. స్టేట్ కోడ్ (AP / TS - 2 అక్షరాలు మాత్రమే)
     const stateCode = val.match(/^[A-Z]{1,2}/);
     if (stateCode) {
       result += stateCode[0];
       val = val.substring(stateCode[0].length);
     } else if (val.length > 0) {
-      return ""; // అక్షరం కాకుండా నంబర్ టైప్ చేస్తే తీసుకోదు
+      return ""; 
     }
 
-    // 2. స్టేట్ కోడ్ పూర్తయ్యాక, నంబర్ కి వెళ్లాలి
     if (result.length === 2) {
       const rtoCode = val.match(/^\d{1,2}/);
       if (rtoCode) {
-        result += " " + rtoCode[0]; // ఆటోమేటిక్ స్పేస్
+        result += " " + rtoCode[0]; 
         val = val.substring(rtoCode[0].length);
       } else if (val.length > 0) {
-        return result; // ఇక్కడ అక్షరాలు టైప్ చేస్తే ఆపేస్తుంది
+        return result; 
       }
 
-      // 3. RTO కోడ్ పూర్తయ్యాక సిరీస్ (లేదా) పాత ఫార్మాట్ నంబర్స్ కి వెళ్లాలి
       if (rtoCode && rtoCode[0].length === 2) {
         const series = val.match(/^[A-Z]{1,2}/);
         if (series) {
-          result += " " + series[0]; // ఆటోమేటిక్ స్పేస్
+          result += " " + series[0]; 
           val = val.substring(series[0].length);
-
-          // చివర్లో 4 అంకెలు
           const numbers = val.match(/^\d{1,4}/);
-          if (numbers) {
-            result += " " + numbers[0];
-          }
+          if (numbers) result += " " + numbers[0];
         } else {
-          // ఒకవేళ అక్షరాలు లేని పాత బండి నంబర్ అయితే (Ex: AP 16 1234)
           const numbers = val.match(/^\d{1,4}/);
-          if (numbers) {
-            result += " " + numbers[0];
-          }
+          if (numbers) result += " " + numbers[0];
         }
       }
     }
@@ -121,12 +127,11 @@ export default function AddVehicle() {
   useSpeechRecognitionEvent("result", (event) => {
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
-      if (activeInput === "name") {
+      if (activeInput === "name" && !isLocked) {
         setName(transcript);
         if (errors.name) setErrors({ ...errors, name: "" });
       }
       else if (activeInput === "number") {
-        // వాయిస్ తో చెప్పినా కూడా ఫార్మాట్ అయ్యేలా సెట్ చేశాం
         setVehicleNumber(formatVehicleNumber(transcript));
         if (errors.number) setErrors({ ...errors, number: "" });
       }
@@ -140,6 +145,10 @@ export default function AddVehicle() {
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
   const handleVoiceInput = async (target: string) => {
+    if (target === "name" && isLocked) {
+      setShowLockInfo(true);
+      return;
+    }
     setActiveInput(target);
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
@@ -156,10 +165,9 @@ export default function AddVehicle() {
 
   useEffect(() => {
     if (vehicleId) {
-      setName((paramName as string) || "");
-      setType((paramType as string) || "");
-      // ఓపెన్ అయినప్పుడు కూడా కరెక్ట్ ఫార్మాట్ లో ఉండేలా
-      setVehicleNumber(formatVehicleNumber((paramNumber as string) || ""));
+      setName(paramName || "");
+      setType(paramType || "");
+      setVehicleNumber(formatVehicleNumber(paramNumber || ""));
     }
   }, [vehicleId]);
 
@@ -174,7 +182,6 @@ export default function AddVehicle() {
     if (!cleanNumber) {
         newErrors.number = language === "te" ? "వాహనం నంబర్ నమోదు చేయండి*" : "Enter Vehicle Number*";
     } else {
-        // 🔥 ఫైనల్ వాలిడేషన్: కనీసం 8 క్యారెక్టర్స్ పక్కాగా ఉండాలి (AP16 1234 లేదా AP16 CD 1234)
         const isValid = /^[A-Z]{2}\d{2}[A-Z]{0,2}\d{4}$/.test(cleanNumber);
         if (!isValid) {
             newErrors.number = language === "te" ? "పూర్తి నంబర్ (ఉదా: AP 16 CD 1234) ఇవ్వండి*" : "Enter full number (Ex: AP 16 CD 1234)*";
@@ -249,20 +256,26 @@ export default function AddVehicle() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           
-          {/* 🚜 VEHICLE NAME */}
+          {/* 🚜 VEHICLE NAME (LOCKED IF hasRecords === true) */}
           <TouchableOpacity
             activeOpacity={1}
             style={[
               styles.inputBox,
-              activeInput === "name" && styles.inputFocused,
-              errors.name && styles.inputError
+              activeInput === "name" && !isLocked && styles.inputFocused,
+              errors.name && styles.inputError,
+              isLocked && styles.inputLocked // 🔥 లాక్ అయితే గ్రే కలర్
             ]}
             onPress={() => {
-              setActiveInput("name");
-              nameRef.current?.focus();
+              if (isLocked) setShowLockInfo(true);
+              else { setActiveInput("name"); nameRef.current?.focus(); }
             }}
           >
-            <MaterialCommunityIcons name="tractor" size={22} color={name || activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
+            {isLocked ? (
+               <Ionicons name="lock-closed" size={22} color="#9CA3AF" />
+            ) : (
+               <MaterialCommunityIcons name="tractor" size={22} color={name || activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
+            )}
+            
             <View style={styles.inputWrapper}>
               {!name && activeInput !== "name" && (
                 <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>
@@ -272,23 +285,34 @@ export default function AddVehicle() {
               <TextInput
                 ref={nameRef}
                 value={name}
+                editable={!isLocked} // 🔥 THE MAIN LOCK
                 onChangeText={(txt) => {
                   setName(txt);
                   if (errors.name) setErrors({ ...errors, name: "" });
                 }}
                 onFocus={() => setActiveInput("name")}
                 onBlur={() => setActiveInput(null)}
-                style={[styles.input, { fontFamily: 'Mandali', display: (name || activeInput === "name") ? "flex" : "none" }]}
+                style={[styles.input, { fontFamily: 'Mandali', display: (name || activeInput === "name") ? "flex" : "none" }, isLocked && { color: "#6B7280" }]}
                 cursorColor="#16A34A"
                 selectionColor="#16A34A40"
               />
             </View>
-            <TouchableOpacity onPress={() => handleVoiceInput("name")} style={styles.micBtn}>
-              <MaterialCommunityIcons 
-                name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
-                size={24} 
-                color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
-              />
+            <TouchableOpacity 
+              onPress={() => {
+                if (isLocked) setShowLockInfo(true);
+                else handleVoiceInput("name");
+              }} 
+              style={styles.micBtn}
+            >
+              {isLocked ? (
+                <Ionicons name="information-circle-outline" size={24} color="#F59E0B" />
+              ) : (
+                <MaterialCommunityIcons 
+                  name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
+                  size={24} 
+                  color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
+                />
+              )}
             </TouchableOpacity>
           </TouchableOpacity>
           {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
@@ -328,7 +352,7 @@ export default function AddVehicle() {
                   { textTransform: "uppercase", fontFamily: 'Mandali', display: (vehicleNumber || activeInput === "number") ? "flex" : "none" }
                 ]}
                 autoCapitalize="characters"
-                maxLength={13} // 🔥 AP 16 CD 1234 (13 chars with spaces)
+                maxLength={13} 
                 cursorColor="#16A34A"
                 selectionColor="#16A34A40"
               />
@@ -383,54 +407,101 @@ export default function AddVehicle() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* VALIDATION MODAL FOR DUPLICATES ONLY */}
-      <Modal visible={showValidationModal} transparent animationType="fade">
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.alertBox}>
-            <View style={styles.alertIconBg}><Ionicons name="warning-outline" size={32} color="#F59E0B" /></View>
-            <AppText style={styles.alertTitle}>
+      {/* 🚀 PREMIUM VALIDATION / DUPLICATE MODAL */}
+      <Modal visible={showValidationModal} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.overlayCenter}>
+          <View style={styles.premiumModalBox}>
+            <View style={[styles.iconBgWarning, { backgroundColor: errorType === "duplicate" ? '#FEF3C7' : '#FEE2E2' }]}>
+              <Ionicons 
+                name={errorType === "duplicate" ? "copy" : "warning"} 
+                size={36} 
+                color={errorType === "duplicate" ? "#F59E0B" : "#DC2626"} 
+              />
+            </View>
+            <AppText style={styles.modalTitleTextDark}>
               {errorType === "duplicate"
                 ? (language === "te" ? "ఇప్పటికే ఉంది" : "Already Exists")
                 : (language === "te" ? "వివరాలు అవసరం" : "Missing Details")}
             </AppText>
-            <AppText style={styles.alertSub}>
+            <AppText style={[styles.modalSubText, { lineHeight: 22 }]}>
               {errorType === "duplicate"
                 ? (language === "te"
-                    ? "ఈ వాహనం ఇప్పటికే మీ ఖాతాలో ఉంది"
-                    : "This vehicle already exists in your account")
+                  ? "ఈ నంబర్ తో వాహనం ఇప్పటికే మీ ఖాతాలో నమోదు చేయబడింది. దయచేసి నంబర్ సరిచూసుకోండి."
+                  : "This vehicle number already exists in your account. Please check the number.")
                 : (language === "te"
-                    ? "దయచేసి వివరాలు సరిగ్గా నమోదు చేయండి"
-                    : "Please check your entered details")}
+                  ? "దయచేసి అన్ని వివరాలు సరిగ్గా నమోదు చేయండి."
+                  : "Please check your entered details.")}
             </AppText>
-            <TouchableOpacity activeOpacity={0.8} style={styles.alertBtn} onPress={() => setShowValidationModal(false)}>
-              <AppText style={styles.alertBtnText}>{language === "te" ? "సరే" : "OK"}</AppText>
-            </TouchableOpacity>
+            <View style={styles.modalBtnsRow}>
+              <TouchableOpacity 
+                style={[styles.actionBtn, { backgroundColor: errorType === "duplicate" ? '#F59E0B' : '#DC2626' }]} 
+                onPress={() => setShowValidationModal(false)}
+              >
+                <AppText style={{ color: 'white', fontWeight: '600' }} language={language}>
+                  {language === "te" ? "సరే" : "OK"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
 
-      {/* VEHICLE TYPE MODAL */}
-      <Modal visible={modalType !== null} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <AppText style={styles.modalTitleText}>{language === "te" ? "వాహనం ఎంచుకోండి" : "Select Vehicle"}</AppText>
-              <TouchableOpacity onPress={() => { setModalType(null); setActiveInput(null); }}>
-                <Ionicons name="close-circle" size={28} color="#9CA3AF" />
+      {/* 🔥 LOCK INFO MODAL */}
+      <Modal visible={showLockInfo} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.overlayCenter}>
+          <View style={styles.premiumModalBox}>
+            <View style={[styles.iconBgWarning, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="lock-closed" size={36} color="#F59E0B" />
+            </View>
+            <AppText style={styles.modalTitleTextDark} language={language}>
+              {language === "te" ? "పేరు మార్చలేరు" : "Name Locked"}
+            </AppText>
+            <AppText style={[styles.modalSubText, { lineHeight: 22 }]} language={language}>
+              {language === "te"
+                ? "ఈ వాహనానికి సంబంధించి రైతులు లేదా డ్రైవర్ల వివరాలు ఇప్పటికే నమోదు అయ్యాయి. కావున వాహనం పేరును మార్చడం కుదరదు."
+                : "Since this vehicle has associated farmers or drivers, you cannot change its name."}
+            </AppText>
+            <View style={styles.modalBtnsRow}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#F59E0B' }]}
+                onPress={() => setShowLockInfo(false)}
+              >
+                <AppText style={{ color: 'white', fontWeight: '600' }} language={language}>
+                  {language === "te" ? "అర్థమైంది" : "Got It"}
+                </AppText>
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🚀 PREMIUM VEHICLE TYPE MODAL */}
+      <Modal visible={modalType !== null} transparent animationType="slide" statusBarTranslucent>
+        <View style={styles.bottomSheetOverlay}>
+          <TouchableWithoutFeedback onPress={() => { setModalType(null); setActiveInput(null); }}>
+            <View style={styles.bottomSheetBackdrop} />
+          </TouchableWithoutFeedback>
+          <View style={styles.bottomSheetContent}>
+            
+            {/* Drag Indicator */}
+            <View style={styles.dragIndicator} />
+
+            <View style={styles.modalHeader}>
+              <AppText style={styles.sheetTitleText}>{language === "te" ? "వాహనం ఎంచుకోండి" : "Select Vehicle"}</AppText>
             </View>
 
             <View style={styles.searchBar}>
+              <Ionicons name="search" size={20} color="#9CA3AF" style={{ marginRight: 8 }} />
               <TextInput
                 autoFocus
-                placeholder={language === "te" ? "ఇక్కడ రాయండి..." : "Type here..."}
+                placeholder={language === "te" ? "ఇక్కడ వెతకండి లేదా రాయండి..." : "Search or type here..."}
                 value={searchText}
                 cursorColor={'#16A34A'}
                 placeholderTextColor={'#9CA3AF'}
                 onChangeText={(text) => setSearchText(text)}
                 style={[styles.searchInput, { fontFamily: "Mandali", flex: 1, color: "#1F2937" }]}
               />
-              {searchText.trim().length > 0 && (
+              {searchText.trim().length > 0 ? (
                 <TouchableOpacity
                   onPress={() => {
                     setType(searchText);
@@ -438,41 +509,28 @@ export default function AddVehicle() {
                     setSearchText("");
                     setActiveInput(null);
                   }}
-                  style={{ backgroundColor: "#16A34A", borderRadius: 12, padding: 6, marginLeft: 6 }}
+                  style={{ backgroundColor: "#16A34A", borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, marginLeft: 6 }}
                 >
-                  <Ionicons name="add" size={20} color="#fff" />
+                  <AppText style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>
+                    {language === "te" ? "వాడు" : "Use"}
+                  </AppText>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => handleVoiceInput("modal")} style={{ padding: 6 }}>
+                  <MaterialCommunityIcons 
+                    name={isListening && activeInput === "modal" ? "microphone" : "microphone-outline"} 
+                    size={24} 
+                    color={isListening && activeInput === "modal" ? "#EF4444" : "#16A34A"} 
+                  />
                 </TouchableOpacity>
               )}
-              {/* 🎤 MODAL MIC */}
-              <TouchableOpacity onPress={() => handleVoiceInput("modal")} style={{ marginLeft: 10, padding: 6, borderRadius: 10, backgroundColor: "#E5E7EB" }}>
-                <MaterialCommunityIcons 
-                  name={isListening && activeInput === "modal" ? "microphone" : "microphone-outline"} 
-                  size={20} 
-                  color={isListening && activeInput === "modal" ? "#EF4444" : "#16A34A"} 
-                />
-              </TouchableOpacity>
             </View>
 
             <FlatList
               data={filteredVehicles}
               keyExtractor={(_, i) => i.toString()}
-              ListEmptyComponent={() =>
-                searchText.trim().length > 0 ? (
-                  <TouchableOpacity
-                    style={[styles.categoryItem, { alignItems: "center" }]}
-                    onPress={() => {
-                      setType(searchText);
-                      setModalType(null);
-                      setSearchText("");
-                      setActiveInput(null);
-                    }}
-                  >
-                    <AppText style={{ color: '#16A34A', fontWeight: '600' }}>
-                      {language === "te" ? `"${searchText}" ని చేర్చండి +` : `Add "${searchText}" +`}
-                    </AppText>
-                  </TouchableOpacity>
-                ) : null
-              }
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 30 }}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.categoryItem}
@@ -483,7 +541,11 @@ export default function AddVehicle() {
                     setActiveInput(null);
                   }}
                 >
-                  <AppText>{language === "te" ? item.te : item.en}</AppText>
+                  <View style={styles.categoryIconBox}>
+                    <MaterialCommunityIcons name="tractor-variant" size={20} color="#16A34A" />
+                  </View>
+                  <AppText style={styles.categoryItemText}>{language === "te" ? item.te : item.en}</AppText>
+                  <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
                 </TouchableOpacity>
               )}
             />
@@ -510,6 +572,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1D5DB"
   },
+  inputLocked: {
+    backgroundColor: "#F3F4F6", 
+    borderColor: "#E5E7EB",
+  },
   inputFocused: {
     borderColor: "#16A34A",
     backgroundColor: "#FFFFFF",
@@ -518,9 +584,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  inputError: {
-    borderColor: "#EF4444",
-  },
+  inputError: { borderColor: "#EF4444" },
   errorText: {
     color: "#EF4444",
     fontSize: 12,
@@ -529,47 +593,62 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginLeft: 4,
   },
-  micBtn: {
-    marginLeft: 10,
-    padding: 4,
-  },
-  inputWrapper: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center'
-  },
+  micBtn: { marginLeft: 10, padding: 4 },
+  inputWrapper: { flex: 1, marginLeft: 12, justifyContent: 'center' },
   input: {
     flex: 1,
     fontSize: 16,
     color: "#1F2937",
-    fontFamily: "Mandali",
     textAlignVertical: "center",
     includeFontPadding: false,
   },
   saveBtn: { marginTop: 20, borderRadius: 18, overflow: "hidden" },
   saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
   saveText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: "#fff", borderTopLeftRadius: 25, borderTopRightRadius: 25, height: "80%" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", padding: 20, alignItems: "center" },
-  modalTitleText: { fontSize: 18, fontWeight: "600" },
+
+  // 🔥 PREMIUM CENTER MODALS (Validation & Lock Info)
+  overlayCenter: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 999 },
+  premiumModalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 24, padding: 24, alignItems: "center", elevation: 10 },
+  iconBgWarning: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 12 },
+  modalTitleTextDark: { fontSize: 18, fontWeight: "600", color: '#111827', textAlign: "center" },
+  modalSubText: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8 },
+  modalBtnsRow: { flexDirection: "row", marginTop: 24, width: '100%' },
+  actionBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: "center", justifyContent: 'center' },
+
+  // 🔥 PREMIUM BOTTOM SHEET MODAL (Vehicle Type)
+  bottomSheetOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
+  bottomSheetBackdrop: { ...StyleSheet.absoluteFillObject },
+  bottomSheetContent: { 
+    backgroundColor: "#fff", 
+    borderTopLeftRadius: 28, 
+    borderTopRightRadius: 28, 
+    maxHeight: "85%",
+    paddingTop: 10
+  },
+  dragIndicator: { width: 40, height: 5, backgroundColor: "#D1D5DB", borderRadius: 3, alignSelf: "center", marginBottom: 10 },
+  modalHeader: { flexDirection: "row", justifyContent: "center", paddingVertical: 10, paddingHorizontal: 20 },
+  sheetTitleText: { fontSize: 18, fontWeight: "700", color: "#111827" },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F3F4F6",
-    margin: 20,
-    borderRadius: 18,
-    paddingHorizontal: 12,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    marginTop: 5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: "#E5E7EB"
   },
-  searchInput: { height: 50, fontSize: 16 },
-  categoryItem: { padding: 20, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  modalOverlayCenter: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center" },
-  alertBox: { width: "85%", backgroundColor: "#fff", borderRadius: 24, padding: 24, alignItems: "center" },
-  alertIconBg: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#FFFBEB", justifyContent: "center", alignItems: "center", marginBottom: 16 },
-  alertTitle: { fontSize: 20, fontWeight: "600" },
-  alertSub: { fontSize: 15, color: "#6B7280", textAlign: "center", marginTop: 8, marginBottom: 24 },
-  alertBtn: { width: "100%", backgroundColor: "#2E7D32", paddingVertical: 14, borderRadius: 14, alignItems: "center" },
-  alertBtnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  searchInput: { height: 50, fontSize: 15 },
+  categoryItem: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 16, 
+    paddingHorizontal: 20, 
+    borderBottomWidth: 1, 
+    borderBottomColor: "#F3F4F6" 
+  },
+  categoryIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginRight: 14 },
+  categoryItemText: { flex: 1, fontSize: 15, fontWeight: "500", color: "#374151" }
 });

@@ -180,7 +180,7 @@ export default function PaymentsScreen() {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder={language === "te" ? "మేస్త్రీని వెతకండి..." : "Search mestri..."}
+          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
           placeholderTextColor="#9CA3AF"
           cursorColor="#16A34A"
           selectionColor="#16A34A40"

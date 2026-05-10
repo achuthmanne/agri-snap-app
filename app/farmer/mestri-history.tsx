@@ -196,12 +196,6 @@ export default function MestriHistory() {
         language={language}
       />
 
-      <View style={styles.mestriBox}>
-        <AppText style={styles.mestriName}>
-          {name} {village ? ` | ${village}` : ""}
-        </AppText>
-      </View>
-
       {/* SUMMARY */}
       <View style={styles.summaryBox}>
         {/* TOTAL DAYS */}
@@ -487,8 +481,6 @@ const styles = StyleSheet.create({
   cropLeft: { flexDirection: "column", justifyContent: "center" },
   cropName: { fontSize: 20, fontWeight: "600", color: "#111827", includeFontPadding: false },
   cropDays: { fontSize: 12, color: "#6B7280", marginTop: 3 },
-  mestriBox: { marginHorizontal: 20, marginTop: 10, marginBottom: 6, alignItems: 'center' },
-  mestriName: { fontSize: 16, fontWeight: "600", color: "#111827", textAlign: "center" },
   summaryBox: { marginHorizontal: 20, marginTop: 10, paddingVertical: 14, flexDirection: "row", justifyContent: "space-around", alignItems: "center", backgroundColor: "#ffffff", borderRadius: 14, borderWidth: 1, borderColor: "#E5E7EB" },
   summaryItem: { alignItems: "center" },
   summaryLabel: { fontSize: 12, color: "#6B7280" },

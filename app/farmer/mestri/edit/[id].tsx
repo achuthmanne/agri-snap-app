@@ -1,6 +1,4 @@
-/// This is the edit screen for a Mestri. It loads the existing details, allows the user to edit them, and saves the updates back to Firestore.
-// It also includes validation to ensure required fields are filled, and shows a success message upon successful update.
-//app/farmer/mestri/edit//[id].tsx
+//app/farmer/mestri/edit/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -15,7 +13,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Modal
 } from "react-native";
 
 import AgriLoader from "@/components/AgriLoader";
@@ -24,7 +23,11 @@ import AppText from "@/components/AppText";
 
 export default function EditMestri() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  
+  // 🔥 GET hasRecords FROM PARAMS
+  const { id, hasRecords } = useLocalSearchParams();
+  const isLocked = hasRecords === "true"; // 🔥 Boolean గా మారుస్తున్నాం
+
   const [activeSession, setActiveSession] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,10 +37,15 @@ export default function EditMestri() {
   const [loaderType, setLoaderType] = useState<"loading" | "updating">("loading");
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ name?: string; phone?: string; village?: string }>({});
+  
+  // Modals state
   const [showWarning, setShowWarning] = useState(false);
+  const [showLockInfo, setShowLockInfo] = useState(false); // 🔥 కొత్త లాక్ ఇన్ఫో మోడల్
+
   const nameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
   const villageRef = useRef<TextInput>(null);
+  
   const t = {
     name: language === "te" ? "పేరు నమోదు చేయండి*" : "Enter name*",
     phone: language === "te" ? "ఫోన్ నంబర్ నమోదు చేయండి" : "Enter phone number",
@@ -49,7 +57,7 @@ export default function EditMestri() {
   useSpeechRecognitionEvent("result", (event) => {
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
-      if (activeInput === "name") setName(transcript);
+      if (activeInput === "name" && !isLocked) setName(transcript); // లాక్ ఉంటే వాయిస్ కూడా అప్లై అవ్వదు
       else if (activeInput === "village") setVillage(transcript);
     }
   });
@@ -57,6 +65,10 @@ export default function EditMestri() {
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
   const handleVoiceInput = async (target: string) => {
+    if (target === "name" && isLocked) {
+      setShowLockInfo(true);
+      return;
+    }
     setActiveInput(target);
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
@@ -84,22 +96,19 @@ export default function EditMestri() {
     loadSession();
   }, []);
 
-
   useEffect(() => {
     const loadLang = async () => {
       const lang = await AsyncStorage.getItem("APP_LANG");
-
       if (lang) setLanguage(lang as "te" | "en");
     };
-
     loadLang();
   }, []);
-  /* ---------------- LOAD DATA ---------------- */
 
+  /* ---------------- LOAD DATA ---------------- */
   useEffect(() => {
     const loadData = async () => {
       try {
-        setLoaderType("loading");   // 👈 loading type
+        setLoaderType("loading");
         setLoading(true);
 
         const userPhone = await AsyncStorage.getItem("USER_PHONE");
@@ -119,24 +128,20 @@ export default function EditMestri() {
           setPhone(data.phone || "");
           setVillage(data.village || "");
         }
-
       } finally {
         setLoading(false);
       }
     };
-
     loadData();
   }, []);
 
-
   useEffect(() => {
     return () => {
-      ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
+      ExpoSpeechRecognitionModule.stop();
     };
   }, []);
 
   /* ---------------- UPDATE ---------------- */
-
   const handleUpdate = async () => {
     const newErrors: { name?: string; phone?: string; village?: string } = {};
     if (!name.trim()) {
@@ -159,7 +164,7 @@ export default function EditMestri() {
     setErrors({});
 
     try {
-      setLoaderType("updating");  // 👈 updating type
+      setLoaderType("updating");
       setLoading(true);
 
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
@@ -173,16 +178,17 @@ export default function EditMestri() {
         Alert.alert("Error", "Session missing");
         return;
       }
+      
       await firestore()
         .collection("users")
         .doc(userPhone)
         .collection("mestris")
         .doc(id as string)
         .update({
-          name: name.trim(),
+          name: name.trim(), // లాక్ ఉన్నా కూడా పాత పేరే సేవ్ అవుతుంది, ఇబ్బంది లేదు
           phone: cleanPhone,
           village: village.trim(),
-          session: activeSession // 🔥 ensure correct session
+          session: activeSession 
         });
 
       setLoading(false);
@@ -193,8 +199,8 @@ export default function EditMestri() {
       console.log("Update error:", e);
     }
   };
-  /* ---------------- UI ---------------- */
 
+  /* ---------------- UI ---------------- */
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -207,45 +213,62 @@ export default function EditMestri() {
 
       <View style={styles.container}>
 
-        {/* NAME */}
+        {/* 🔥 NAME (LOCKED IF hasRecords === true) */}
         <TouchableOpacity
           style={[
             styles.inputBox,
-            activeInput === "name" && styles.inputFocused,
-            errors.name && styles.inputError
+            activeInput === "name" && !isLocked && styles.inputFocused,
+            errors.name && styles.inputError,
+            isLocked && styles.inputLocked // లాక్ ఐనప్పుడు గ్రే కలర్ కోసం
           ]}
           activeOpacity={1}
-          onPress={() => nameRef.current?.focus()}
+          onPress={() => {
+            if (isLocked) setShowLockInfo(true);
+            else nameRef.current?.focus();
+          }}
         >
-          <Ionicons name="person-outline" size={20} color={activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
+          {isLocked ? (
+             <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
+          ) : (
+             <Ionicons name="person-outline" size={20} color={activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
+          )}
 
           <TextInput
             ref={nameRef}
             placeholder={isListening && activeInput === "name" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.name}
             placeholderTextColor={isListening && activeInput === "name" ? "#EF4444" : "#9CA3AF"}
             value={name}
+            editable={!isLocked} // 🔥 THE MAIN LOCK
             onChangeText={(txt) => {
               setName(txt);
               if (errors.name) setErrors({ ...errors, name: undefined });
             }}
             cursorColor="#16A34A"
             selectionColor="#16A34A40"
-            style={styles.input}
+            style={[styles.input, isLocked && { color: "#6B7280" }]} // లాక్ అయితే కలర్ డిమ్ గా
             onFocus={() => setActiveInput("name")}
             onBlur={() => setActiveInput(null)}
             returnKeyType="next"
             onSubmitEditing={() => phoneRef.current?.focus()}
           />
+          
           <TouchableOpacity
-            onPress={() => handleVoiceInput("name")}
+            onPress={() => {
+              if (isLocked) setShowLockInfo(true);
+              else handleVoiceInput("name");
+            }}
             style={styles.micBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons
-              name={isListening && activeInput === "name" ? "mic" : "mic-outline"}
-              size={24}
-              color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")}
-            />
+            {isLocked ? (
+              <Ionicons name="information-circle-outline" size={24} color="#F59E0B" />
+            ) : (
+              <Ionicons
+                name={isListening && activeInput === "name" ? "mic" : "mic-outline"}
+                size={24}
+                color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")}
+              />
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
         {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
@@ -330,7 +353,8 @@ export default function EditMestri() {
         <TouchableOpacity
           style={styles.saveBtn}
           onPress={handleUpdate}
-          disabled={loading} >
+          disabled={loading} 
+        >
           <LinearGradient
             colors={["#2E7D32", "#1B5E20"]}
             style={styles.saveGradient}
@@ -347,49 +371,42 @@ export default function EditMestri() {
         type={loaderType}
         language={language}
       />
-      {showWarning && (
+
+      {/* 🔥 LOCK INFO MODAL */}
+      <Modal visible={showLockInfo} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
-
           <View style={styles.modalBox}>
-
-            <View style={styles.iconBg}>
-              <Ionicons name="warning" size={36} color="#1B5E20" />
+            <View style={[styles.iconBg, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="lock-closed" size={36} color="#F59E0B" />
             </View>
-
             <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "లోపం" : "Error"}
+              {language === "te" ? "పేరు మార్చలేరు" : "Name Locked"}
             </AppText>
-
-            <AppText style={styles.modalSub} language={language}>
+            <AppText style={[styles.modalSub, { lineHeight: 22 }]} language={language}>
               {language === "te"
-                ? "దయచేసి * గుర్తు వివరాలు నమోదు చేయండి"
-                : "Please enter all required* fields to continue"}
+                ? "ఈ మేస్త్రీకి ఇప్పటికే హాజరు లేదా చెల్లింపుల రికార్డ్స్ ఉన్నందున మీరు పేరును సవరించలేరు. కేవలం ఫోన్ నంబర్ మరియు గ్రామం మార్చుకోవచ్చు."
+                : "Since this mestri already has attendance or payment records, you cannot change the name. You can only update the phone number and village."}
             </AppText>
-
-            <TouchableOpacity
-              style={styles.okBtn}
-              onPress={() => setShowWarning(false)}
+            <TouchableOpacity activeOpacity={0.8}
+              style={[styles.okBtn, { backgroundColor: '#F59E0B' }]}
+              onPress={() => setShowLockInfo(false)}
             >
               <AppText style={styles.okText} language={language}>
-                {language === "te" ? "సరే" : "Okay"}
+                {language === "te" ? "అర్థమైంది" : "Got It"}
               </AppText>
             </TouchableOpacity>
-
           </View>
-
         </View>
-      )}
+      </Modal>
+
     </SafeAreaView>
   );
 }
 
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-
   container: { padding: 20 },
-
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -401,7 +418,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1D5DB"
   },
-
+  // 🔥 NEW STYLE FOR LOCKED INPUT
+  inputLocked: {
+    backgroundColor: "#F3F4F6", // Slight gray
+    borderColor: "#E5E7EB",
+  },
   input: {
     flex: 1,
     marginLeft: 10,
@@ -411,7 +432,6 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     includeFontPadding: false,
   },
-
   inputFocused: {
     borderColor: "#16A34A",
     backgroundColor: "#FFFFFF",
@@ -420,11 +440,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-
-  inputError: {
-    borderColor: "#EF4444",
-  },
-
+  inputError: { borderColor: "#EF4444" },
   errorText: {
     color: "#EF4444",
     fontSize: 12,
@@ -433,80 +449,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginLeft: 5,
   },
-
-  micBtn: {
-    marginLeft: 10,
-    padding: 4,
-  },
-  saveBtn: {
-    marginTop: 25,
-    borderRadius: 18,
-    overflow: "hidden"
-  },
-
-  saveGradient: {
-    height: 52,
-    justifyContent: "center",
-    alignItems: "center"
-  },
-
-  saveText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600"
-  },
+  micBtn: { marginLeft: 10, padding: 4 },
+  saveBtn: { marginTop: 25, borderRadius: 18, overflow: "hidden" },
+  saveGradient: { height: 52, justifyContent: "center", alignItems: "center" },
+  saveText: { color: "white", fontSize: 15, fontWeight: "600" },
   overlay: {
     position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
+    top: 0, bottom: 0, left: 0, right: 0,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 999
   },
-
-  modalBox: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    alignItems: "center"
-  },
-
-  iconBg: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#E8F5E9",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10
-  },
-
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "600"
-  },
-
-  modalSub: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 6
-  },
-
-  okBtn: {
-    marginTop: 20,
-    backgroundColor: "#1B5E20",
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    borderRadius: 12
-  },
-
-  okText: {
-    color: "white",
-    fontWeight: "600"
-  }
+  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center" },
+  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#E8F5E9", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  modalTitle: { fontSize: 16, fontWeight: "600" },
+  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 6 },
+  okBtn: { marginTop: 20, backgroundColor: "#1B5E20", paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
+  okText: { color: "white", fontWeight: "600" }
 });

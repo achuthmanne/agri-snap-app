@@ -1,4 +1,3 @@
-//vechile farmer
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -7,13 +6,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Modal,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
-  Modal
+  View
 } from "react-native";
 
 import AgriLoader from "@/components/AgriLoader";
@@ -23,18 +22,17 @@ import AppText from "@/components/AppText";
 // URL params లో arrays వస్తే string లా మార్చడానికి చిన్న హెల్పర్
 const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
 
-export default function AddWork() {
+export default function AddOwner() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  
-  const vehicleId = getStr(params.vehicleId);
+
   const editId = getStr(params.editId);
   const hasRecords = getStr(params.hasRecords);
-  
+
   // 🔥 LOCK LOGIC
   const isLocked = hasRecords === "true";
 
-  // 🔥 INSTANT DATA LOAD FROM PARAMS (No delay!)
+  // 🔥 INSTANT DATA LOAD FROM PARAMS
   const [name, setName] = useState(getStr(params.name));
   const [phone, setPhone] = useState(getStr(params.phone));
   const [village, setVillage] = useState(getStr(params.village));
@@ -55,12 +53,12 @@ export default function AddWork() {
 
   const placeholders = {
     en: {
-      name: "Full Name*",
+      name: "Owner Name*",
       phone: "Phone Number*",
       village: "Village Name*"
     },
     te: {
-      name: "రైతు పూర్తి పేరు*",
+      name: "యజమాని పూర్తి పేరు*",
       phone: "ఫోన్ నంబర్*",
       village: "గ్రామం పేరు*"
     }
@@ -91,7 +89,6 @@ export default function AddWork() {
       setShowLockInfo(true);
       return;
     }
-
     setActiveInput(target);
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
@@ -121,7 +118,7 @@ export default function AddWork() {
 
   useEffect(() => {
     return () => {
-      ExpoSpeechRecognitionModule.stop(); 
+      ExpoSpeechRecognitionModule.stop();
     };
   }, []);
 
@@ -135,7 +132,7 @@ export default function AddWork() {
 
     // 🔥 INLINE VALIDATION LOGIC
     const newErrors: any = {};
-    if (!cleanName) newErrors.name = language === "te" ? "రైతు పేరు నమోదు చేయండి*" : "Enter farmer name*";
+    if (!cleanName) newErrors.name = language === "te" ? "యజమాని పేరు నమోదు చేయండి*" : "Enter owner name*";
     
     if (!cleanPhone) {
       newErrors.phone = language === "te" ? "ఫోన్ నంబర్ నమోదు చేయండి*" : "Enter phone number*";
@@ -153,6 +150,7 @@ export default function AddWork() {
 
     try {
       setLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
       if (!userPhone || !activeSession) {
@@ -160,22 +158,21 @@ export default function AddWork() {
         return;
       }
 
+      // 🔥 సేవింగ్ టు owners కలెక్షన్
       const ref = firestore()
         .collection("users")
         .doc(userPhone)
-        .collection("vehicles")
-        .doc(vehicleId)
-        .collection("farmers");
+        .collection("owners");
 
       if (editId) {
         await ref.doc(editId).update({
-          farmerName: cleanName,
+          ownerName: cleanName,
           phone: cleanPhone,
           village: cleanVillage
         });
       } else {
         await ref.add({
-          farmerName: cleanName,
+          ownerName: cleanName,
           phone: cleanPhone,
           village: cleanVillage,
           session: activeSession, 
@@ -202,13 +199,13 @@ export default function AddWork() {
       <AppHeader
         title={
           editId
-            ? (language === "te" ? "రైతు వివరాలు మార్చండి" : "Edit Farmer")
-            : (language === "te" ? "రైతు వివరాలు" : "Add Farmer")
+            ? (language === "te" ? "యజమాని వివరాలు మార్చండి" : "Edit Owner")
+            : (language === "te" ? "యజమాని వివరాలు" : "Add Owner")
         }
         subtitle={
           editId
             ? (language === "te" ? "సవరించండి" : "Update Details")
-            : (language === "te" ? "రైతు నమోదు చేయండి" : "Add Farmer Details")
+            : (language === "te" ? "యజమానిని నమోదు చేయండి" : "Add Owner Details")
         }
         language={language}
       />
@@ -369,8 +366,8 @@ export default function AddWork() {
           >
             <AppText style={styles.saveText}>
               {editId
-                ? (language === "te" ? "సవరించండి" : "Update Farmer")
-                : (language === "te" ? "భద్రపరచండి" : "Save Farmer")}
+                ? (language === "te" ? "సవరించండి" : "Update Owner")
+                : (language === "te" ? "భద్రపరచండి" : "Save Owner")}
             </AppText>
           </LinearGradient>
         </TouchableOpacity>
@@ -391,8 +388,8 @@ export default function AddWork() {
             </AppText>
             <AppText style={[styles.modalSub, { lineHeight: 22 }]} language={language}>
               {language === "te"
-                ? "ఈ రైతుకి సంబంధించిన పని వివరాలు ఇప్పటికే రికార్డ్ అయినందున మీరు పేరును సవరించలేరు. కేవలం ఫోన్ నంబర్ మరియు గ్రామం మార్చుకోవచ్చు."
-                : "Since this farmer has existing work records, you cannot change the name. You can only update the phone number and village."}
+                ? "ఈ యజమానికి సంబంధించిన పని వివరాలు ఇప్పటికే రికార్డ్ అయినందున మీరు పేరును సవరించలేరు. కేవలం ఫోన్ నంబర్ మరియు గ్రామం మార్చుకోవచ్చు."
+                : "Since this owner has existing work records, you cannot change the name. You can only update the phone number and village."}
             </AppText>
             <TouchableOpacity activeOpacity={0.8}
               style={[styles.okBtn, { backgroundColor: '#F59E0B' }]}
@@ -500,7 +497,7 @@ const styles = StyleSheet.create({
   },
   modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center" },
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#E8F5E9", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  modalTitle: { fontSize: 16, fontWeight: "600" },
+  modalTitle: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 6 },
   okBtn: { marginTop: 20, backgroundColor: "#1B5E20", paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
   okText: { color: "white", fontWeight: "600" }

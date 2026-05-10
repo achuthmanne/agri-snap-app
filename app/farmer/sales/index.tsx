@@ -2,7 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన కొత్త కాంపోనెంట్ ఇంపోర్ట్
+import AppEmptyState from "@/components/AppEmptyState";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -17,9 +17,9 @@ import {
   StatusBar,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View
 } from "react-native";
+import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; // 🔥 PREMIUM MENU
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
 export default function SalesScreen() {
@@ -34,7 +34,6 @@ export default function SalesScreen() {
   const [cropQty, setCropQty] = useState<any>({});
   const [cropIncome, setCropIncome] = useState<any>({});
 
-  const [menuVisible, setMenuVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
 
@@ -152,6 +151,23 @@ export default function SalesScreen() {
     return colors[code % colors.length];
   };
 
+  // 🔥 MODERN MENU OPTIONS STYLE
+  const optionsStyles = {
+    optionsContainer: {
+      borderRadius: 14,
+      paddingVertical: 5,
+      paddingHorizontal: 0,
+      width: 150,
+      backgroundColor: "#fff",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+      marginTop: 25, 
+    }
+  };
+
   /* ---------------- UI ---------------- */
 
   return (
@@ -172,9 +188,10 @@ export default function SalesScreen() {
           flexGrow: 1 
         }}
         
-        // 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT
         ListEmptyComponent={
-          loading ? null : ( 
+          loading ? (
+            <EmptyShimmer />
+          ) : ( 
             <AppEmptyState
               iconName="cash-outline"
               title={language === "te" ? "అమ్మకాలు లేవు" : "No Sales Yet"}
@@ -268,74 +285,58 @@ export default function SalesScreen() {
                 <AppText style={styles.income}>
                   + ₹{item.total?.toLocaleString("en-IN")}
                 </AppText>
-                <TouchableOpacity
-                  activeOpacity={0.6}
-                  onPress={() => {
-                    setSelectedItem(item);
-                    setMenuVisible(true);
-                  }}
-                  style={styles.menuBtn}
-                >
-                  <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
-                </TouchableOpacity>
+                
+                {/* 🔥 NEW PREMIUM MENU */}
+                <Menu>
+                  <MenuTrigger style={styles.menuBtn}>
+                    <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
+                  </MenuTrigger>
+
+                  <MenuOptions customStyles={optionsStyles}>
+                    {/* 🔥 INSTANT DATA PASSING */}
+                    <MenuOption onSelect={() => {
+                      router.push({ 
+                        pathname: "/farmer/sales/add-sale", 
+                        params: { 
+                          editId: item.id,
+                          crop: item.crop || "",
+                          unit: item.unit || "",
+                          qty: item.quantity?.toString() || "",
+                          rate: item.rate?.toString() || ""
+                        } 
+                      });
+                    }}>
+                      <View style={styles.modernMenuItem}>
+                        <Ionicons name="create-outline" size={18} color="#2563EB" />
+                        <AppText style={styles.menuTextEdit} language={language}>
+                          {language === "te" ? "సవరించు" : "Edit"}
+                        </AppText>
+                      </View>
+                    </MenuOption>
+                    
+                    <View style={styles.menuDivider} />
+
+                    <MenuOption onSelect={() => {
+                      setSelectedItem(item);
+                      setDeleteVisible(true);
+                    }}>
+                      <View style={styles.modernMenuItem}>
+                        <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                        <AppText style={styles.menuTextDelete} language={language}>
+                          {language === "te" ? "తొలగించు" : "Delete"}
+                        </AppText>
+                      </View>
+                    </MenuOption>
+                  </MenuOptions>
+                </Menu>
+
               </View>
             </View>
           );
         }}
       />
 
-      {/* MENU */}
-      <Modal 
-        visible={menuVisible} 
-        transparent 
-        animationType="none"
-        onRequestClose={() => { setMenuVisible(false); setSelectedItem(null); }}
-      >
-        <TouchableWithoutFeedback onPress={() => { setMenuVisible(false); setSelectedItem(null); }}>
-          <View style={styles.modalOverlay}>
-            {selectedItem ? (
-              <View style={styles.menuContent}>
-                <AppText style={styles.menuHeader}>
-                  {selectedItem.crop}
-                </AppText>
-                  
-                <TouchableOpacity 
-                  style={styles.menuItem} 
-                  onPress={() => {
-                    const id = selectedItem.id;
-                    setMenuVisible(false);
-                    setSelectedItem(null);
-                    router.push({ 
-                      pathname: "/farmer/sales/add-sale", 
-                      params: { editId: id } 
-                    });
-                  }}
-                >
-                  <Ionicons name="pencil-outline" size={20} color="#3B82F6" />
-                  <AppText style={styles.menuText}>
-                    {language === "te" ? "సవరించండి" : "Edit Record"}
-                  </AppText>
-                </TouchableOpacity>
-      
-                <TouchableOpacity 
-                  style={[styles.menuItem, { borderBottomWidth: 0 }]} 
-                  onPress={() => {
-                    setMenuVisible(false);
-                    setDeleteVisible(true);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                  <AppText style={[styles.menuText, { color: '#EF4444' }]}>
-                    {language === "te" ? "తొలగించండి" : "Delete Record"}
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* DELETE MODAL */}
+      {/* 🔥 PREMIUM DELETE MODAL */}
       <Modal visible={deleteVisible} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.deleteBox}>
@@ -343,7 +344,7 @@ export default function SalesScreen() {
               <Ionicons name="trash-outline" size={32} color="#DC2626" />
             </View>
             <AppText style={styles.deleteTitle} language={language}>
-              {language === "te" ? "తొలగించాలా?" : "Delete Expense?"}
+              {language === "te" ? "తొలగించాలా?" : "Delete Sale?"}
             </AppText>
             <AppText style={styles.deleteSub} language={language}>
               {language === "te"
@@ -374,6 +375,7 @@ export default function SalesScreen() {
                       .delete();
                   }
                   setDeleteVisible(false);
+                  setSelectedItem(null);
                 }}
               >
                 <Ionicons name="trash-outline" size={16} color="#fff" />
@@ -416,29 +418,65 @@ const styles = StyleSheet.create({
     borderRadius: 20
   },
   
-  modalOverlay: {
+  // NEW MENU STYLES
+  menuBtn: {
+    padding: 6,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6"   
+  },
+  modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
+  menuTextEdit: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
+  menuTextDelete: { fontSize: 14, color: "#EF4444", fontWeight: "500" },
+  menuDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 10 },
+
+  // DELETE MODAL
+  overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center"
+  },
+  deleteBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center"
+  },
+  iconBg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  deleteTitle: { fontSize: 18, fontWeight: "600", marginTop: 12, color: '#111827' },
+  deleteSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20
   },
   deleteBtns: {
     flexDirection: "row",
     marginTop: 20,
-    gap: 10
+    gap: 12
   },
   cancelBtn: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center"
   },
   cancelText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151"
+    color: "#475569"
   },
   deleteBtn: {
     flex: 1,
@@ -455,80 +493,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff"
   },
-  menuContent: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E5E7EB"
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "center",
-    alignItems: "center"
-  },
-  deleteBox: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 20,
-    alignItems: "center"
-  },
-  iconBg: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#FEE2E2",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10
-  },
-  deleteTitle: {
-    fontSize: 16,
-    fontWeight: "600"
-  },
-  deleteSub: {
-    fontSize: 13,
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 6
-  },
-  menuHeader: { fontSize: 14, fontWeight: '600', color: '#64748b', marginBottom: 15, textAlign: 'center' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  menuText: { marginLeft: 12, fontSize: 16, fontWeight: '600', color: '#1e293b' },
 
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
   statLabel: { color: "#bbf7d0", fontSize: 12 },
   statValue: { color: "#fff", fontSize: 28, fontWeight: "600" },
-  qtyText: { color: "#86efac", fontSize: 12, marginTop: 4 },
-
-  cropChipBox: {
-    backgroundColor: "#fff",
-    padding: 14,
-    borderRadius: 16,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    minWidth: 110
-  },
-
+  
   cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   chipText: {
     color: "#E5E7EB",
     fontSize: 12
   },
-  chipSubText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: 2
-  },
-  cropChipTitle: { fontWeight: "600" },
-  cropQty: { fontSize: 16, fontWeight: "600" },
-  cropIncome: { color: "#16A34A", marginTop: 4 },
   categorySummary: {
     marginTop: 10,
     marginBottom: 6
@@ -542,11 +517,6 @@ const styles = StyleSheet.create({
     color: "#16A34A",
     fontWeight: "600",
     fontSize: 14
-  },
-  menuBtn: {
-    padding: 6,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6"   
   },
   sectionTitle: {
     fontSize: 18,
@@ -603,17 +573,13 @@ const styles = StyleSheet.create({
   cardCrop: { fontSize: 16, fontWeight: "600" },
   cardCat: { fontSize: 12, color: "#6B7280" },
   
-  menuBox: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 12
-  },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
   addGradient: {
     width: 60,
     height: 60,
     borderRadius: 30,
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    elevation: 5
   }
 });

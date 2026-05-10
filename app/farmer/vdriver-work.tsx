@@ -1,6 +1,6 @@
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -192,12 +192,23 @@ export default function DriverHistory() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      {/* 🔥 CLEAR HEADER */}
       <AppHeader
         title={language === "te" ? "పనుల చరిత్ర" : "Work History"}
         subtitle={language === "te" ? "ఖాతా వివరాలు" : "Account Details"}
-        language={language}
+                language={language}
       />
+
+      {/* 🔥 INFO BOX (ONLY SHOWS IF THERE IS DATA) */}
+      {!loading && data.length > 0 && (
+        <View style={styles.infoBanner}>
+          <Ionicons name="information-circle" size={20} color="#0284C7" />
+          <AppText style={styles.infoText} language={language}>
+            {language === "te" 
+              ? "గమనిక: పనికి సంబంధించిన చెల్లింపు పూర్తయిన తర్వాత దాన్ని లాక్ చేయండి. లాక్ చేసిన తర్వాత రికార్డును తొలగించడం కుదరదు." 
+              : "Note: Mark as paid once the payment is completed. Locked records cannot be deleted."}
+          </AppText>
+        </View>
+      )}
  
       {loading ? (
         <View style={{ paddingTop: 10 }}>
@@ -211,11 +222,9 @@ export default function DriverHistory() {
           keyExtractor={(item: any) => item.work} 
           contentContainerStyle={[
             { padding: 16, paddingBottom: 120 },
-            // 🔥 డేటా లేనప్పుడు సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
             grouped.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
 
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="clipboard-outline"
@@ -256,9 +265,10 @@ export default function DriverHistory() {
                 {/* EXPAND */}
                 {isOpen && item.list.map((work: any) => {
                   const amount = Number(work.finalAmount?.toString().replace(/,/g, "") || 0);
+                  const isPaid = work.paymentStatus === "paid"; // 🔥 Check if Paid
 
                   return (
-                    <View key={work.id} style={[styles.workCard, work.paymentStatus === "paid" && { opacity: 0.6, borderColor: "#16A34A" }]}>
+                    <View key={work.id} style={[styles.workCard]}>
 
                       {/* TOP */}
                       <View style={[styles.rowBetween, { justifyContent:'center'}]}>
@@ -267,28 +277,27 @@ export default function DriverHistory() {
 
                       {/* PAYMENT STATUS */}
                       <View style={styles.statusRow}>
-                        <AppText style={[styles.statusText, { color: work.paymentStatus === "paid" ? "#16A34A" : "#DC2626" }]}>
-                          {work.paymentStatus === "paid"
+                        <AppText style={[styles.statusText, { color: isPaid ? "#16A34A" : "#DC2626" }]}>
+                          {isPaid
                             ? (language === "te" ? "చెల్లింపు పూర్తైంది" : "Payment Done")
                             : (language === "te" ? "చెల్లింపు పెండింగ్" : "Payment Pending")}
                         </AppText>
                         <TouchableOpacity
-                          activeOpacity={work.paymentStatus === "paid" ? 1 : 0.8}
-                          disabled={work.paymentStatus === "paid"}
-                          style={[styles.toggle, { backgroundColor: work.paymentStatus === "paid" ? "#16A34A" : "#DC2626", opacity: work.paymentStatus === "paid" ? 0.6 : 1 }]}
+                          activeOpacity={isPaid ? 1 : 0.8}
+                          disabled={isPaid}
+                          style={[styles.toggle, { backgroundColor: isPaid ? "#16A34A" : "#DC2626", opacity: isPaid ? 0.6 : 1 }]}
                           onPress={() => {
-                            if (work.paymentStatus === "paid") return;
+                            if (isPaid) return;
                             setStatusId(work.id);
                             setNewStatus("paid");
                           }}
                         >
-                          <View style={[styles.toggleCircle, { alignSelf: work.paymentStatus === "paid" ? "flex-end" : "flex-start" }]} />
+                          <View style={[styles.toggleCircle, { alignSelf: isPaid ? "flex-end" : "flex-start" }]} />
                         </TouchableOpacity>
                       </View>
 
                       {/* DETAILS */}
                       <View style={styles.detailsGrid}>
-                        {/* PAYABLE */}
                         <View style={styles.detailItem}>
                           <View style={styles.leftPart}>
                             <Ionicons name="cash-outline" size={14} color="#6B7280" />
@@ -297,7 +306,6 @@ export default function DriverHistory() {
                           <AppText style={styles.value}>₹ {Number(work.payableAmount || 0).toLocaleString("en-IN")}</AppText>
                         </View>
 
-                        {/* ADVANCE */}
                         <View style={styles.detailItem}>
                           <View style={styles.leftPart}>
                             <Ionicons name="wallet-outline" size={14} color="#6B7280" />
@@ -309,10 +317,17 @@ export default function DriverHistory() {
 
                       {/* FINAL + DELETE */}
                       <View style={styles.bottomRow}>
-                        <AppText style={styles.finalAmount}>₹ {amount.toLocaleString("en-IN")}</AppText>
-                        <TouchableOpacity activeOpacity={0.7} style={styles.deleteBtn} onPress={() => setDeleteId(work.id)}>
-                          <Ionicons name="trash" size={16} color="#DC2626" />
-                        </TouchableOpacity>
+                        <AppText style={[styles.finalAmount, isPaid && {color: "#16A34A"}]}>₹ {amount.toLocaleString("en-IN")}</AppText>
+                        
+                        {isPaid ? (
+                          <View style={[styles.deleteBtn, { backgroundColor: '#DCFCE7' }]}>
+                             <Ionicons name="lock-closed" size={16} color="#16A34A" />
+                          </View>
+                        ) : (
+                          <TouchableOpacity activeOpacity={0.7} style={styles.deleteBtn} onPress={() => setDeleteId(work.id)}>
+                            <Ionicons name="trash" size={16} color="#DC2626" />
+                          </TouchableOpacity>
+                        )}
                       </View>
 
                       {/* NOTES */}
@@ -403,8 +418,28 @@ export default function DriverHistory() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
+  
+  infoBanner: {
+    flexDirection: "row",
+    backgroundColor: "#DBEAFE", 
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#BFDBFE"
+  },
+  infoText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: "#1E3A8A",
+    lineHeight: 22,
+    fontFamily: "Mandali"
+  },
 
-  cropCard: { backgroundColor: "#fff", borderRadius: 16, marginBottom: 12, overflow: "hidden", borderWidth: 1, borderColor: "#E5E7EB" },
+  cropCard: { backgroundColor: "#fff", borderRadius: 16, marginBottom: 12, overflow: "hidden", borderWidth: 1, borderColor: "#E5E7EB", marginHorizontal: 4 },
   cropHeader: { flexDirection: "row", justifyContent: "space-between", padding: 16, backgroundColor: "#F9FAFB" },
   cropTitle: { fontSize: 20, fontWeight: "600", color: "#111827" },
   cropCount: { fontSize: 15, color: "#6B7280", marginTop: 2 },
@@ -414,13 +449,12 @@ const styles = StyleSheet.create({
   value: { fontSize: 12, fontWeight: "600", color: "#111827", textAlign: "right" },
   detailsGrid: { marginTop: 10, gap: 8 },
   bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
-  finalAmount: { fontSize: 17, fontWeight: "bold", color: "#16A34A" },
+  finalAmount: { fontSize: 17, fontWeight: "bold", color: "#111827" },
   deleteBtn: { backgroundColor: "#FEE2E2", padding: 8, borderRadius: 10 },
   notesBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
   notesText: { fontSize: 12, color: "#374151", flex: 1, lineHeight: 18 },
   workCard: { padding: 14, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between" },
-  workTitle: { fontSize: 14, fontWeight: "600" },
   date: { fontSize: 12, color: "#6B7280" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
   addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },

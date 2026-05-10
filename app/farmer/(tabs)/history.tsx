@@ -119,6 +119,7 @@ export default function PaymentHistory() {
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [isListening, setIsListening] = useState(false);
   const isScreenFocused = useIsFocused();
+const [activeSession, setActiveSession] = useState("");
 
   useSpeechRecognitionEvent("result", (event) => {
     // 🔥 FIX: only current screen lo unna appude work avvali
@@ -172,14 +173,28 @@ export default function PaymentHistory() {
 
   /* ---------- LOAD DATA ---------- */
   const loadData = async () => {
-    const phone = await AsyncStorage.getItem("USER_PHONE");
-    if (!phone) return;
+    const userPhone = await AsyncStorage.getItem("USER_PHONE");
 
+    if (!userPhone) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    const userDoc = await firestore()
+      .collection("users")
+      .doc(userPhone)
+      .get();
+ const session = userDoc.data()?.activeSession;
 
+    if (!session) {
+      setLoading(false);
+      return;
+    }
+
+    setActiveSession(session);
     try {
       const db = firestore();
-      const userDoc = await db.collection("users").doc(phone).get();
+      const userDoc = await db.collection("users").doc(userPhone).get();
       const activeSession = userDoc.data()?.activeSession;
 
       if (!activeSession) return;
@@ -187,7 +202,7 @@ export default function PaymentHistory() {
       /* 🔥 1. GET PAYMENTS ONLY */
       const paymentSnap = await db
         .collection("users")
-        .doc(phone)
+        .doc(userPhone)
         .collection("payments")
         .where("session", "==", activeSession) 
         .get();
@@ -221,7 +236,7 @@ export default function PaymentHistory() {
       const promises = Object.keys(map).map(async (key) => {
         const attendanceSnap = await db
           .collection("users")
-          .doc(phone)
+          .doc(userPhone)
           .collection("mestris")
           .doc(key)
           .collection("attendance")
@@ -283,7 +298,7 @@ export default function PaymentHistory() {
 
       <AppHeader
         title={language === "te" ? "చెల్లింపు చరిత్ర" : "Payment History"}
-        subtitle={language === "te" ? "స్థితి & పురోగతి" : "Status & Progress"}
+        subtitle={language === "te" ? `సీజన్: ${activeSession}` : `Season: ${activeSession}`}
         language={language}
       />
 
@@ -295,7 +310,7 @@ export default function PaymentHistory() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search mestri..."}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
             placeholderTextColor="#9CA3AF"
             cursorColor="#16A34A"
             selectionColor="#16A34A40"

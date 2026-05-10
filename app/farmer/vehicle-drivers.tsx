@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Modal,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -19,19 +20,34 @@ import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 
+// URL params లో arrays వస్తే string లా మార్చడానికి చిన్న హెల్పర్
+const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
+
 export default function AddWork() {
   const router = useRouter();
-  const { vehicleId, editId } = useLocalSearchParams();
+  const params = useLocalSearchParams();
 
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [village, setVillage] = useState("");
+  const vehicleId = getStr(params.vehicleId);
+  const editId = getStr(params.editId);
+  const hasRecords = getStr(params.hasRecords);
 
+  // 🔥 LOCK LOGIC
+  const isLocked = hasRecords === "true";
+
+  // 🔥 INSTANT DATA LOAD FROM PARAMS (No delay!)
+  const [name, setName] = useState(getStr(params.name));
+  const [phone, setPhone] = useState(getStr(params.phone));
+  const [village, setVillage] = useState(getStr(params.village));
+
+  const [activeSession, setActiveSession] = useState("");
   const [activeInput, setActiveInput] = useState<string | null>(null);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({}); // 🔥 Inline Errors State
+  const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   const [loading, setLoading] = useState(false);
 
   const [language, setLanguage] = useState<"te" | "en">("te");
+  
+  // 🔥 Lock Info Modal State
+  const [showLockInfo, setShowLockInfo] = useState(false);
 
   const nameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
@@ -56,7 +72,7 @@ export default function AddWork() {
   useSpeechRecognitionEvent("result", (event) => {
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
-      if (activeInput === "name") {
+      if (activeInput === "name" && !isLocked) {
         setName(transcript);
         if (errors.name) setErrors({ ...errors, name: "" });
       }
@@ -70,6 +86,10 @@ export default function AddWork() {
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
   const handleVoiceInput = async (target: string) => {
+    if (target === "name" && isLocked) {
+      setShowLockInfo(true);
+      return;
+    }
     setActiveInput(target);
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
@@ -85,47 +105,22 @@ export default function AddWork() {
     AsyncStorage.getItem("APP_LANG").then((l) => {
       if (l) setLanguage(l as any);
     });
+
+    // 🔥 సేవ్ చేయడానికి Session కావాలి కాబట్టి ఇది మాత్రం లోడ్ చేస్తున్నాం
+    const fetchSession = async () => {
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) return;
+      const doc = await firestore().collection("users").doc(userPhone).get();
+      setActiveSession(doc.data()?.activeSession || "");
+    };
+    fetchSession();
   }, []);
 
   useEffect(() => {
-    const loadEditData = async () => {
-      if (!editId) return;
-
-      const userPhone = await AsyncStorage.getItem("USER_PHONE");
-      if (!userPhone) return;
-
-      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
-      const eId = Array.isArray(editId) ? editId[0] : editId;
-
-      const doc = await firestore()
-        .collection("users")
-        .doc(userPhone)
-        .collection("vehicles")
-        .doc(vId as string)
-        .collection("drivers")
-        .doc(eId as string)
-        .get();
-
-      const data = doc.data();
-
-      // 🔥 SESSION SECURITY CHECK
-      const userDoc = await firestore().collection("users").doc(userPhone).get();
-      const activeSession = userDoc.data()?.activeSession;
-
-      if (data?.session && data.session !== activeSession) {
-        console.log("Wrong session blocked");
-        return;
-      }
-
-      if (data) {
-        setName(data.driverName || "");
-        setPhone(data.phone || "");
-        setVillage(data.village || "");
-      }
+    return () => {
+      ExpoSpeechRecognitionModule.stop();
     };
-
-    loadEditData();
-  }, [editId]);
+  }, []);
 
   /* ---------------- SAVE ---------------- */
   const handleSave = async () => {
@@ -158,18 +153,7 @@ export default function AddWork() {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
-      if (!userPhone || !vehicleId) {
-        setLoading(false);
-        return;
-      }
-
-      const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
-      const eId = editId ? (Array.isArray(editId) ? editId[0] : editId) : null;
-
-      const userDoc = await firestore().collection("users").doc(userPhone).get();
-      const activeSession = userDoc.data()?.activeSession;
-
-      if (!activeSession) {
+      if (!userPhone || !vehicleId || !activeSession) {
         setLoading(false);
         return;
       }
@@ -178,12 +162,12 @@ export default function AddWork() {
         .collection("users")
         .doc(userPhone)
         .collection("vehicles")
-        .doc(vId)
+        .doc(vehicleId)
         .collection("drivers");
 
-      if (eId) {
-        await ref.doc(eId).update({
-          driverName: cleanName,
+      if (editId) {
+        await ref.doc(editId).update({
+          driverName: cleanName, // లాక్ ఉన్నా పాత పేరే వెళ్తుంది
           phone: cleanPhone,
           village: cleanVillage
         });
@@ -229,17 +213,26 @@ export default function AddWork() {
 
       <View style={styles.container}>
 
-        {/* 👤 NAME */}
+        {/* 👤 NAME (LOCKED IF hasRecords === true) */}
         <TouchableOpacity
-          style={[styles.inputBox, activeInput === "name" && styles.inputFocused, errors.name && styles.inputError]}
+          style={[
+            styles.inputBox, 
+            activeInput === "name" && !isLocked && styles.inputFocused, 
+            errors.name && styles.inputError,
+            isLocked && styles.inputLocked // 🔥 లాక్ అయితే గ్రే కలర్
+          ]}
           activeOpacity={1}
-          onPress={() => { setActiveInput("name"); nameRef.current?.focus(); }}
+          onPress={() => {
+            if (isLocked) setShowLockInfo(true);
+            else { setActiveInput("name"); nameRef.current?.focus(); }
+          }}
         >
-          <Ionicons 
-            name="person-outline" 
-            size={20} 
-            color={name || activeInput === "name" ? "#16A34A" : "#9CA3AF"} 
-          />
+          {isLocked ? (
+             <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
+          ) : (
+             <Ionicons name="person-outline" size={20} color={name || activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
+          )}
+          
           <View style={styles.inputWrapper}>
             {!name && activeInput !== "name" && (
               <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>{t.name}</AppText>
@@ -247,25 +240,36 @@ export default function AddWork() {
             <TextInput
               ref={nameRef}
               value={name}
+              editable={!isLocked} // 🔥 THE MAIN LOCK
               onChangeText={(txt) => {
                 setName(txt);
                 if (errors.name) setErrors({ ...errors, name: "" });
               }}
               cursorColor="#16A34A"
               selectionColor="#16A34A40"
-              style={[styles.input, { display: (name || activeInput === "name") ? "flex" : "none" }]}
+              style={[styles.input, { display: (name || activeInput === "name") ? "flex" : "none" }, isLocked && { color: "#6B7280" }]}
               onFocus={() => setActiveInput("name")}
               onBlur={() => setActiveInput(null)}
               returnKeyType="next"
               onSubmitEditing={() => phoneRef.current?.focus()}
             />
           </View>
-          <TouchableOpacity onPress={() => handleVoiceInput("name")} style={styles.micBtn}>
-            <MaterialCommunityIcons 
-              name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
-              size={24} 
-              color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
-            />
+          <TouchableOpacity 
+            onPress={() => {
+              if (isLocked) setShowLockInfo(true);
+              else handleVoiceInput("name");
+            }} 
+            style={styles.micBtn}
+          >
+            {isLocked ? (
+              <Ionicons name="information-circle-outline" size={24} color="#F59E0B" />
+            ) : (
+              <MaterialCommunityIcons 
+                name={isListening && activeInput === "name" ? "microphone" : "microphone-outline"} 
+                size={24} 
+                color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")} 
+              />
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
         {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
@@ -367,7 +371,34 @@ export default function AddWork() {
 
       </View>
 
-      <AgriLoader visible={loading} type="saving" language={language} />
+      <AgriLoader visible={loading} type={editId ? "updating" : "saving"} language={language} />
+
+      {/* 🔥 LOCK INFO MODAL */}
+      <Modal visible={showLockInfo} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.overlay}>
+          <View style={styles.modalBox}>
+            <View style={[styles.iconBg, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="lock-closed" size={36} color="#F59E0B" />
+            </View>
+            <AppText style={styles.modalTitle} language={language}>
+              {language === "te" ? "పేరు మార్చలేరు" : "Name Locked"}
+            </AppText>
+            <AppText style={[styles.modalSub, { lineHeight: 22 }]} language={language}>
+              {language === "te"
+                ? "ఈ డ్రైవర్ కి సంబంధించిన పని వివరాలు ఇప్పటికే రికార్డ్ అయినందున మీరు పేరును సవరించలేరు. కేవలం ఫోన్ నంబర్ మరియు గ్రామం మార్చుకోవచ్చు."
+                : "Since this driver has existing work records, you cannot change the name. You can only update the phone number and village."}
+            </AppText>
+            <TouchableOpacity
+              style={[styles.okBtn, { backgroundColor: '#F59E0B' }]}
+              onPress={() => setShowLockInfo(false)}
+            >
+              <AppText style={styles.okText} language={language}>
+                {language === "te" ? "అర్థమైంది" : "Got It"}
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -382,7 +413,6 @@ const styles = StyleSheet.create({
   container: {
     padding: 20
   },
-
   // 🔥 STANDARD PATTERN INPUT STYLES
   inputBox: {
     flexDirection: "row",
@@ -394,6 +424,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#D1D5DB"
+  },
+  inputLocked: {
+    backgroundColor: "#F3F4F6", 
+    borderColor: "#E5E7EB",
   },
   inputFocused: {
     borderColor: "#16A34A",
@@ -431,7 +465,6 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     includeFontPadding: false,
   },
-  
   // ORIGINAL BUTTON STYLES
   saveBtn: {
     marginTop: 10,
@@ -452,5 +485,19 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600"
-  }
+  },
+  overlay: {
+    position: "absolute",
+    top: 0, bottom: 0, left: 0, right: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 999
+  },
+  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center" },
+  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#E8F5E9", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  modalTitle: { fontSize: 16, fontWeight: "600", textAlign: "center" },
+  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8 },
+  okBtn: { marginTop: 20, backgroundColor: "#1B5E20", paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
+  okText: { color: "white", fontWeight: "600" }
 });

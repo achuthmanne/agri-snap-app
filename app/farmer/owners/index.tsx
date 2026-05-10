@@ -1,5 +1,4 @@
-//vechile details
-import AppEmptyState from "@/components/AppEmptyState";
+import AppEmptyState from "@/components/AppEmptyState"; 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -7,7 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -25,13 +24,9 @@ import {
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
-export default function VehicleDetails() {
+export default function OwnersList() {
 
   const router = useRouter();
-  const { id, name, number, type } = useLocalSearchParams();
-
-  const vehicleNumber = Array.isArray(number) ? number[0] : number;
-  const vehicleType = Array.isArray(type) ? type[0] : type;
 
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,12 +40,12 @@ export default function VehicleDetails() {
   const [isListening, setIsListening] = useState(false);
   const isScreenFocused = useIsFocused();
 
-  // 🔥 NEW STATES FOR LOGIC
+  // 🔥 LOCK LOGIC & MODERN UI STATES
   const [actionLoading, setActionLoading] = useState(false);
   const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
 
   useSpeechRecognitionEvent("result", (event) => {
-    if (!isScreenFocused) return;
+    if (!isScreenFocused || !isListening) return;
     if (event.results && event.results.length > 0) {
       setSearch(event.results[0].transcript);
     }
@@ -61,7 +56,6 @@ export default function VehicleDetails() {
   const handleVoiceSearch = async () => {
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
-  
     setIsListening(true);
     ExpoSpeechRecognitionModule.start({
       lang: language === "te" ? "te-IN" : "en-US",
@@ -70,29 +64,26 @@ export default function VehicleDetails() {
   };
 
   useEffect(() => {
-    return () => {
-      ExpoSpeechRecognitionModule.stop();
-    };
+    return () => { ExpoSpeechRecognitionModule.stop(); };
   }, []);
 
-  /* ---------------- LOAD ---------------- */
+  useEffect(() => {
+    AsyncStorage.getItem("APP_LANG").then(l => { if (l) setLanguage(l as any); });
+  }, []);
 
+  /* ---------------- LOAD DATA ---------------- */
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
 
-      const load = async () => {
+      const loadData = async () => {
         try {
           const phone = await AsyncStorage.getItem("USER_PHONE");
           if (!phone) return;
 
           setLoading(true);
 
-          const userDoc = await firestore()
-            .collection("users")
-            .doc(phone)
-            .get();
-
+          const userDoc = await firestore().collection("users").doc(phone).get();
           const session = userDoc.data()?.activeSession;
 
           if (!session) {
@@ -101,14 +92,13 @@ export default function VehicleDetails() {
             return;
           }
           
-          setActiveSession(session); // స్టేట్ లో స్టోర్ చేసాం
+          setActiveSession(session);
 
+          // 🔥 Fetching "owners" instead of drivers
           unsub = firestore()
             .collection("users")
             .doc(phone)
-            .collection("vehicles")
-            .doc(id as string)
-            .collection("farmers")
+            .collection("owners")
             .where("session", "==", session)
             .onSnapshot(
               (snap) => {
@@ -145,91 +135,79 @@ export default function VehicleDetails() {
         }
       };
 
-      load();
+      loadData();
 
-      return () => {
-        if (unsub) unsub();
-      };
-    }, [id])
+      return () => { if (unsub) unsub(); };
+    }, [])
   );
 
-  /* ---------------- FILTER ---------------- */
+  /* ---------------- FILTER & COLORS ---------------- */
   const filtered = data.filter(item =>
-    item.farmerName?.toLowerCase().includes(search.toLowerCase())
+    item.ownerName?.toLowerCase().includes(search.toLowerCase())
   );
 
-  /* ---------------- COLORS ---------------- */
   const colors = ["#22C55E","#3B82F6","#F59E0B","#EF4444","#8B5CF6"];
+  const getColor = (id: string) => colors[id.charCodeAt(0) % colors.length];
 
-  const getColor = (id: string) => {
-    return colors[id.charCodeAt(0) % colors.length];
-  };
-
-  /* ---------------- CALL ---------------- */
   const handleCall = (phone: string) => {
     if (!phone) return;
     Linking.openURL(`tel:${phone}`);
   };
 
-  // 🔥 CORE LOGIC: Check if Farmer has Work Records
-  const checkHasRecords = async (farmerId: string) => {
+  // 🔥 CORE LOGIC: CHECK FOR ENTRIES TO LOCK EDIT/DELETE
+  const checkHasRecords = async (ownerId: string) => {
     try {
       const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone || !activeSession || !id) return false;
+      if (!phone || !activeSession) return false;
 
-      // చెక్ వర్క్స్ కల్లెక్షన్
-      const workSnap = await firestore()
+      // చెక్ వర్క్స్ ఎంట్రీస్
+      const entriesSnap = await firestore()
         .collection("users").doc(phone)
-        .collection("vehicles").doc(id as string)
-        .collection("works").doc(farmerId)
+        .collection("owners").doc(ownerId)
         .collection("entries")
         .where("session", "==", activeSession)
-        .limit(1) // ఒక్కటి ఉన్నా చాలు
+        .limit(1)
         .get();
 
-      return !workSnap.empty;
+      return !entriesSnap.empty; 
     } catch (error) {
       console.log("Error checking records", error);
-      return true; // సేఫ్టీ కోసం
+      return true; 
     }
   };
 
-  // 🔥 Edit Action
   const handleEditClick = async (item: any) => {
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
     setActionLoading(false);
 
     router.push({
-      pathname: "/farmer/vehicle-farmers",
+      pathname: "/farmer/owners/add-owner",
       params: {
-        vehicleId: id,
         editId: item.id,
-        name: item.farmerName,
+        name: item.ownerName,
         phone: item.phone,
         village: item.village,
-        hasRecords: hasRecords ? "true" : "false" // 🔥 Flag పంపుతున్నాం
+        hasRecords: hasRecords ? "true" : "false" 
       }
     });
   };
 
-  // 🔥 Delete Action
   const handleDeleteClick = async (item: any) => {
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
     setActionLoading(false);
 
     if (hasRecords) {
-      setShowCannotDeleteModal(true); // రికార్డ్స్ ఉంటే వార్నింగ్
+      setShowCannotDeleteModal(true); 
     } else {
       setDeleteItem(item);
-      setShowDeleteModal(true); // లేకపోతే డిలీట్
+      setShowDeleteModal(true); 
     }
   };
 
   const confirmDelete = async () => {
     if (!deleteItem) return;
-
     const phone = await AsyncStorage.getItem("USER_PHONE");
     if (!phone) return;
 
@@ -240,36 +218,24 @@ export default function VehicleDetails() {
       await firestore()
         .collection("users")
         .doc(phone)
-        .collection("vehicles")
-        .doc(id as string)
-        .collection("farmers")
+        .collection("owners")
         .doc(deleteItem.id)
         .delete();
     } catch (e) {
-      console.log(e);
+      console.log("Delete Error:", e);
     }
-
     setDeleteItem(null);
   };
 
-  // 🔥 MODERN MENU STYLES
+  // MODERN MENU STYLES
   const optionsStyles = {
     optionsContainer: {
-      borderRadius: 14,
-      paddingVertical: 5,
-      paddingHorizontal: 0,
-      width: 150,
-      backgroundColor: "#fff",
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 12,
-      elevation: 8,
-      marginTop: 25, 
+      borderRadius: 14, paddingVertical: 5, paddingHorizontal: 0, width: 150,
+      backgroundColor: "#fff", shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15, shadowRadius: 12, elevation: 8, marginTop: 25, 
     }
   };
 
-  /* ---------------- SHIMMER ---------------- */
   const ShimmerRow = () => (
     <View style={styles.row}>
       <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 42, height: 42, borderRadius: 21 }} />
@@ -284,7 +250,6 @@ export default function VehicleDetails() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      {/* ACTION LOADING OVERLAY */}
       {actionLoading && (
         <View style={styles.actionLoadingOverlay}>
           <ActivityIndicator size="large" color="#16A34A" />
@@ -292,23 +257,18 @@ export default function VehicleDetails() {
       )}
 
       <AppHeader
-        title={language === "te" ? "రైతుల జాబితా" : "Farmers List"}
-        subtitle={
-          vehicleNumber && vehicleNumber.trim() !== ""
-            ? `${name || vehicleType} | ${vehicleNumber}` 
-            : `${name || vehicleType || (language === "te" ? "వాహన వివరాలు" : "Vehicle Details")}`
-        }
+        title={language === "te" ? "వాహన యజమానులు" : "Vehicle Owners"}
+        subtitle={language === "te" ? "మీ పొలంలో పని చేసిన వారు" : "Owners who worked in your field"}
         language={language}
       />
 
-      {/* SEARCH BAR */}
       {(!loading && data.length === 0) ? null : (
         <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
           <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder={language === "te" ? "రైతును వెతకండి..." : "Search farmer..."}
+            placeholder={language === "te" ? "యజమాని పేరు వెతకండి..." : "Search owner..."}
             placeholderTextColor="#9CA3AF"
             cursorColor="#16A34A"
             selectionColor="#16A34A40"
@@ -332,34 +292,31 @@ export default function VehicleDetails() {
         </View>
       )}
 
-      {/* LIST */}
       {loading ? (
         <View style={{ paddingTop: 10 }}>
-          <ShimmerRow />
-          <ShimmerRow />
-          <ShimmerRow />
+          <ShimmerRow /><ShimmerRow /><ShimmerRow />
         </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="handled" 
           contentContainerStyle={[
             { padding: 20, paddingBottom: 100 },
             filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
           ListEmptyComponent={
             <AppEmptyState
-              iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
+              iconName={search.trim().length > 0 ? "search-outline" : "tractor"}
               title={
                 search.trim().length > 0
-                  ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "రైతులు లేరు" : "No Farmers Added")
+                  ? language === "te" ? "ఏమి దొరకలేదు" : "Not Found"
+                  : language === "te" ? "యజమానులు లేరు" : "No Owners Added"
               }
               subtitle={
                 search.trim().length > 0
-                  ? (language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search")
-                  : (language === "te" ? "+ బటన్ నొక్కి రైతులను చేర్చండి" : "Tap + button to add farmers")
+                  ? language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search"
+                  : language === "te" ? "+ బటన్ నొక్కి వాహన యజమానిని చేర్చండి" : "Tap + button to add owners"
               }
               language={language}
             />
@@ -369,17 +326,15 @@ export default function VehicleDetails() {
 
             return (
               <View style={styles.row}>
-                {/* LEFT */}
                 <TouchableOpacity
                   style={styles.left}
                   activeOpacity={0.8}
                   onPress={() => {
                     router.push({
-                      pathname: "/farmer/vfarmer-work",
+                      pathname: "/farmer/owners/owner-work", // 🔥 Next screen for entering works
                       params: {
-                        vehicleId: id,
-                        farmerId: item.id,
-                        name: item.farmerName,
+                        ownerId: item.id,
+                        name: item.ownerName,
                         phone: item.phone,
                         village: item.village
                       }
@@ -387,19 +342,16 @@ export default function VehicleDetails() {
                   }}
                 >
                   <View style={[styles.avatar, { backgroundColor: color }]}>
-                    <AppText style={styles.avatarText}>
-                      {item.farmerName?.charAt(0)?.toUpperCase()}
-                    </AppText>
+                    <AppText style={styles.avatarText}>{item.ownerName?.charAt(0)?.toUpperCase()}</AppText>
                   </View>
 
                   <View style={styles.details}>
-                    <AppText style={styles.name}>{item.farmerName}</AppText>
+                    <AppText style={styles.name}>{item.ownerName}</AppText>
                     <AppText style={styles.phone}>+91 - {item.phone || "----"}</AppText>
                     <AppText style={styles.sub}>{item.village || "----"}</AppText>
                   </View>
                 </TouchableOpacity>
 
-                {/* RIGHT */}
                 <View style={styles.right}>
                   <TouchableOpacity style={styles.callBtn} onPress={() => handleCall(item.phone)}>
                     <Ionicons name="call" size={16} color="#16A34A" />
@@ -409,25 +361,18 @@ export default function VehicleDetails() {
                     <MenuTrigger style={{ padding: 5 }}>
                       <Ionicons name="ellipsis-vertical" size={20} color="#6B7280" />
                     </MenuTrigger>
-
                     <MenuOptions customStyles={optionsStyles}>
                       <MenuOption onSelect={() => handleEditClick(item)}>
                         <View style={styles.modernMenuItem}>
                           <Ionicons name="create-outline" size={18} color="#2563EB" />
-                          <AppText style={styles.menuTextEdit} language={language}>
-                            {language === "te" ? "మార్చు" : "Edit"}
-                          </AppText>
+                          <AppText style={styles.menuTextEdit} language={language}>{language === "te" ? "మార్చు" : "Edit"}</AppText>
                         </View>
                       </MenuOption>
-                      
                       <View style={styles.menuDivider} />
-
                       <MenuOption onSelect={() => handleDeleteClick(item)}>
                         <View style={styles.modernMenuItem}>
                           <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                          <AppText style={styles.menuTextDelete} language={language}>
-                            {language === "te" ? "తొలగించు" : "Delete"}
-                          </AppText>
+                          <AppText style={styles.menuTextDelete} language={language}>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
                         </View>
                       </MenuOption>
                     </MenuOptions>
@@ -439,71 +384,50 @@ export default function VehicleDetails() {
         />
       )}
 
-      {/* ADD BUTTON */}
       <TouchableOpacity activeOpacity={0.8}
         style={styles.addBtn}
-        onPress={() =>
-          router.push({
-            pathname: "/farmer/vehicle-farmers",
-            params: { vehicleId: id }
-          })
-        }
+        onPress={() => router.push("/farmer/owners/add-owner")}
       >
         <LinearGradient colors={["#16A34A","#166534"]} style={styles.addGradient}>
            <Ionicons name="add" size={30} color="#fff" />
          </LinearGradient>
       </TouchableOpacity>
 
-      {/* 🔴 STANDARD DELETE MODAL */}
       <Modal visible={showDeleteModal} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
             <View style={styles.iconBgWarning}>
               <Ionicons name="trash-outline" size={36} color="#DC2626" />
             </View>
-            <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "తొలగించాలా?" : "Delete Entry?"}
-            </AppText>
-            <AppText style={styles.modalSub} language={language}>
-              {language === "te" ? "ఈ వివరాన్ని తొలగించాలా?" : "Are you sure you want to delete this record?"}
-            </AppText>
+            <AppText style={styles.modalTitle} language={language}>{language === "te" ? "తొలగించాలా?" : "Delete Entry?"}</AppText>
+            <AppText style={styles.modalSub} language={language}>{language === "te" ? "ఈ యజమానిని పూర్తిగా తొలగించాలా?" : "Are you sure you want to delete this record?"}</AppText>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDeleteModal(false)}>
                 <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
-                <AppText style={{ color: "#fff", fontWeight: '600' }}>
-                  {language === "te" ? "తొలగించు" : "Delete"}
-                </AppText>
+                <AppText style={{ color: "#fff", fontWeight: '600' }}>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 🔒 CANNOT DELETE WARNING MODAL */}
       <Modal visible={showCannotDeleteModal} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
             <View style={[styles.iconBgWarning, { backgroundColor: '#FEF3C7' }]}>
               <Ionicons name="lock-closed" size={36} color="#F59E0B" />
             </View>
-            <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "తొలగించడం కుదరదు" : "Cannot Delete"}
-            </AppText>
+            <AppText style={styles.modalTitle} language={language}>{language === "te" ? "తొలగించడం కుదరదు" : "Cannot Delete"}</AppText>
             <AppText style={[styles.modalSub, { lineHeight: 22 }]} language={language}>
               {language === "te"
-                ? "ఈ రైతుకి సంబంధించి పని వివరాలు ఇప్పటికే రికార్డ్ అయ్యాయి. కావున వారిని తొలగించడం కుదరదు."
-                : "This farmer has existing work records. Therefore, they cannot be deleted."}
+                ? "ఈ యజమానికి సంబంధించి పనుల వివరాలు ఇప్పటికే రికార్డ్ అయ్యాయి. కావున వీరిని తొలగించడం కుదరదు."
+                : "This owner has existing work records. Therefore, they cannot be deleted."}
             </AppText>
             <View style={styles.modalBtns}>
-              <TouchableOpacity activeOpacity={0.8}
-                style={[styles.cancelBtn, { flex: 1, backgroundColor: '#F59E0B' }]} 
-                onPress={() => setShowCannotDeleteModal(false)}
-              >
-                <AppText style={{ color: 'white', fontWeight: '600' }} language={language}>
-                  {language === "te" ? "అర్థమైంది" : "Got It"}
-                </AppText>
+              <TouchableOpacity activeOpacity={0.8} style={[styles.cancelBtn, { flex: 1, backgroundColor: '#F59E0B' }]} onPress={() => setShowCannotDeleteModal(false)}>
+                <AppText style={{ color: 'white', fontWeight: '600' }} language={language}>{language === "te" ? "అర్థమైంది" : "Got It"}</AppText>
               </TouchableOpacity>
             </View>
           </View>
@@ -513,8 +437,6 @@ export default function VehicleDetails() {
     </SafeAreaView>
   );
 }
-
-/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
@@ -533,14 +455,10 @@ const styles = StyleSheet.create({
   callBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#ECFDF5", justifyContent: "center", alignItems: "center" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
   addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset:{width:0, height:2}, shadowOpacity:0.2, shadowRadius:4 },
-  
-  // MENU STYLES
   modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
   menuTextEdit: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
   menuTextDelete: { fontSize: 14, color: "#EF4444", fontWeight: "500" },
   menuDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 10 },
-
-  // MODAL STYLES
   overlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 999 },
   actionLoadingOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(255,255,255,0.7)", justifyContent: "center", alignItems: "center", zIndex: 1000 },
   modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center", elevation: 10 },

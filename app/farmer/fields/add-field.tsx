@@ -1,4 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+// app/farmer/fields/add-field.tsx
+
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,9 +17,22 @@ import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 
+// URL params helper
+const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
+
 export default function AddField() {
   const router = useRouter();
-  const { editId } = useLocalSearchParams(); 
+  const params = useLocalSearchParams(); 
+
+  const editId = getStr(params.editId);
+
+  // 🔥 INSTANT DATA LOAD FROM PARAMS
+  const [crop, setCrop] = useState(getStr(params.crop));
+  const [soilType, setSoilType] = useState(getStr(params.soilType));
+  const [acres, setAcres] = useState(getStr(params.acres));
+  const [type, setType] = useState<"own" | "rent" | null>(getStr(params.type) as "own" | "rent" | null);
+  const [rent, setRent] = useState(getStr(params.rent) !== "0" ? getStr(params.rent) : "");
+
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [loading, setLoading] = useState(false);
   
@@ -25,12 +40,6 @@ export default function AddField() {
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   
-  // Form States
-  const [crop, setCrop] = useState("");
-  const [acres, setAcres] = useState("");
-  const [type, setType] = useState<"own" | "rent" | null>(null);
-  const [rent, setRent] = useState("");
-  const [soilType, setSoilType] = useState(""); 
   const [modalType, setModalType] = useState<"crop" | "soil" | null>(null); 
   const [searchText, setSearchText] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -118,38 +127,7 @@ export default function AddField() {
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
-    
-    if (editId) {
-      loadFieldData();
-    }
-  }, [editId]);
-
-  const loadFieldData = async () => {
-    const phone = await AsyncStorage.getItem("USER_PHONE");
-    if (!phone || !editId || typeof editId !== 'string') return;
-    
-    setLoading(true);
-    try {
-      const doc = await firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("fields")
-        .doc(editId)
-        .get();
-
-      if (doc.data()) { 
-        const data = doc.data();
-        setCrop(data?.crop || "");
-        setSoilType(data?.soilType || ""); 
-        setAcres(String(data?.acres || ""));
-        setType(data?.type || null);
-        setRent(String(data?.rent || ""));
-      }
-    } catch (error) {
-      console.log("Error loading field:", error);
-    }
-    setLoading(false);
-  };
+  }, []);
 
   const handleSave = async () => {
     if (loading) return;
@@ -172,7 +150,10 @@ export default function AddField() {
 
     try {
       const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
+      if (!phone) {
+        setLoading(false);
+        return;
+      }
 
       const userDoc = await firestore().collection("users").doc(phone).get();
       const activeSession = userDoc.data()?.activeSession;
@@ -276,7 +257,7 @@ export default function AddField() {
               {crop || (language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop*")}
             </AppText>
           </View>
-          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
         </TouchableOpacity>
         {errors.crop && <AppText style={styles.errorText} language={language}>{errors.crop}</AppText>}
 
@@ -292,17 +273,17 @@ export default function AddField() {
               {soilType || (language === "te" ? "నేల రకాన్ని ఎంచుకోండి*" : "Select Soil Type*")}
             </AppText>
           </View>
-          <Ionicons name="chevron-down" size={16} color="#9CA3AF" />
+          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
         </TouchableOpacity>
         {errors.soilType && <AppText style={styles.errorText} language={language}>{errors.soilType}</AppText>}
 
-        {/* 📏 ACRES BOX (🔥 Fixed Focus Bug) */}
+        {/* 📏 ACRES BOX */}
         <TouchableOpacity
           style={[styles.inputBox, activeInput === "acres" && styles.inputFocused, errors.acres && styles.inputError]}
           activeOpacity={1}
           onPress={() => {
             setActiveInput("acres");
-            setTimeout(() => acresRef.current?.focus(), 50); // Delay ensures display: flex applies first
+            setTimeout(() => acresRef.current?.focus(), 50); 
           }}
         >
           <Ionicons name="resize-outline" size={20} color={acres ? "#16A34A" : "#9CA3AF"} />
@@ -352,7 +333,7 @@ export default function AddField() {
         </View>
         {errors.type && <AppText style={[styles.errorText, {marginTop: -10, marginBottom: 16}]} language={language}>{errors.type}</AppText>}
 
-        {/* 💰 RENT BOX (🔥 Fixed Focus Bug) */}
+        {/* 💰 RENT BOX */}
         {type === "rent" && (
           <View>
             <TouchableOpacity
@@ -392,9 +373,9 @@ export default function AddField() {
           </View>
         )}
 
-        {/* 💾 SAVE BUTTON */}
+        {/* 💾 SAVE BUTTON (🔥 REPLACED WITH STANDARD PREM BUTTON) */}
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.8}>
-          <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveInner}>
+          <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
             <AppText style={styles.saveText}>
               {editId 
                 ? (language === "te" ? "వివరాలు మార్చండి" : "Update Details") 
@@ -404,8 +385,8 @@ export default function AddField() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* OTHER MODALS */}
-      <AgriLoader visible={loading} type="saving" language={language} />
+      {/* 🟢 LOADER (🔥 Corrected Type) */}
+      <AgriLoader visible={loading} type={editId ? "updating" : "saving"} language={language} />
       
       {/* 🔥 MODAL WRAPPER */}
       <Modal visible={modalType !== null} transparent animationType="slide" onRequestClose={() => setModalType(null)}>
@@ -482,24 +463,29 @@ export default function AddField() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F8FAFC" },
+  safe: { flex: 1, backgroundColor: "#F6F7F6" },
   container: { padding: 20 },
   label: { fontSize: 14, color: "#6B7280", marginBottom: 6, marginLeft: 4, fontWeight: '500', fontFamily: 'Mandali' },
   
-  // 🔥 STANDARD PATTERN INPUT STYLES
+  // 🔥 STANDARD PATTERN INPUT STYLES (Grey Bg, Thin Border, Green Focus)
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
     paddingHorizontal: 15,
-    height: 58,
+    height: 55,
     marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: "#E5E7EB" 
+    borderWidth: 1,
+    borderColor: "#D1D5DB" 
   },
   inputFocused: { 
     borderColor: "#16A34A",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   inputError: {
     borderColor: "#EF4444",
@@ -534,16 +520,16 @@ const styles = StyleSheet.create({
 
   row: { flexDirection: "row", gap: 12, marginBottom: 20 },
   pill: {
-    flex: 1, padding: 15, borderRadius: 16, backgroundColor: "#fff", 
-    alignItems: "center", borderWidth: 1.5, borderColor: "#E5E7EB"
+    flex: 1, padding: 15, borderRadius: 12, backgroundColor: "#F9FAFB", 
+    alignItems: "center", borderWidth: 1, borderColor: "#D1D5DB"
   },
-  activePill: { backgroundColor: "#098034", borderColor: "#03762d" },
+  activePill: { backgroundColor: "#16A34A", borderColor: "#16A34A" },
   pillText: { fontSize: 16, fontWeight: "600", fontFamily: "Mandali" },
 
-  // 🔥 Save Button Styles
-  saveBtn: { marginTop: 10, borderRadius: 18, overflow: "hidden", elevation: 4, shadowColor: "#16A34A", shadowOpacity: 0.3, shadowRadius: 5 },
-  saveInner: { height: 60, justifyContent: "center", alignItems: "center" },
-  saveText: { color: "#fff", fontSize: 16, fontWeight: "500", fontFamily: "Mandali" },
+  // 🔥 STANDARD SAVE BUTTON
+  saveBtn: { marginTop: 10, borderRadius: 18, overflow: "hidden", elevation: 6, shadowColor: "#1B5E20", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 8 },
+  saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
+  saveText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalContent: { backgroundColor: "#fff", height: "70%", borderTopLeftRadius: 25, borderTopRightRadius: 25 },

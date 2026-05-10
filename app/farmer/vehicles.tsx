@@ -1,13 +1,15 @@
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   SafeAreaView,
@@ -17,6 +19,7 @@ import {
   TouchableWithoutFeedback,
   View
 } from "react-native";
+import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; // 🔥 NEW PREMIUM MENU
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
 export default function VehiclesScreen() {
@@ -28,11 +31,13 @@ export default function VehiclesScreen() {
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
 
-  const [menuVisible, setMenuVisible] = useState(false);
+  // 🔥 NEW STATES FOR PREMIUM UI & LOCK LOGIC
   const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [typeModalVisible, setTypeModalVisible] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
 
   /* ---------------- LOAD ---------------- */
 
@@ -42,71 +47,66 @@ export default function VehiclesScreen() {
     });
   }, []);
 
-  useEffect(() => {
-    let unsubscribe: any;
+  useFocusEffect(
+    useCallback(() => {
+      let unsubscribe: any;
 
-    const load = async () => {
+      const load = async () => {
+        setLoading(true);
 
-      setLoading(true); // 🔥 MOVE HERE FIRST
-
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) {
-        setLoading(false);
-        return;
-      }
-
-      const userDoc = await firestore()
-        .collection("users")
-        .doc(phone)
-        .get();
-
-      const activeSession = userDoc.data()?.activeSession;
-
-      if (!activeSession) {
-        setLoading(false);
-        return;
-      }
-
-      unsubscribe = firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("vehicles")
-        .where("session", "==", activeSession) // 🔥 ADD THIS
-        .where("createdAt", "!=", null)  
-        .orderBy("createdAt", "desc") // 🔥 keep this after where
-        .onSnapshot((snap) => {
-
-        if (!snap || !snap.docs) {
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (!phone) {
           setLoading(false);
           return;
         }
 
-        const list: any[] = [];
-        const group: any = {};
+        const userDoc = await firestore().collection("users").doc(phone).get();
+        const activeSession = userDoc.data()?.activeSession;
 
-        snap.forEach(doc => {
-          const d: any = doc.data();
+        if (!activeSession) {
+          setLoading(false);
+          return;
+        }
 
-          if (!d) return; // 🔥 extra safety
+        unsubscribe = firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("vehicles")
+          .where("session", "==", activeSession)
+          .where("createdAt", "!=", null)  
+          .orderBy("createdAt", "desc")
+          .onSnapshot((snap) => {
 
-          list.push({ id: doc.id, ...d });
+          if (!snap || !snap.docs) {
+            setLoading(false);
+            return;
+          }
 
-          const type = d.type || "Others";
+          const list: any[] = [];
+          const group: any = {};
 
-          if (!group[type]) group[type] = [];
-          group[type].push({ id: doc.id, ...d });
+          snap.forEach(doc => {
+            const d: any = doc.data();
+            if (!d) return; 
+
+            list.push({ id: doc.id, ...d });
+
+            const type = d.type || "Others";
+            if (!group[type]) group[type] = [];
+            group[type].push({ id: doc.id, ...d });
+          });
+
+          setData(list);
+          setGrouped(group);
+          setLoading(false);
         });
+      };
 
-        setData(list);
-        setGrouped(group);
-        setLoading(false);
-      });
-    };
+      load();
+      return () => unsubscribe && unsubscribe();
 
-    load();
-    return () => unsubscribe && unsubscribe();
-
-  }, []);
+    }, [])
+  );
 
   /* ---------------- COLOR ---------------- */
   const typeColors: any = {
@@ -123,74 +123,29 @@ export default function VehiclesScreen() {
 
   const getColor = (type: string) => {
     const label = type?.toLowerCase() || "";
-
-    // 🚜 TRACTOR (ట్రాక్టర్)
     if (label.includes("tractor") || label.includes("ట్రాక్టర్")) return typeColors.tractor;
-    
-    // 🏗️ JCB (జెసిబి)
     if (label.includes("jcb") || label.includes("backhoe") || label.includes("జెసిబి")) return typeColors.jcb;
-    
-    // 🌾 HARVESTER (హార్వెస్టర్)
     if (label.includes("harvester") || label.includes("హార్వెస్టర్")) return typeColors.harvester;
-    
-    // ⚙️ TILLER (టిల్లర్)
     if (label.includes("tiller") || label.includes("టిల్లర్")) return typeColors.tiller;
-    
-    // 🐂 BULLOCK CART (ఎద్దుల బండి)
     if (label.includes("bullock") || label.includes("బండి") || label.includes("ఎద్దుల")) return typeColors.bullock;
-    
-    // 🚛 TRUCK/TRAILER (లారీ/టిప్పర్/ట్రైలర్)
     if (label.includes("truck") || label.includes("tipper") || label.includes("trailer") || 
         label.includes("లారీ") || label.includes("టిప్పర్") || label.includes("ట్రైలర్")) return typeColors.truck;
-    
-    // 🛺 AUTO (ఆటో)
     if (label.includes("auto") || label.includes("ఆటో")) return typeColors.auto;
-    
-    // 🛻 PICKUP/BOLERO (పికప్/బొలెరో)
     if (label.includes("pickup") || label.includes("bolero") || label.includes("పికప్") || label.includes("బొలెరో")) return typeColors.pickup;
-    
-    // 🐘 TATA ACE (ఏస్)
     if (label.includes("ace") || label.includes("ఏస్") || label.includes("ఏనుగు")) return typeColors.ace;
-
-    return "#520b33"; // Default Grey if nothing matches
+    return "#520b33"; 
   };
 
   /* ---------------- SHIMMER ---------------- */
   const VehicleShimmer = () => (
     <View style={styles.shimmerCard}>
-      {/* LEFT BAR */}
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
-        style={styles.shimmerBar}
-      />
-      {/* CONTENT */}
+      <ShimmerPlaceholder LinearGradient={LinearGradient} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={styles.shimmerBar} />
       <View style={styles.shimmerContent}>
-        {/* TITLE */}
-        <ShimmerPlaceholder
-          LinearGradient={LinearGradient}
-          shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
-          style={styles.shimmerTitle}
-        />
-        {/* SUB */}
-        <ShimmerPlaceholder
-          LinearGradient={LinearGradient}
-          shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
-          style={styles.shimmerSub}
-        />
-        {/* NUMBER PLATE */}
-        <ShimmerPlaceholder
-          LinearGradient={LinearGradient}
-          shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
-          style={styles.shimmerPlate}
-        />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={styles.shimmerTitle} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={styles.shimmerSub} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={styles.shimmerPlate} />
       </View>
-      {/* RIGHT MENU */}
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]}
-        style={styles.shimmerMenu}
-      />
+      <ShimmerPlaceholder LinearGradient={LinearGradient} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={styles.shimmerMenu} />
     </View>
   );
 
@@ -199,10 +154,91 @@ export default function VehiclesScreen() {
     return match ? `${match[1]} ${match[2]} ${match[3]} ${match[4]}` : num;
   };
 
+  // 🔥 CORE LOGIC: CHECK IF VEHICLE HAS FARMERS OR DRIVERS
+  const checkVehicleHasRecords = async (vehicleId: string) => {
+    try {
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone) return false;
+
+      const vehicleRef = firestore()
+        .collection("users").doc(phone)
+        .collection("vehicles").doc(vehicleId);
+
+      // 1. రైతులు ఎవరైనా ఉన్నారా?
+      const farmersSnap = await vehicleRef.collection("farmers").limit(1).get();
+      if (!farmersSnap.empty) return true;
+
+      // 2. డ్రైవర్లు ఎవరైనా ఉన్నారా?
+      const driversSnap = await vehicleRef.collection("drivers").limit(1).get();
+      if (!driversSnap.empty) return true;
+
+      return false; // ఎవరూ లేకపోతే False
+    } catch (error) {
+      console.log("Error checking vehicle records", error);
+      return true; // సేఫ్టీ కోసం లాక్
+    }
+  };
+
+  // 🔥 Handle Edit Menu Click
+  const handleEditClick = async (vehicle: any) => {
+    setActionLoading(true);
+    const hasRecords = await checkVehicleHasRecords(vehicle.id);
+    setActionLoading(false);
+
+    router.push({
+      pathname: "/farmer/add-vehicle",
+      params: {
+        vehicleId: vehicle.id,
+        name: vehicle.nickname,
+        type: vehicle.type,
+        number: vehicle.number || "",
+        hasRecords: hasRecords ? "true" : "false" // 🔥 Flag పంపుతున్నాం
+      }
+    });
+  };
+
+  // 🔥 Handle Delete Menu Click
+  const handleDeleteClick = async (vehicle: any) => {
+    setActionLoading(true);
+    const hasRecords = await checkVehicleHasRecords(vehicle.id);
+    setActionLoading(false);
+
+    if (hasRecords) {
+      setShowCannotDeleteModal(true); // 🔒 రికార్డ్స్ ఉంటే లాక్
+    } else {
+      setSelectedItem(vehicle);
+      setShowDeleteModal(true); // 🗑️ లేకపోతే డిలీట్
+    }
+  };
+
+  // 🔥 MODERN MENU STYLES
+  const optionsStyles = {
+    optionsContainer: {
+      borderRadius: 14,
+      paddingVertical: 5,
+      paddingHorizontal: 0,
+      width: 150,
+      backgroundColor: "#fff",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+      marginTop: 25, 
+    }
+  };
+
   /* ---------------- UI ---------------- */
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
+
+      {/* ACTION LOADING OVERLAY */}
+      {actionLoading && (
+        <View style={styles.actionLoadingOverlay}>
+          <ActivityIndicator size="large" color="#16A34A" />
+        </View>
+      )}
 
       <AppHeader
         title={language === "te" ? "నా వాహనాలు" : "My Vehicles"} 
@@ -219,15 +255,13 @@ export default function VehiclesScreen() {
         keyExtractor={(item, index) => loading ? index.toString() : item}
         contentContainerStyle={[
           { paddingBottom: 120 },
-          // 🔥 సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
           !loading && Object.keys(grouped).length === 0 && { flexGrow: 1, justifyContent: 'center' }
         ]}
 
-        /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
         ListEmptyComponent={
           !loading && Object.keys(grouped).length === 0 ? (
             <AppEmptyState
-              iconName="tractor" // MaterialCommunityIcons నుండి ట్రాక్టర్ ఐకాన్
+              iconName="tractor" 
               title={language === "te" ? "వాహనాలు లేవు" : "No Vehicles Yet"}
               subtitle={language === "te" ? "మీ వాహనాలను చేర్చడానికి + బటన్ నొక్కండి" : "Tap + button to add your vehicles"}
               language={language}
@@ -257,7 +291,6 @@ export default function VehiclesScreen() {
 
                   <View style={styles.cardInfo}>
                     <AppText style={styles.cardTitle}>{v.nickname}</AppText>
-
                     <AppText style={styles.cardSub}>
                       {language === "te" ? "రకం" : "Type"}: {v.type}
                     </AppText>
@@ -269,15 +302,34 @@ export default function VehiclesScreen() {
                     )}
                   </View>
 
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedItem(v);
-                      setMenuVisible(true);
-                    }}
-                    style={styles.menuBtn}
-                  >
-                    <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
-                  </TouchableOpacity>
+                  {/* 🔥 NEW POPUP MENU */}
+                  <Menu>
+                    <MenuTrigger style={styles.menuBtn}>
+                      <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
+                    </MenuTrigger>
+
+                    <MenuOptions customStyles={optionsStyles}>
+                      <MenuOption onSelect={() => handleEditClick(v)}>
+                        <View style={styles.modernMenuItem}>
+                          <Ionicons name="create-outline" size={18} color="#2563EB" />
+                          <AppText style={styles.menuTextEdit} language={language}>
+                            {language === "te" ? "మార్చు" : "Edit"}
+                          </AppText>
+                        </View>
+                      </MenuOption>
+                      
+                      <View style={styles.menuDivider} />
+
+                      <MenuOption onSelect={() => handleDeleteClick(v)}>
+                        <View style={styles.modernMenuItem}>
+                          <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                          <AppText style={styles.menuTextDelete} language={language}>
+                            {language === "te" ? "తొలగించు" : "Delete"}
+                          </AppText>
+                        </View>
+                      </MenuOption>
+                    </MenuOptions>
+                  </Menu>
 
                 </TouchableOpacity>
               ))}
@@ -287,68 +339,12 @@ export default function VehiclesScreen() {
         }}
       />
 
-      {/* 📱 MENU MODAL */}
-      <Modal visible={menuVisible} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.menuContent}>
-                {selectedItem && (
-                  <>
-                    <AppText style={styles.menuHeader}>
-                      {selectedItem.nickname}
-                    </AppText>
-
-                    {/* Edit Option */}
-                    <TouchableOpacity activeOpacity={0.8}
-                      style={styles.menuItem}
-                      onPress={() => {
-                        const id = selectedItem.id;
-                        setMenuVisible(false);
-                        router.push({
-                          pathname: "/farmer/add-vehicle",
-                          params: {
-                            vehicleId: selectedItem.id,
-                            name: selectedItem.nickname,
-                            type: selectedItem.type,
-                            number: selectedItem.number || ""
-                          }
-                        });
-                      }}
-                    >
-                      <Ionicons name="pencil-outline" size={20} color="#3B82F6" />
-                      <AppText style={styles.menuText}>
-                        {language === "te" ? "సవరించు" : "Edit"}
-                      </AppText>
-                    </TouchableOpacity>
-
-                    {/* Delete Option */}
-                    <TouchableOpacity activeOpacity={0.8}
-                      style={[styles.menuItem, { borderBottomWidth: 0 }]}
-                      onPress={() => {
-                        setMenuVisible(false);
-                        setDeleteVisible(true);
-                      }}
-                    >
-                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                      <AppText style={[styles.menuText, { color: "#EF4444" }]}>
-                        {language === "te" ? "తొలగించు" : "Delete"}
-                      </AppText>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* 🗑️ DELETE CONFIRMATION MODAL */}
-      <Modal visible={deleteVisible} transparent animationType="fade">
+      {/* 🔴 STANDARD DELETE MODAL */}
+      <Modal visible={showDeleteModal} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
           <View style={styles.deleteBox}>
             <View style={styles.iconBg}>
-              <Ionicons name="trash-outline" size={32} color="#DC2626" />
+              <Ionicons name="trash-outline" size={36} color="#DC2626" />
             </View>
 
             <AppText style={styles.deleteTitle}>
@@ -362,17 +358,15 @@ export default function VehiclesScreen() {
             </AppText>
 
             <View style={styles.deleteBtns}>
-              {/* Cancel Button */}
               <TouchableOpacity activeOpacity={0.8}
                 style={styles.cancelBtn}
-                onPress={() => setDeleteVisible(false)}
+                onPress={() => setShowDeleteModal(false)}
               >
                 <AppText style={styles.cancelBtnText}>
                   {language === "te" ? "వద్దు" : "Cancel"}
                 </AppText>
               </TouchableOpacity>
 
-              {/* Confirm Delete Button */}
               <TouchableOpacity activeOpacity={0.8}
                 style={styles.deleteBtn}
                 onPress={async () => {
@@ -380,48 +374,29 @@ export default function VehiclesScreen() {
                   if (!phone || !selectedItem) return;
 
                   try {
-                    const userDoc = await firestore()
-                      .collection("users")
-                      .doc(phone)
-                      .get();
-
-                    const activeSession = userDoc.data()?.activeSession;
-                    if (!activeSession) return;
-
                     const docRef = firestore()
                       .collection("users")
                       .doc(phone)
                       .collection("vehicles")
                       .doc(selectedItem.id);
 
-                    const doc = await docRef.get();
-
-                    // 🔥 SESSION SAFETY
-                    if (doc.data()?.session !== activeSession) {
-                      console.log("Wrong session delete blocked");
-                      return;
-                    }
                     // 🔥 INSTANT UI REMOVE
                     setGrouped((prev: any) => {
                       const newGroup = { ...prev };
-
                       Object.keys(newGroup).forEach((type) => {
                         newGroup[type] = newGroup[type].filter(
                           (item: any) => item.id !== selectedItem.id
                         );
-
                         if (newGroup[type].length === 0) {
                           delete newGroup[type];
                         }
                       });
-
                       return newGroup;
                     });
 
-                    // 🔥 CLOSE MODAL IMMEDIATELY
-                    setDeleteVisible(false);
+                    setShowDeleteModal(false);
 
-                    // 🔥 THEN DELETE FROM FIRESTORE
+                    // 🔥 FIRESTORE DELETE
                     await docRef.delete();
                   } catch (e) {
                     console.log(e);
@@ -437,24 +412,58 @@ export default function VehiclesScreen() {
         </View>
       </Modal>
 
-      {selectedVehicle && (
-        <Modal visible={typeModalVisible} transparent animationType="fade">
-          <TouchableWithoutFeedback onPress={() => setTypeModalVisible(false)}>
-            <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.modalBox}>
+      {/* 🔒 CANNOT DELETE WARNING MODAL */}
+      <Modal visible={showCannotDeleteModal} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.overlay}>
+          <View style={styles.deleteBox}>
+            <View style={[styles.iconBg, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="lock-closed" size={36} color="#F59E0B" />
+            </View>
+            <AppText style={styles.deleteTitle} language={language}>
+              {language === "te" ? "తొలగించడం కుదరదు" : "Cannot Delete"}
+            </AppText>
+            <AppText style={[styles.deleteSub, { lineHeight: 22 }]} language={language}>
+              {language === "te"
+                ? "ఈ వాహనానికి సంబంధించి రైతులు లేదా డ్రైవర్ల వివరాలు ఇప్పటికే నమోదు అయ్యాయి. కావున ఈ వాహనాన్ని తొలగించడం కుదరదు."
+                : "This vehicle has associated farmers or drivers. Therefore, it cannot be deleted."}
+            </AppText>
+            <View style={[styles.deleteBtns, { justifyContent: 'center' }]}>
+              <TouchableOpacity activeOpacity={0.8}
+                style={[styles.cancelBtn, { flex: 1, backgroundColor: '#F59E0B' }]} 
+                onPress={() => setShowCannotDeleteModal(false)}
+              >
+                <AppText style={{ color: 'white', fontWeight: '600' }} language={language}>
+                  {language === "te" ? "అర్థమైంది" : "Got It"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
-                  <AppText style={styles.modalTitle}>
+      {/* 🚀 PREMIUM "CHOOSE WORK TYPE" MODAL */}
+      {selectedVehicle && (
+        <Modal visible={typeModalVisible} transparent animationType="fade" statusBarTranslucent>
+          <TouchableWithoutFeedback onPress={() => setTypeModalVisible(false)}>
+            <View style={styles.overlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.premiumModalBox}>
+
+                  <AppText style={styles.premiumModalTitle}>
                     {language === "te" ? "పని ఎంపిక చేసుకోండి" : "Choose Work Type"}
+                  </AppText>
+                  
+                  <AppText style={styles.premiumModalSub}>
+                    {language === "te" ? "మీరు ఎవరి పనులను నమోదు చేయాలి అనుకుంటున్నారు?" : "Whose records do you want to manage?"}
                   </AppText>
 
                   {/* 🚜 FARMER */}
-                  <TouchableOpacity activeOpacity={0.8}
-                    style={[styles.selectCard, {borderColor: 'green'}]}
+                  <TouchableOpacity activeOpacity={0.7}
+                    style={styles.premiumSelectCard}
                     onPress={() => {
                       setTypeModalVisible(false);
                       router.push({
-                        pathname: "/farmer/vehicle-details",
+                        pathname: "/farmer/vehicle-details", // (Change this to vehicle-farmers if renamed)
                         params: {
                           id: selectedVehicle.id,
                           name: selectedVehicle.nickname,
@@ -464,29 +473,27 @@ export default function VehiclesScreen() {
                       });
                     }}
                   >
-                    <View style={[styles.iconBox, { backgroundColor: "#DCFCE7" }]}>
-                      <Ionicons name="people-outline" size={22} color="#16A34A" />
+                    <View style={[styles.premiumIconBox, { backgroundColor: "#DCFCE7" }]}>
+                      <Ionicons name="people" size={24} color="#16A34A" />
                     </View>
-
                     <View style={{ flex: 1 }}>
-                      <AppText style={styles.cardTitle1}>
-                        {language === "te" ? "రైతుల పని" : "Farmer Work"}
+                      <AppText style={styles.premiumCardTitle}>
+                        {language === "te" ? "రైతుల పనులు" : "Farmer Works"}
                       </AppText>
-                      <AppText style={styles.cardSub1}>
+                      <AppText style={styles.premiumCardSub}>
                         {language === "te"
-                          ? "రైతుల పనులను నమోదు చేయండి"
-                          : "Manage farmer works"}
+                          ? "రైతుల పొలాల్లో చేసిన పనులు"
+                          : "Works done in farmer fields"}
                       </AppText>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
                   </TouchableOpacity>
 
                   {/* 👷 DRIVER */}
-                  <TouchableOpacity activeOpacity={0.8}
-                      style={[styles.selectCard, {borderColor: 'blue'}]}
+                  <TouchableOpacity activeOpacity={0.7}
+                      style={styles.premiumSelectCard}
                       onPress={() => {
                         setTypeModalVisible(false);
-
                         router.push({
                           pathname: "/farmer/driver-list",
                           params: {
@@ -498,22 +505,20 @@ export default function VehiclesScreen() {
                         });
                       }}
                     >
-                    <View style={[styles.iconBox, { backgroundColor: "#DBEAFE" }]}>
-                      <Ionicons name="person-outline" size={22} color="#2563EB" />
+                    <View style={[styles.premiumIconBox, { backgroundColor: "#DBEAFE" }]}>
+                      <Ionicons name="person" size={24} color="#2563EB" />
                     </View>
-
                     <View style={{ flex: 1 }}>
-                      <AppText style={styles.cardTitle}>
-                        {language === "te" ? "డ్రైవర్ పని" : "Driver Work"}
+                      <AppText style={styles.premiumCardTitle}>
+                        {language === "te" ? "డ్రైవర్ పనులు" : "Driver Works"}
                       </AppText>
-                      <AppText style={styles.cardSub}>
+                      <AppText style={styles.premiumCardSub}>
                         {language === "te"
-                          ? "డ్రైవర్ పనులను నమోదు చేయండి"
-                          : "Manage driver works"}
+                          ? "డ్రైవర్ల హాజరు మరియు పనులు"
+                          : "Manage driver attendance"}
                       </AppText>
                     </View>
-
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
                   </TouchableOpacity>
 
                 </View>
@@ -563,8 +568,8 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 12
   },
   cardInfo: { flex: 1, marginLeft: 15 },
-  cardTitle: { fontSize: 16, fontWeight: "600" },
-  cardSub: { fontSize: 12, color: "#6B7280" },
+  cardTitle: { fontSize: 16, fontWeight: "600", color: "#111827" },
+  cardSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
 
   plate: {
     marginTop: 6,
@@ -582,28 +587,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: "#111827"
   },
-  menuHeader: { 
-    textAlign: "center", 
-    fontSize: 18, 
-    fontWeight: "700", 
-    color: "#1E293B",
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    paddingBottom: 10
-  },
-  menuItem: {
-    flexDirection: "row",
+  
+  // NEW MENU STYLES
+  menuBtn: {
+    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    gap: 12,
+    padding: 6,
+    borderRadius: 10,
+    width: 32,
+    height: 32,
+    backgroundColor: "#F3F4F6"
   },
-  menuText: { 
-    fontSize: 16, 
-    fontWeight: "500",
-    color: "#475569"
-  },
+  modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
+  menuTextEdit: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
+  menuTextDelete: { fontSize: 14, color: "#EF4444", fontWeight: "500" },
+  menuDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 10 },
+
   shimmerCard: {
     marginHorizontal: 16,
     marginVertical: 6,
@@ -615,151 +614,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB"
   },
+  shimmerBar: { width: 4, height: "100%", borderRadius: 2 },
+  shimmerContent: { flex: 1, marginLeft: 12 },
+  shimmerTitle: { height: 16, width: "55%", borderRadius: 6 },
+  shimmerSub: { height: 12, width: "35%", marginTop: 6, borderRadius: 6 },
+  shimmerPlate: { height: 18, width: 100, marginTop: 8, borderRadius: 6 },
+  shimmerMenu: { width: 32, height: 32, borderRadius: 10 },
 
-  shimmerBar: {
-    width: 4,
-    height: "100%",
-    borderRadius: 2
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center"
-  },
-
-  modalBox: {
-    width: "85%",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10
-  },
-
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 16,
-    color: "#111827"
-  },
-
-  selectCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 12,
-    backgroundColor: "#fff"
-  },
-
-  iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12
-  },
-
-  cardTitle1: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111827"
-  },
-
-  cardSub1: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 2
-  },
-  shimmerContent: {
-    flex: 1,
-    marginLeft: 12
-  },
-
-  shimmerTitle: {
-    height: 16,
-    width: "55%",
-    borderRadius: 6
-  },
-
-  shimmerSub: {
-    height: 12,
-    width: "35%",
-    marginTop: 6,
-    borderRadius: 6
-  },
-
-  shimmerPlate: {
-    height: 18,
-    width: 100,
-    marginTop: 8,
-    borderRadius: 6
-  },
-
-  shimmerMenu: {
-    width: 32,
-    height: 32,
-    borderRadius: 10
-  },
-  deleteSub: {
-    fontSize: 14,
-    color: "#64748B",
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 20
-  },
-  cancelBtnText: {
-    fontWeight: "600",
-    color: "#475569"
-  },
-  deleteBtnText: {
-    fontWeight: "600",
-    color: "#fff"
-  },
-  menuBtn: {
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 6,
-    borderRadius: 10,
-    width: 32,
-    height: 32,
-    backgroundColor: "#F3F4F6"
-  },
-  modalOverlay1: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
-    justifyContent: "center",
-    alignItems: "center"
-  },
-
-  menuContent: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 18
-  },
-
+  // MODALS
   overlay: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)"
+    backgroundColor: "rgba(0,0,0,0.4)"
   },
-
+  actionLoadingOverlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(255,255,255,0.7)", justifyContent: "center", alignItems: "center", zIndex: 1000 },
+  
   deleteBox: {
     width: "80%",
     backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 16,
-    alignItems: "center"
+    padding: 24,
+    borderRadius: 20,
+    alignItems: "center",
+    elevation: 10
   },
-
   iconBg: {
     width: 60,
     height: 60,
@@ -768,38 +646,71 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center"
   },
+  deleteTitle: { fontSize: 18, fontWeight: "600", marginTop: 12, color: '#111827' },
+  deleteSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20
+  },
+  deleteBtns: { flexDirection: "row", marginTop: 20, gap: 12 },
+  cancelBtn: { flex: 1, paddingVertical: 12, backgroundColor: "#F1F5F9", borderRadius: 12, alignItems: "center" },
+  deleteBtn: { flex: 1, paddingVertical: 12, backgroundColor: "#DC2626", borderRadius: 12, alignItems: "center" },
+  cancelBtnText: { fontWeight: "600", color: "#475569" },
+  deleteBtnText: { fontWeight: "600", color: "#fff" },
 
-  deleteTitle: { fontSize: 16, fontWeight: "600", marginTop: 10 },
-
-  deleteBtns: {
+  // PREMIUM CHOOSE WORK MODAL
+  premiumModalBox: {
+    width: "85%",
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 20,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  premiumModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 4,
+  },
+  premiumModalSub: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 20,
+  },
+  premiumSelectCard: {
     flexDirection: "row",
-    marginTop: 20,
-    gap: 10
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 12,
+    backgroundColor: "#F9FAFB"
   },
-
-  cancelBtn: {
-    flex: 1,
-    padding: 12,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 10,
-    alignItems: "center"
+  premiumIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14
   },
-
-  deleteBtn: {
-    flex: 1,
-    padding: 12,
-    backgroundColor: "#DC2626",
-    borderRadius: 10,
-    alignItems: "center"
+  premiumCardTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937"
+  },
+  premiumCardSub: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 3
   },
 
   addBtn: { position: "absolute", bottom: 30, right: 20 },
-
-  addGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center"
-  }
+  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset:{width:0, height:2}, shadowOpacity:0.2, shadowRadius:4 }
 });

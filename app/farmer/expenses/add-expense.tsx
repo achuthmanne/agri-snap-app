@@ -16,13 +16,20 @@ import { createNotification } from "@/utils/notifications";
 import AppText from "@/components/AppText";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 
+// URL params helper
+const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
+
 export default function AddExpense() {
     const router = useRouter();
-    const { editId } = useLocalSearchParams();
+    const params = useLocalSearchParams();
 
-    const [crop, setCrop] = useState("");
-    const [category, setCategory] = useState("");
-    const [amount, setAmount] = useState("");
+    const editId = getStr(params.editId);
+
+    // 🔥 INSTANT DATA LOAD FROM PARAMS
+    const [crop, setCrop] = useState(getStr(params.crop));
+    const [category, setCategory] = useState(getStr(params.category));
+    const [amount, setAmount] = useState(getStr(params.amount));
+    
     const [userCrops, setUserCrops] = useState<string[]>([]);
     
     // 🔥 New States for Modal & Standard Pattern
@@ -33,7 +40,7 @@ export default function AddExpense() {
     const [language, setLanguage] = useState<"te" | "en">("te");
     
     const [activeInput, setActiveInput] = useState<string | null>(null);
-    const [errors, setErrors] = useState<{ [key: string]: string }>({}); // 🔥 Inline Errors
+    const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
     
     const [isListening, setIsListening] = useState(false);
     const [voiceTarget, setVoiceTarget] = useState<"modal" | null>(null);
@@ -78,6 +85,14 @@ export default function AddExpense() {
         loadUserCrops();
       }
     }, [activeSession]);
+
+    // 🔥 Check initially if editing
+    useEffect(() => {
+      if (editId) {
+        setShowLabourInfo(isLabourCategory(category));
+        setShowRentInfo(isRentCategory(category));
+      }
+    }, [editId, category]);
 
     const analyzeExpenseAndNotify = async ({ phone, category, amount }: any) => {
       try {
@@ -167,21 +182,6 @@ export default function AddExpense() {
     useEffect(() => {
         AsyncStorage.getItem("APP_LANG").then(l => { if (l) setLanguage(l as any); });
     }, []);
-
-    useEffect(() => {
-        if (!editId) return;
-        const load = async () => {
-            const phone = await AsyncStorage.getItem("USER_PHONE");
-            const doc = await firestore().collection("users").doc(phone!).collection("expenses").doc(editId as string).get();
-            const d = doc.data();
-            if (d) {
-                setCrop(d.crop);
-                setCategory(d.category);
-                setAmount(String(d.amount));
-            }
-        };
-        load();
-    }, [editId]);
 
     const handlePick = (val: string) => {
       if (modalType === "crop") {
@@ -481,13 +481,6 @@ export default function AddExpense() {
                                   </View>
                                 );
                               }
-                              return searchText.trim().length > 0 ? (
-                                <TouchableOpacity style={[styles.categoryItem, { justifyContent: "center" }]} onPress={() => handlePick(searchText)}>
-                                  <AppText style={{ color: '#DC2626', fontWeight: '600' }}>
-                                    {language === "te" ? `"${searchText}" ని చేర్చండి +` : `Add "${searchText}" +`}
-                                  </AppText>
-                                </TouchableOpacity>
-                              ) : null;
                             }}
                             renderItem={({ item }) => (
                                 <TouchableOpacity 
@@ -514,7 +507,6 @@ const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F6F7F6" },
     container: { padding: 20, flexGrow: 1 },
     
-    // 🔥 STANDARD PATTERN INPUT STYLES (WITH RED FOCUS)
     inputBox: { 
         flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", 
         borderRadius: 12, paddingHorizontal: 15, height: 55, marginBottom: 16, 
@@ -561,7 +553,6 @@ const styles = StyleSheet.create({
     saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
     saveText: { color: "#fff", fontSize: 16, fontWeight: "600" },
     
-    // Modal Styles
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: 'white', borderTopLeftRadius: 25, borderTopRightRadius: 25, height: '75%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
