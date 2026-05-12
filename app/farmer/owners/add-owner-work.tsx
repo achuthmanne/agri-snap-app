@@ -73,12 +73,39 @@ export default function AddOwnerWork() {
   const [saving, setSaving] = useState(false);
   const router = useRouter();
   
-  // 🔥 Changed from vehicleId/farmerId to ownerId
   const { ownerId } = useLocalSearchParams(); 
 
   const notesInputRef = useRef<TextInput>(null);
 
-  // Automatic ga Calculation maragane Payable Amount update avvali
+  // 🔥 FETCH CROPS FROM FIELDS
+  const [userCrops, setUserCrops] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadUserCrops = async () => {
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone) return;
+
+      const userDoc = await firestore().collection("users").doc(phone).get();
+      const activeSession = userDoc.data()?.activeSession;
+      if (!activeSession) return; 
+
+      const snap = await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("fields")
+        .where("session", "==", activeSession) 
+        .get();
+
+      const set = new Set<string>();
+      snap.forEach(doc => {
+        const data = doc.data();
+        if (data.crop) set.add(data.crop);
+      });
+      setUserCrops(Array.from(set));
+    };
+    loadUserCrops();
+  }, []);
+
   useEffect(() => {
     if (workType === "time") {
       const h = parseFloat(hrs) || 0;
@@ -137,75 +164,6 @@ export default function AddOwnerWork() {
     const final = p - a;
     return (final < 0 ? 0 : final).toLocaleString('en-IN');
   };
-
-  const cropOptions = [
-    { "en": "Acid Lime / Lemon", "te": "నిమ్మ" },
-    { "en": "Apple Gourd", "te": "దండకాయ" },
-    { "en": "Areca Nut", "te": "పోక చెక్క" },
-    { "en": "Banana", "te": "అరటి" },
-    { "en": "Bajra / Pearl Millet", "te": "సజ్జలు" },
-    { "en": "Beetroot", "te": "బీట్రూట్" },
-    { "en": "Bengal Gram / Chickpea", "te": "శనగలు" },
-    { "en": "Bhendi / Okra", "te": "బెండకాయ" },
-    { "en": "Bitter Gourd", "te": "కాకరకాయ" },
-    { "en": "Black Gram / Urad Dal", "te": "మినుములు" },
-    { "en": "Bottle Gourd", "te": "సొరకాయ" },
-    { "en": "Brinjal / Eggplant", "te": "వంకాయ" },
-    { "en": "Broad Beans", "te": "చిక్కుడుకాయ" },
-    { "en": "Cabbage", "te": "క్యాబేజీ" },
-    { "en": "Carrot", "te": "క్యారెట్" },
-    { "en": "Cashew Nut", "te": "జీడిమామిడి" },
-    { "en": "Castor", "te": "ఆముదం" },
-    { "en": "Cauliflower", "te": "కాలీఫ్లవర్" },
-    { "en": "Chilli", "te": "మిర్చి" },
-    { "en": "Citrus / Sweet Orange", "te": "బత్తాయి" },
-    { "en": "Cluster Beans", "te": "గోరు చిక్కుడు" },
-    { "en": "Coconut", "te": "కొబ్బరి" },
-    { "en": "Coriander", "te": "కొత్తిమీర" },
-    { "en": "Cotton", "te": "పత్తి" },
-    { "en": "Cowpea", "te": "బొబ్బర్లు" },
-    { "en": "Cucumber", "te": "దోసకాయ" },
-    { "en": "Curry Leaves", "te": "కరివేపాకు" },
-    { "en": "Drumstick", "te": "ములక్కాయ" },
-    { "en": "Flowers / Marigold", "te": "బంతి పూలు" },
-    { "en": "Garlic", "te": "వెల్లుల్లి" },
-    { "en": "Ginger", "te": "అల్లం" },
-    { "en": "Grapes", "te": "ద్రాక్ష" },
-    { "en": "Green Chilli", "te": "పచ్చి మిరపకాయ" },
-    { "en": "Green Gram / Mung Bean", "te": "పెసలు" },
-    { "en": "Groundnut / Peanut", "te": "వేరుశనగ" },
-    { "en": "Guava", "te": "జామ" },
-    { "en": "Horse Gram", "te": "ఉలవలు" },
-    { "en": "Jowar / Sorghum", "te": "జొన్న" },
-    { "en": "Jute", "te": "జనుము" },
-    { "en": "Maize / Corn", "te": "మొక్కజొన్న" },
-    { "en": "Mango", "te": "మామిడి" },
-    { "en": "Mesta", "te": "గోగునార" },
-    { "en": "Millets / Korra", "te": "కొర్రలు" },
-    { "en": "Muskmelon", "te": "కర్బూజా" },
-    { "en": "Mustard", "te": "ఆవాలు" },
-    { "en": "Oil Palm", "te": "పామాయిల్" },
-    { "en": "Onion", "te": "ఉల్లిపాయ" },
-    { "en": "Paddy / Rice", "te": "వరి" },
-    { "en": "Papaya", "te": "బొప్పాయి" },
-    { "en": "Pomegranate", "te": "దానిమ్మ" },
-    { "en": "Potato", "te": "బంగాళాదుంప" },
-    { "en": "Radish", "te": "ముల్లంగి" },
-    { "en": "Ragi / Finger Millet", "te": "రాగులు" },
-    { "en": "Red Gram / Pigeon Pea", "te": "కంది" },
-    { "en": "Ridge Gourd", "te": "బీరకాయ" },
-    { "en": "Sapota", "te": "సపోటా" },
-    { "en": "Sesame / Gingelly", "te": "నువ్వులు" },
-    { "en": "Snake Gourd", "te": "పొట్లకాయ" },
-    { "en": "Soybean", "te": "సోయాబీన్" },
-    { "en": "Sugarcane", "te": "చెరకు" },
-    { "en": "Sunflower", "te": "పొద్దుతిరుగుడు" },
-    { "en": "Tobacco", "te": "పొగాకు" },
-    { "en": "Tomato", "te": "టమాటా" },
-    { "en": "Turmeric", "te": "పసుపు" },
-    { "en": "Watermelon", "te": "పుచ్చకాయ" },
-    { "en": "Wheat", "te": "గోధుమ" }
-  ];
 
   const workOptions = [
     { "en": "Bailing (Straw)", "te": "గడ్డి చుట్టలు చుట్టడం (బేలర్)" },
@@ -319,7 +277,6 @@ export default function AddOwnerWork() {
 
       const phone = await AsyncStorage.getItem("USER_PHONE");
       
-      // 🔥 Changed to validate ownerId instead of vehicleId/farmerId
       if (!phone || !ownerId) {
         setSaving(false);
         return;
@@ -337,7 +294,6 @@ export default function AddOwnerWork() {
 
       const oId = Array.isArray(ownerId) ? ownerId[0] : ownerId;
 
-      // 🔥 Saving to "owners" instead of "vehicles -> works"
       await firestore()
         .collection("users")
         .doc(phone)
@@ -382,11 +338,19 @@ export default function AddOwnerWork() {
     });
   }, []);
 
-  const options = modalType === "crop" ? cropOptions : workOptions;
-  const filteredData = options.filter(item => {
+  // 🔥 TS ERROR FIX: NORMALIZE DATA FOR FLATLIST
+  const filteredCrops = userCrops.filter(c =>
+    c.toLowerCase().includes(searchText.toLowerCase().trim())
+  );
+  
+  const filteredWorks = workOptions.filter(item => {
     const value = (language === "te" ? item.te : item.en).toLowerCase().trim();
     return value.includes(searchText.toLowerCase().trim());
   });
+
+  const listData = modalType === "crop"
+    ? filteredCrops.map(c => ({ id: c, label: c }))
+    : filteredWorks.map(w => ({ id: w.en, label: language === "te" ? w.te : w.en }));
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -448,6 +412,7 @@ export default function AddOwnerWork() {
           onPress={() => {
             setModalType("crop");
             setActiveInput("crop");
+            setSearchText(""); // 🔥 Search Cleared
             if (errors.crop) setErrors({ ...errors, crop: "" });
           }}
         >
@@ -476,6 +441,7 @@ export default function AddOwnerWork() {
           onPress={() => {
             setModalType("work");
             setActiveInput("work");
+            setSearchText(""); // 🔥 Search Cleared
             if (errors.work) setErrors({ ...errors, work: "" });
           }}
         >
@@ -658,18 +624,18 @@ export default function AddOwnerWork() {
               </AppText>
             )}
 
-            <View style={{ paddingHorizontal: 4, marginBottom: 10 }}>
+            <View style={{ paddingHorizontal: 4, marginBottom: 5 }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <Ionicons name="information-circle-outline" size={14} color="#6B7280" style={{ marginTop: 2 }} />
+                <Ionicons name="information-circle-outline" size={16} color="#059669" style={{ marginTop: 2 }} />
                 <View style={{ marginLeft: 6, flex: 1 }}>
-                  <AppText style={{ fontSize: 12, color: "#4B5563", lineHeight: 18 }}>
+                  <AppText style={{ fontSize: 13, color: "#166534", lineHeight: 20, fontFamily: "Mandali" }}>
                     {language === "te" 
-                      ? "ఇక్కడ ఎకరాకు ఎన్ని సాళ్లు అనేది కాకుండా, మీరు మొత్తం పొలంలో వేసిన సాళ్ల సంఖ్యను నమోదు చేయండి (ఉదా: 2 ఎకరాల్లో 2 సార్లు దున్నితే 4 సాళ్లు అని ఇవ్వాలి)." 
-                      : "Enter the total number of Saallu done across the entire field, not per acre."}
+                      ? "గమనిక: ఒక ఎకరాను ఒకసారి దున్నితే అది '1 సాలు' కింద లెక్క. ఒకవేళ మీరు 2 ఎకరాల పొలాన్ని 2 సార్లు దున్నితే... ఇక్కడ మొత్తం '4 సాళ్లు' (2 ఎకరాలు × 2 సార్లు) అని నమోదు చేయాలి." 
+                      : "Note: Ploughing 1 acre once equals '1 Saalu'. If you ploughed a 2-acre field 2 times, you should enter '4 Saallu' (2 acres × 2 times) here."}
                   </AppText>
                 </View>
               </View>
-            </View>   
+            </View>
           </View>
         ) : (
           <View>
@@ -1159,6 +1125,7 @@ export default function AddOwnerWork() {
         </View>
       </Modal>
 
+      {/* 🔥 MAIN SELECTION MODAL (CROP/WORK) */}
       <Modal visible={modalType !== null} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -1170,6 +1137,7 @@ export default function AddOwnerWork() {
               </AppText>
               <TouchableOpacity onPress={() => {
                 setModalType(null);
+                setSearchText(""); // 🔥 SEARCH CLEAR ON CLOSE
                 setActiveInput(null);
               }}>
                 <Ionicons name="close-circle" size={28} color="#9CA3AF" />
@@ -1183,21 +1151,20 @@ export default function AddOwnerWork() {
                 value={searchText}
                 onChangeText={(text) => {
                   setSearchText(text);
-                  modalType === "crop" ? setCrop(text) : setWork(text);
                 }}
                 placeholder={language === "te" ? "ఇక్కడ రాయండి..." : "Type here..."}
                 placeholderTextColor="#9CA3AF"
-                cursorColor={'green'}
+                cursorColor={'#16A34A'}
                 style={{ flex: 1, fontSize: 16, fontFamily: "Mandali", color: "#1F2937", paddingVertical: 8 }}
               />
-              {searchText.trim().length > 0 && (
+              
+              {/* 🔥 ADD CUSTOM TEXT BUTTON (Only for Works!) */}
+              {searchText.trim().length > 0 && modalType === "work" && (
                 <TouchableOpacity
                   onPress={() => {
-                    if (modalType === "crop") setCrop(searchText);
-                    else setWork(searchText);
-
+                    setWork(searchText);
                     setModalType(null);
-                    setSearchText("");
+                    setSearchText(""); 
                     setActiveInput(null);
                   }}
                   style={{ backgroundColor: "#16A34A", borderRadius: 12, padding: 6, marginLeft: 6 }}
@@ -1205,6 +1172,7 @@ export default function AddOwnerWork() {
                   <Ionicons name="add" size={20} color="#fff" />
                 </TouchableOpacity>
               )}
+              
               {/* 🎤 MODAL MIC */}
               <TouchableOpacity
                 onPress={() => handleVoiceInput(modalType === "crop" ? "crop" : "work")}
@@ -1217,49 +1185,82 @@ export default function AddOwnerWork() {
                 />
               </TouchableOpacity>
             </View>
+
             <FlatList
-              data={filteredData}
-              keyExtractor={(item, index) => `${item.en}-${index}`}
-              ListEmptyComponent={() =>
-                searchText.trim().length > 0 ? (
+              data={listData}
+              keyExtractor={(item, index) => `${item.id}-${index}`}
+              ListEmptyComponent={() => {
+                // 🔥 SHOW "ADD IN FIELDS" UI IF IT IS CROP MODAL
+                if (modalType === "crop") {
+                  return (
+                    <View style={{ padding: 20, alignItems: "center" }}>
+                      <View style={{ padding: 20, alignItems: 'center' }}>
+                        <Ionicons name="information-circle-outline" size={24} color="#6B7280" style={{ marginBottom: 10 }} />
+                        <AppText style={{ color: "#4B5563", textAlign: "center", fontSize: 15, fontWeight: '500', lineHeight: 22 }}>
+                          {language === "te" ? "మొదట 'పొలాలు' విభాగంలో\nపంట వివరాలను నమోదు చేయండి." : "First, register your crop details in the\n'Fields' section."}
+                        </AppText>
+                        <AppText style={{ color: "#9CA3AF", textAlign: "center", fontSize: 13, marginTop: 8 }}>
+                          {language === "te" ? "అక్కడ జోడించిన పంటలు మాత్రమే ఇక్కడ కనిపిస్తాయి." : "Only crops added there will appear here for selection."}
+                        </AppText>
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => { 
+                            setModalType(null); 
+                            setSearchText(""); // 🔥 Clear
+                            router.push("/farmer/fields"); 
+                          }}
+                          style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#16A34A", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 }}
+                        >
+                          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                          <AppText style={{ color: "#fff", fontWeight: "600" }}>
+                            {language === "te" ? "పంట జోడించండి" : "Add Crop"}
+                          </AppText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                } 
+
+                // 🔥 IF WORK MODAL AND SEARCH IS TYPED, SHOW "ADD CUSTOM"
+                if (modalType === "work" && searchText.trim().length > 0) {
+                  return (
+                    <TouchableOpacity
+                      style={[styles.categoryItem, { alignItems: "center" }]}
+                      onPress={() => {
+                        setWork(searchText);
+                        setModalType(null);
+                        setSearchText(""); 
+                        setActiveInput(null);
+                      }}
+                    >
+                      <AppText style={{ color: '#16A34A', fontWeight: '600' }}>
+                        {language === "te" ? `"${searchText}" ని చేర్చండి +` : `Add "${searchText}" +`}
+                      </AppText>
+                    </TouchableOpacity>
+                  );
+                }
+
+                return null;
+              }}
+              renderItem={({ item }) => {
+                return (
                   <TouchableOpacity
-                    style={[styles.categoryItem, { alignItems: "center" }]}
+                    style={styles.categoryItem}
                     onPress={() => {
-                      if (modalType === "crop") setCrop(searchText);
-                      else setWork(searchText);
+                      if (modalType === "crop") setCrop(item.label);
+                      else setWork(item.label);
 
                       setModalType(null);
-                      setSearchText("");
+                      setSearchText(""); // 🔥 Clear search on press
                       setActiveInput(null);
                     }}
                   >
-                    <AppText style={{ color: '#16A34A', fontWeight: '600' }}>
-                      {language === "te" ? `"${searchText}" ని చేర్చండి +` : `Add "${searchText}" +`}
+                    <AppText>
+                      {item.label}
                     </AppText>
                   </TouchableOpacity>
-                ) : null
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.categoryItem}
-                  onPress={() => {
-                    const value = language === "te" ? item.te : item.en;
-                    modalType === "crop" ? setCrop(value) : setWork(value);
-
-                    if (searchText.trim()) {
-                      modalType === "crop" ? setCrop(searchText) : setWork(searchText);
-                    }
-
-                    setModalType(null);
-                    setSearchText("");
-                    setActiveInput(null);
-                  }}
-                >
-                  <AppText>
-                    {language === "te" ? item.te : item.en}
-                  </AppText>
-                </TouchableOpacity>
-              )}
+                );
+              }}
             />
           </View>
         </View>

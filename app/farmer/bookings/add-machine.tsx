@@ -577,13 +577,13 @@ export default function AddMachine() {
             </TouchableOpacity>
             {errors.location && <AppText style={styles.errorText} language={language}>{errors.location}</AppText>}
 
-            {/* ⚠️ LOCATION WARNING NOTE */}
+            {/* ⚠️ LOCATION WARNING NOTE (🔥 DYNAMIC MACHINE NAME) */}
             <View style={styles.locationNoteBox}>
               <Ionicons name="information-circle-outline" size={16} color="#B91C1C" />
               <AppText style={styles.locationNoteText}>
                 {language === "te" 
-                  ? "గమనిక: మెషీన్ ఉన్న చోట నుండి మాత్రమే వివరాలను నమోదు చేయండి. మీ లొకేషన్ మార్చుకోవడానికి పైనున్న బ్లూ బటన్ ని నొక్కండి." 
-                  : "Note: Add details only when you are at the machine's location. Click the blue map icon above to adjust your location manually."}
+                  ? `గమనిక: ${equipment ? equipment : "మెషీన్"} ఉన్న చోట నుండి మాత్రమే వివరాలను నమోదు చేయండి. మీ లొకేషన్ మార్చుకోవడానికి పైనున్న బ్లూ బటన్ ని నొక్కండి.` 
+                  : `Note: Add details only when you are at the ${equipment ? equipment : "machine"}'s location. Click the blue map icon above to adjust your location manually.`}
               </AppText>
             </View>
 
@@ -728,6 +728,25 @@ export default function AddMachine() {
             <FlatList
               data={filteredOperations}
               keyExtractor={(item, i) => i.toString()}
+              
+              /* 🔥 ALLOW TYPE TO ADD: CUSTOM WORK FEATURE */
+              ListEmptyComponent={() => searchText.trim().length > 0 ? (
+                <TouchableOpacity
+                  style={[styles.categoryItem, { alignItems: "center" }]}
+                  onPress={() => {
+                    const newOp = searchText.trim();
+                    if (!operations.includes(newOp)) {
+                      setOperations(prev => [...prev, newOp]);
+                    }
+                    setSearchText("");
+                  }}
+                >
+                  <AppText style={{ color: '#16A34A', fontWeight: '600' }}>
+                    {language === "te" ? `"${searchText}" ని చేర్చండి +` : `Add "${searchText}" +`}
+                  </AppText>
+                </TouchableOpacity>
+              ) : null}
+
               renderItem={({ item }) => {
                 const label = language === "te" ? item.te : item.en;
                 const selected = operations.includes(label);
@@ -744,6 +763,20 @@ export default function AddMachine() {
                 );
               }}
             />
+            
+            {/* 🔥 STICKY DONE BUTTON (Only visible when >0 selected) */}
+            {operations.length > 0 && (
+              <View style={styles.modalFooter}>
+                <TouchableOpacity activeOpacity={0.8} onPress={() => { setModalType1(null); setSearchText(""); setActiveInput(null); }}>
+                  <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.modalDoneBtn}>
+                    <AppText style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>
+                      {language === "te" ? "పూర్తయింది" : "Done"}
+                    </AppText>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            )}
+
           </View>
         </View>
       </Modal>
@@ -875,6 +908,10 @@ const styles = StyleSheet.create({
   
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   modalContent: { backgroundColor: "#fff", height: "60%", borderTopLeftRadius: 25, borderTopRightRadius: 25 },
+  
+  // 🔥 MODAL FOOTER & DONE BUTTON STYLES
+  modalFooter: { padding: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#fff' },
+  modalDoneBtn: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
 
   locationNoteBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', padding: 10, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#FEE2E2', marginHorizontal: 4 },
   locationNoteText: { fontSize: 12, color: '#B91C1C', marginLeft: 6, flex: 1, fontFamily: "Mandali" },

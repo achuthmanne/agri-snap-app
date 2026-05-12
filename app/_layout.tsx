@@ -1,4 +1,4 @@
-import { LanguageProvider } from "@/context/LanguageContext"; // ✅ ADD THIS
+import { LanguageProvider } from "@/context/LanguageContext";
 import messaging from "@react-native-firebase/messaging";
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -15,54 +15,47 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
   console.log("🔥 Background notification:", remoteMessage);
 });
 
-
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     'Mandali': require('../assets/fonts/Mandali-Regular.ttf')
   });
 
   useEffect(() => {
-
     async function setupApp() {
-
       // 🔥 1. Splash hide
       if (fontsLoaded) {
         await SplashScreen.hideAsync();
       }
 
-      // 🔥 2. Notification permission (IMPORTANT)
+      // 🔥 2. Notification permission
       if (Platform.OS === "android" && Platform.Version >= 33) {
         await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
         );
       }
 
-
       // 🔥 3. USER ACTIVE TRACK
-const phone = await AsyncStorage.getItem("USER_PHONE");
+      const phone = await AsyncStorage.getItem("USER_PHONE");
 
-if (phone) {
-  await firestore()
-    .collection("users")
-    .doc(phone)
-    .update({
-      lastActiveAt: firestore.FieldValue.serverTimestamp()
-    });
-}
-
+      if (phone) {
+        await firestore()
+          .collection("users")
+          .doc(phone)
+          .update({
+            lastActiveAt: firestore.FieldValue.serverTimestamp()
+          });
+      }
     }
 
     setupApp();
-
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {
     return null;
   }
 
-
   return (
-    <LanguageProvider> {/* ✅ WRAP HERE */}
+    <LanguageProvider>
       <MenuProvider>
         <Stack screenOptions={{ headerShown: false }} />
       </MenuProvider>

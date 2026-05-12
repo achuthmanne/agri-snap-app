@@ -481,6 +481,22 @@ export default function AddExpense() {
                                   </View>
                                 );
                               }
+                            return searchText.trim().length > 0 ? (
+                                <TouchableOpacity
+                                  style={[styles.option, { alignItems: "center" }]}
+                                  onPress={() => {
+                                    setCategory(searchText);
+                                    setModalType(null);
+                                    setSearchText("");
+                                  }}
+                                >
+                                  <AppText style={{ color: "#a34516", fontWeight: "600" }}>
+                                    {language === "te"
+                                      ? `"${searchText}" ని చేర్చండి +`
+                                      : `Add "${searchText}" +`}
+                                  </AppText>
+                                </TouchableOpacity>
+                              ) : null;
                             }}
                             renderItem={({ item }) => (
                                 <TouchableOpacity 
@@ -575,4 +591,9 @@ const styles = StyleSheet.create({
     infoText: {
       flex: 1, fontSize: 13, color: "#92400E", lineHeight: 18, fontFamily: "Mandali"
     },
+    option: {
+  padding: 12,
+  borderBottomWidth: 1,
+  borderBottomColor: "#F1F5F9"
+},
 });

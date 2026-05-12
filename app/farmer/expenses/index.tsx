@@ -15,17 +15,44 @@ import {
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
+// 🔥 REANIMATED తో SUPER SMOOTH COUNT UP (No Lag)
+import Animated, { useSharedValue, useAnimatedProps, withTiming, Easing } from "react-native-reanimated";
+import { TextInput } from "react-native"; // We animate a hidden TextInput for the number
+
+Animated.addWhitelistedNativeProps({ text: true });
+const AnimatedText = Animated.createAnimatedComponent(TextInput);
+
 export default function ExpensesScreen() {
     const router = useRouter();
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [language, setLanguage] = useState<"te" | "en">("te");
+    
     const [totalExpense, setTotalExpense] = useState(0);
     const [cropTotals, setCropTotals] = useState<any>({});
     const [categoryTotals, setCategoryTotals] = useState<any>({});
     const [deleteVisible, setDeleteVisible] = useState(false);
     const [activeSession, setActiveSession] = useState("");
     const [selectedItem, setSelectedItem] = useState<any>(null);
+
+    // 🔥 Shared value for Animation
+    const animatedAmount = useSharedValue(0);
+
+    // Trigger animation whenever totalExpense changes
+    useEffect(() => {
+        animatedAmount.value = withTiming(totalExpense, {
+            duration: 2500, // 3 Seconds for slow, premium feel
+            easing: Easing.out(Easing.exp), // Starts fast, ends slow & smooth
+        });
+    }, [totalExpense]);
+
+   // Format the number properly with Indian commas
+    const animatedProps = useAnimatedProps(() => {
+        const formatted = Math.floor(animatedAmount.value).toLocaleString('en-IN');
+        return {
+            text: `₹ ${formatted}`,
+        } as any; // 🔥 TypeScript Error సాల్వ్ చేయడానికి ఇది పెట్టాలి బ్రో!
+    });
 
     const EmptyShimmer = () => (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 100 }}>
@@ -185,7 +212,14 @@ export default function ExpensesScreen() {
                       <>
                           <LinearGradient colors={["#911d10", "#561111"]} style={styles.mainStatsCard}>
                               <AppText style={styles.statLabel}>{language === "te" ? "మొత్తం పెట్టుబడి" : "Total Investment"}</AppText>
-                              <AppText style={styles.statValue}>₹ {totalExpense.toLocaleString('en-IN')}</AppText>
+                              
+                              {/* 🔥 PRO-LEVEL ANIMATED TOTAL VALUE */}
+                              <AnimatedText 
+                                editable={false}
+                                animatedProps={animatedProps}
+                                style={styles.statValue}
+                              />
+                              
                               <View style={styles.divider} />
                               <ScrollView horizontal showsHorizontalScrollIndicator={false} >
                                   {Object.keys(cropTotals || {}).map((crop) => (
@@ -245,7 +279,6 @@ export default function ExpensesScreen() {
                               </MenuTrigger>
 
                               <MenuOptions customStyles={optionsStyles}>
-                                {/* 🔥 INSTANT DATA PASSING AS PARAMS */}
                                 <MenuOption onSelect={() => {
                                   router.push({ 
                                       pathname: "/farmer/expenses/add-expense", 
@@ -352,7 +385,8 @@ const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F8FAFC" },
     mainStatsCard: { margin: 20, padding: 22, borderRadius: 24, elevation: 5 },
     statLabel: { color: "#f7bbbb", fontSize: 12 },
-    statValue: { color: "#fff", fontSize: 32, fontWeight: "600", marginVertical: 2, marginTop: -5 },
+    // Animated Text Styles
+    statValue: { color: "#fff", fontSize: 32, fontWeight: "600", marginVertical: 2, marginTop: -5, fontFamily: 'System' },
     divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 12},
     cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
     dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },

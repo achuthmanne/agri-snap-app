@@ -12,13 +12,14 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-spe
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList, Linking, SafeAreaView,
+  FlatList, Linking,
+  Modal,
+  SafeAreaView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
-  Modal
+  View
 } from "react-native";
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
@@ -260,12 +261,21 @@ export default function AttendanceScreen() {
   };
 
   const ShimmerRow = () => (
+    // 🔥 ఒరిజినల్ కార్డ్ కి ఉన్న "styles.row" నే ఇక్కడ కూడా వాడుతున్నాం!
     <View style={styles.row}>
-      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 42, height: 42, borderRadius: 21 }} />
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "60%", height: 14, borderRadius: 6 }} />
-        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 6 }} />
-        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "50%", height: 12, borderRadius: 6, marginTop: 6 }} />
+      <View style={styles.left}>
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 42, height: 42, borderRadius: 21, marginRight: 12 }} />
+        <View style={{ flex: 1, gap: 4, marginLeft: 8 }}>
+          <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "60%", height: 14, borderRadius: 6 }} />
+          <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 2 }} />
+          <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "30%", height: 12, borderRadius: 6, marginTop: 2 }} />
+        </View>
+      </View>
+      
+      {/* రైట్ సైడ్ లో ఉండే కాల్ బటన్ మరియు మెనూ ఐకాన్ కోసం షిమ్మర్స్ */}
+      <View style={styles.right}>
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 34, height: 34, borderRadius: 10 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 20, height: 20, borderRadius: 10, marginLeft: 5 }} />
       </View>
     </View>
   );
@@ -286,44 +296,56 @@ export default function AttendanceScreen() {
         subtitle={language === "te" ? "రోజువారీ హాజరు & వివరాలు" : "Daily Attendance & Records"}
         language={language}
       />
-      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
-        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestri name..."}
-          placeholderTextColor="#9CA3AF"
-          cursorColor="#16A34A"
-          selectionColor="#16A34A40"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          style={styles.searchInput}
-        />
-        {search.trim().length > 0 ? (
-          <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity onPress={handleVoiceSearch} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <MaterialCommunityIcons 
-              name={isListening ? "microphone" : "microphone-outline"} 
-              size={22} 
-              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+
+      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
+      {(!loading && mestris.length === 0) ? null : (
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestri name..."}
+            placeholderTextColor="#9CA3AF"
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            style={styles.searchInput}
+          />
+          {search.trim().length > 0 ? (
+            <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={handleVoiceSearch} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <MaterialCommunityIcons 
+                name={isListening ? "microphone" : "microphone-outline"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {loading ? (
-        <>
-          <ShimmerRow /><ShimmerRow /><ShimmerRow /><ShimmerRow />
-        </>
+        // 🔥 FIX: FlatList ki unna same padding ikkada isthe, shimmer exact ga card size ki vastundi!
+        <View style={{ padding: 20, paddingTop: 10 }}>
+          <ShimmerRow />
+          <ShimmerRow />
+          <ShimmerRow />
+          <ShimmerRow />
+        </View>
       ) : (
         <FlatList
           data={filteredMestris}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled" 
-          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          contentContainerStyle={[
+            { padding: 20, paddingBottom: 100 },
+            // 🔥 సెంటర్ లోకి రావడానికి లాజిక్
+            filteredMestris.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+          ]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <AppEmptyState
@@ -339,7 +361,7 @@ export default function AttendanceScreen() {
                   : language === "te" ? "+ బటన్ నొక్కి మేస్త్రీలను చేర్చండి" : "Tap + button to add mestris"
               }
               language={language}
-              marginTop={60} 
+              marginTop={mestris.length === 0 ? 0 : 60} 
             />
           }
           renderItem={({ item }) => (

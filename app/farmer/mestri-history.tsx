@@ -326,7 +326,7 @@ renderItem={({ item }) => {
                     </View>
                     <View style={styles.valueItem}>
                       <Ionicons name="partly-sunny-outline" size={14} color="#3B82F6" />
-                      <AppText style={styles.label} language={language}>{language === "te" ? "సాయంత్రం" : "Evening"}</AppText>
+                      <AppText style={styles.label} language={language}>{language === "te" ? "మధ్యాహ్నం" : "Afternoon"}</AppText>
                       <AppText style={styles.value}>{entry.evening || 0}</AppText>
                     </View>
                     <View style={styles.valueItem}>

@@ -1,8 +1,8 @@
 // app/farmer/fields/index.tsx
 
+import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -11,19 +11,23 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Dimensions,
-  FlatList,
   Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { PieChart } from "react-native-chart-kit";
-import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; // 🔥 PREMIUM MENU
-import ShimmerPlaceholder from "react-native-shimmer-placeholder";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
+
+// 🔥 REANIMATED IMPORTS FOR SMOOTH COUNT UP
+import Animated, { Easing, FadeInDown, useAnimatedProps, useSharedValue, withTiming } from "react-native-reanimated";
+
+Animated.addWhitelistedNativeProps({ text: true });
+const AnimatedText = Animated.createAnimatedComponent(TextInput);
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -43,11 +47,30 @@ export default function FieldsScreen() {
   const [rentAcres, setRentAcres] = useState(0);
   const [cropStats, setCropStats] = useState<any[]>([]);
   
-  // 🔥 DELETED OLD MENU STATE, USING PREMIUM ONE
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [loading, setLoading] = useState(true); 
   const [soilStats, setSoilStats] = useState<any[]>([]); 
+
+  // 🔥 ANIMATION STATE FOR TOTAL ACRES
+  const animatedAcres = useSharedValue(0);
+
+  useEffect(() => {
+    // 1.5 Seconds smooth and constant count up animation
+    animatedAcres.value = withTiming(totalAcres, {
+        duration: 1500, // Reduced to 1.5s for a snappier feel
+        easing: Easing.out(Easing.quad), // 🔥 Constant speed, smooth ending
+    });
+  }, [totalAcres]);
+
+  const animatedProps = useAnimatedProps(() => {
+    const val = animatedAcres.value;
+    // ఎకరాలు పాయింట్స్ లో (2.5) ఉంటే అలానే చూపించడానికి, లేదంటే నార్మల్ గా (2) చూపించడానికి
+    const formatted = totalAcres % 1 !== 0 ? val.toFixed(1) : Math.floor(val).toString();
+    return {
+        text: formatted,
+    } as any; // 🔥 TS Error సాల్వ్ చేయడానికి
+  });
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
@@ -223,7 +246,6 @@ export default function FieldsScreen() {
     );
   };
 
-  // 🔥 MODERN MENU OPTIONS STYLE
   const optionsStyles = {
     optionsContainer: {
       borderRadius: 14,
@@ -270,7 +292,18 @@ export default function FieldsScreen() {
           <>
              <LinearGradient colors={["#53143d", "#2e0513"]} style={styles.mainCard}>
                 <AppText style={styles.cardLabel}>{language === "te" ? "మొత్తం సాగు భూమి" : "Total Cultivated Area"}</AppText>
-                <AppText style={styles.cardValue}>{totalAcres} <AppText style={{fontSize: 18, color: '#ef86e4'}}>{language === "te" ? "ఎకరాలు" : "Acres"}</AppText></AppText>
+                
+                {/* 🔥 ANIMATED ACRES HERO VALUE */}
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 5 }}>
+                  <AnimatedText 
+                    editable={false}
+                    animatedProps={animatedProps}
+                    style={{ color: "#fff", fontSize: 32, fontWeight: "600", fontFamily: 'System', padding: 0, margin: 0 }}
+                  />
+                  <AppText style={{fontSize: 18, color: '#ef86e4', marginLeft: 6}}>
+                    {language === "te" ? "ఎకరాలు" : "Acres"}
+                  </AppText>
+                </View>
 
                 <View style={styles.glassRow}>
                   <View style={styles.glassBox}>
@@ -398,7 +431,6 @@ export default function FieldsScreen() {
                         </View>
                       )}
 
-                      {/* 🔥 NEW PREMIUM MENU */}
                       <Menu>
                         <MenuTrigger style={styles.menuBtn}>
                           <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
@@ -505,7 +537,6 @@ const styles = StyleSheet.create({
   glassUnit: { fontSize: 10, color: 'rgba(255, 255, 255, 0.5)', fontWeight: '400' },
   mainCard: { margin: 16, padding: 20, borderRadius: 24 },
   cardLabel: { color: "#f7bbe4", fontSize: 13, fontWeight: '500', letterSpacing: 0.5 },
-  cardValue: { color: "#fff", fontSize: 32, fontWeight: "600", marginTop: 5 },
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 15 },
   miniChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, marginRight: 8 },
   dot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
@@ -525,14 +556,12 @@ const styles = StyleSheet.create({
   rentUnit: { fontSize: 9, color: '#94A3B8', fontWeight: '600' },
   cardRightSection: { flexDirection: 'row', alignItems: 'center', paddingRight: 8, gap: 10 },
   
-  // NEW MENU STYLES
   menuBtn: { padding: 8, backgroundColor: '#F1F5F9', borderRadius: 10 },
   modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },
   menuTextEdit: { fontSize: 14, color: "#1E293B", fontWeight: "500" },
   menuTextDelete: { fontSize: 14, color: "#EF4444", fontWeight: "500" },
   menuDivider: { height: 1, backgroundColor: "#F1F5F9", marginHorizontal: 10 },
 
-  // DELETE MODAL
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
   deleteBox: { width: "80%", backgroundColor: "#fff", borderRadius: 18, padding: 20, alignItems: "center" },
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
@@ -554,10 +583,10 @@ const styles = StyleSheet.create({
   shimmerRight: { flexDirection: 'row', alignItems: 'center', paddingRight: 10, gap: 10 },
   shimmerPriceBox: { width: 55, height: 30, backgroundColor: '#F1F5F9', borderRadius: 8 },
   shimmerMenuCircle: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F1F5F9' },
-  donutHole: { position: 'absolute', width: 90, height: 90, borderRadius: 50, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
+  donutHole: { position: 'absolute', width: 90, height: 90, borderRadius: 50, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
   donutText: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
   semiChartWrapper: { height: 160, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-start', marginTop: -20 },
-  semiHole: { position: 'absolute', bottom: -20, width: 130, height: 125, borderRadius: 75, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  semiHole: { position: 'absolute', bottom: -20, width: 130, height: 125, borderRadius: 75, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9',shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   semiValueText: { fontSize: 22, fontWeight: '800', color: '#1E293B' },
   semiLabelText: { fontSize: 10, color: '#94A3B8', fontWeight: '600', textTransform: 'uppercase' },
   semiLegendRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20, paddingTop: 15 },

@@ -658,18 +658,18 @@ export default function AddFarmerWork() {
               </AppText>
             )}
 
-            <View style={{ paddingHorizontal: 4, marginBottom: 10 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                <Ionicons name="information-circle-outline" size={14} color="#6B7280" style={{ marginTop: 2 }} />
-                <View style={{ marginLeft: 6, flex: 1 }}>
-                  <AppText style={{ fontSize: 12, color: "#4B5563", lineHeight: 18 }}>
-                    {language === "te" 
-                      ? "ఇక్కడ ఎకరాకు ఎన్ని సాళ్లు అనేది కాకుండా, మీరు మొత్తం పొలంలో వేసిన సాళ్ల సంఖ్యను నమోదు చేయండి (ఉదా: 2 ఎకరాల్లో 2 సార్లు దున్నితే 4 సాళ్లు అని ఇవ్వాలి)." 
-                      : "Enter the total number of Saallu done across the entire field, not per acre."}
-                  </AppText>
-                </View>
-              </View>
-            </View>   
+            <View style={{ paddingHorizontal: 4, marginBottom: 5 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                            <Ionicons name="information-circle-outline" size={16} color="#059669" style={{ marginTop: 2 }} />
+                            <View style={{ marginLeft: 6, flex: 1 }}>
+                              <AppText style={{ fontSize: 13, color: "#166534", lineHeight: 20, fontFamily: "Mandali" }}>
+                                {language === "te" 
+                                  ? "గమనిక: ఒక ఎకరాను ఒకసారి దున్నితే అది '1 సాలు' కింద లెక్క. ఒకవేళ మీరు 2 ఎకరాల పొలాన్ని 2 సార్లు దున్నితే... ఇక్కడ మొత్తం '4 సాళ్లు' (2 ఎకరాలు × 2 సార్లు) అని నమోదు చేయాలి." 
+                                  : "Note: Ploughing 1 acre once equals '1 Saalu'. If you ploughed a 2-acre field 2 times, you should enter '4 Saallu' (2 acres × 2 times) here."}
+                              </AppText>
+                            </View>
+                          </View>
+           </View>  
           </View>
         ) : (
           <View>

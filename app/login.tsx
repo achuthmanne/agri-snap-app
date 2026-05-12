@@ -1,4 +1,3 @@
-// login.tsx - FULL UPDATED CODE WITH FONT SUPPORT
 import firestore from "@react-native-firebase/firestore";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -21,7 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import AgriLoader from "../components/AgriLoader";
-import AppText from "../components/AppText"; // AppText ని వాడుతున్నాం
+import AppText from "../components/AppText";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -94,7 +93,6 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <View style={styles.container}>
           
-          {/* భాష ఎంపిక */}
           <View style={styles.langRow}>
             <Pressable onPress={() => setLanguage("te")}>
               <AppText style={[styles.lang, language === "te" && styles.active]} language={language}>తెలుగు</AppText>
@@ -105,20 +103,16 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-        <AppText style={styles.title} language={language}>Agrisnap</AppText>
-<AppText style={styles.tagline} language={language}>
-  {language === "te" 
-    ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు" 
-    : "Our digital support for your farming"}
-</AppText>
+          <AppText style={styles.title} language={language}>Agrisnap</AppText>
+          <AppText style={styles.tagline} language={language}>
+            {language === "te" ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు" : "Our digital support for your farming"}
+          </AppText>
 
-
-          {/* ఫోన్ నంబర్ ఇన్పుట్ */}
           <Animated.View style={[styles.inputBox, borderStyle]}>
             <AppText style={styles.prefix} language={language}>+91</AppText>
             <View style={styles.divider} />
             <TextInput
-              style={[styles.input, { fontFamily: "Mandali", marginTop: Platform.OS === "android" ? 2 : 0, }]} // Android లో టెక్స్ట్ సెంటర్ లో ఉండేందుకు మర్జిన్
+              style={[styles.input, { fontFamily: "Mandali", marginTop: Platform.OS === "android" ? 2 : 0 }]}
               keyboardType="number-pad"
               maxLength={10}
               value={phone}
@@ -135,7 +129,6 @@ export default function LoginScreen() {
             />
           </Animated.View>
 
-          {/* రోల్ సెలెక్షన్ */}
           <View style={styles.roleRow}>
             <TouchableOpacity activeOpacity={0.8} style={[styles.roleCard, role === "FARMER" && styles.roleActive]} onPress={() => setRole("FARMER")}>
               <Image source={require("../assets/images/farmer.png")} style={[styles.customIcon, { opacity: role === "FARMER" ? 1 : 0.5 }]} />
@@ -161,15 +154,13 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-       <AgriLoader visible={loading} type="loading" language={language} />
+        <AgriLoader visible={loading} type="loading" language={language} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-// Styles లో పెద్ద మార్పులు లేవు, కానీ Text కి బదులు AppText వాడాము
 const styles = StyleSheet.create({
-  // ... నీ పాత స్టైల్స్ అన్నీ ఇక్కడే ఉంచు ...
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   watermark: { position: "absolute", width: 300, height: 300, opacity: 0.04, alignSelf: "center", top: "30%" },
   container: { flex: 1, padding: 24, paddingTop: 60 },
@@ -181,14 +172,7 @@ const styles = StyleSheet.create({
   inputBox: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 22, borderWidth: 0.5, borderColor: "#E5E7EB", paddingHorizontal: 18, height: 60, marginBottom: 20, marginTop: -20},
   prefix: { fontSize: 17, fontWeight: "600", color: "#1B5E20", marginRight: 8 },
   divider: { width: 1.5, height: 24, backgroundColor: "#E5E7EB", marginRight: 15 },
-  input: {
-  flex: 1,
-  fontSize: 18,
-  fontWeight: "600",
-  color: "#111827",
-  height: '100%', // ఇది మొత్తం హైట్ ని ఆక్యుపై చేస్తుంది
-  paddingVertical: 0, // ప్యాడింగ్ జీరో చేస్తే టెక్స్ట్ సెంటర్ లో ఉంటుంది
-},
+  input: { flex: 1, fontSize: 18, fontWeight: "600", color: "#111827", height: '100%', paddingVertical: 0 },
   roleRow: { flexDirection: "row", marginBottom: 30, gap: 12 },
   roleCard: { flex: 1, backgroundColor: "#FFF", paddingVertical: 25, borderRadius: 22, alignItems: "center", borderWidth: 1, borderColor: "#F3F4F6" },
   customIcon: { width: 55, height: 55, resizeMode: 'contain', marginBottom: 8 },

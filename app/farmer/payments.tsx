@@ -173,42 +173,44 @@ export default function PaymentsScreen() {
         language={language}
       />
 
-      {/* 🔥 MINIMAL & CLEAN SEARCH BAR */}
-      <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
-        <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
+      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
+      {(!loading && mestris.length === 0) ? null : (
+        <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
+          <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
-          placeholderTextColor="#9CA3AF"
-          cursorColor="#16A34A"
-          selectionColor="#16A34A40"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          style={styles.searchInput}
-        />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
+            placeholderTextColor="#9CA3AF"
+            cursorColor="#16A34A"
+            selectionColor="#16A34A40"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            style={styles.searchInput}
+          />
 
-        {search.trim().length > 0 ? (
-          <TouchableOpacity 
-            onPress={() => setSearch("")} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            onPress={handleVoiceSearch} 
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MaterialCommunityIcons 
-              name={isListening ? "microphone" : "microphone-outline"} 
-              size={22} 
-              color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
-            />
-          </TouchableOpacity>
-        )}
-      </View>
+          {search.trim().length > 0 ? (
+            <TouchableOpacity 
+              onPress={() => setSearch("")} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              onPress={handleVoiceSearch} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialCommunityIcons 
+                name={isListening ? "microphone" : "microphone-outline"} 
+                size={22} 
+                color={isListening ? "#EF4444" : (isFocused ? "#16A34A" : "#9CA3AF")} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* LIST */}
       {loading ? (
@@ -244,6 +246,7 @@ export default function PaymentsScreen() {
                   : (language === "te" ? "ముందుగా హాజరు నమోదు చేయండి" : "Mark Attendance to get Payments")
               }
               language={language}
+              marginTop={mestris.length === 0 ? 0 : 60} 
             />
           }
 

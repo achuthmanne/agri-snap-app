@@ -43,7 +43,7 @@ const ProgressCircle = ({ percent }: { percent: number }) => {
 
   useEffect(() => {
     animatedValue.value = withTiming(percent, {
-      duration: 1800
+      duration: 1200
     });
   }, [percent]);
 

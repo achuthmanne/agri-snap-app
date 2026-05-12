@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -118,11 +119,15 @@ export default function PinScreen() {
       }
       setShowForgotModal(true); 
     } else {
-      setLoading(true);
+      // 🔥 1. పిన్ కొట్టగానే వెంటనే లోడింగ్ స్టార్ట్ అవుతుంది
+      setLoading(true); 
       try {
         const doc = await firestore().collection("users").doc(String(phone)).get();
         const data = doc.data();
+
         if (data?.pin !== p) {
+          // తప్పు పిన్ కొడితే లోడింగ్ ఆపేసి, వార్నింగ్ ఇస్తాం
+          setLoading(false); 
           const newAttempts = attempts + 1;
           setAttempts(newAttempts);
           if (newAttempts >= 3) {
@@ -137,12 +142,42 @@ export default function PinScreen() {
           inputs.current[0]?.focus();
         } else {
           await AsyncStorage.setItem("USER_PHONE", String(phone));
-          router.replace(role === "FARMER" ? "/farmer/(tabs)" : "/(tabs)");
+          if (data?.name) {
+            await AsyncStorage.setItem("USER_NAME", data.name);
+          }
+          
+          let hasNavigated = false;
+
+          // 🔥 1. ముందు కీబోర్డ్ ని స్మూత్ గా కిందకి దించేయాలి
+          Keyboard.dismiss();
+
+          // 🔥 2. "కీబోర్డ్ పూర్తిగా కిందకి వెళ్ళిపోయింది" అని కన్ఫామ్ అయ్యాకే రౌటింగ్ జరగాలి
+          const keyboardListener = Keyboard.addListener("keyboardDidHide", () => {
+            if (!hasNavigated) {
+              hasNavigated = true;
+              keyboardListener.remove(); // పని అయ్యాక లిజనర్ ని క్లోజ్ చేయాలి
+              router.replace(role === "FARMER" ? "/farmer/(tabs)" : "/(tabs)");
+            }
+          });
+
+          // 🔥 3. సేఫ్టీ ఫాల్‌బ్యాక్: ఒకవేళ యూజర్ ముందే కీబోర్డ్ క్లోజ్ చేసి ఉంటే, లిజనర్ వర్క్ అవ్వదు కదా! 
+          // అప్పుడు 300ms ఆగి స్మూత్ గా పంపించేస్తాం.
+          setTimeout(() => {
+            if (!hasNavigated) {
+              hasNavigated = true;
+              keyboardListener.remove();
+              router.replace(role === "FARMER" ? "/farmer/(tabs)" : "/(tabs)");
+            }
+          }, 300);
+  
         }
-      } catch (e) { showAlert("Error", "error"); } finally { setLoading(false); }
+      } catch (e) { 
+        setLoading(false);
+        showAlert("Error", "error"); 
+      }
+      // 🔥 గమనిక: ఇక్కడ finally { setLoading(false) } తీసేసాను. ఎందుకంటే వెరిఫై అయ్యాక కూడా డాష్‌బోర్డ్ ఓపెన్ అయ్యేదాకా లోడింగ్ తిరగాలి కాబట్టి!
     }
   };
-
   const handleForgotVerify = async () => {
     if (ansYear.length !== 4 || ansCrop.trim() === "") {
         showAlert(language === "te" ? "వివరాలు నింపండి" : "Fill Details", "error");

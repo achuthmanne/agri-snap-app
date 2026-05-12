@@ -293,7 +293,7 @@ export default function OwnersList() {
       )}
 
       {loading ? (
-        <View style={{ paddingTop: 10 }}>
+        <View style={{ paddingTop: 10, paddingHorizontal: 20 }}>
           <ShimmerRow /><ShimmerRow /><ShimmerRow />
         </View>
       ) : (

@@ -753,8 +753,7 @@ const filteredData = options.filter(item => {
       backgroundColor: "#E5E7EB"
     }}
   >
-    
-    
+     
     <MaterialCommunityIcons
       name={
         isListening &&

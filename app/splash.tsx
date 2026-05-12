@@ -12,7 +12,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import AppText from "../components/AppText"; // నీ కస్టమ్ AppText
+import AppText from "../components/AppText";
 
 const { width } = Dimensions.get("window");
 
@@ -20,7 +20,6 @@ export default function SplashScreen() {
   const router = useRouter();
   const [language, setLanguage] = useState<"te" | "en">("te");
 
-  // Animation Values
   const titleOpacity = useSharedValue(0);
   const titleTranslate = useSharedValue(30);
   const titleScale = useSharedValue(0.94);
@@ -32,14 +31,12 @@ export default function SplashScreen() {
   const curveOpacity = useSharedValue(0);
 
   useEffect(() => {
-    // 1. Language Load
     const loadLang = async () => {
       const storedLang = await AsyncStorage.getItem("APP_LANG");
       if (storedLang) setLanguage(storedLang as "te" | "en");
     };
     loadLang();
 
-    // 2. Animations
     curveOpacity.value = withTiming(1, { duration: 1200 });
     curveTopTranslate.value = withTiming(0, { duration: 1500, easing: Easing.out(Easing.cubic) });
     curveBottomTranslate.value = withTiming(0, { duration: 1500, easing: Easing.out(Easing.cubic) });
@@ -54,7 +51,6 @@ export default function SplashScreen() {
     taglineOpacity.value = withDelay(1700, withTiming(1, { duration: 800 }));
     taglineTranslate.value = withDelay(1700, withTiming(0, { duration: 800 }));
 
-    // 3. Auth Boot Logic
     const boot = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       const role = await AsyncStorage.getItem("USER_ROLE");
@@ -81,7 +77,6 @@ export default function SplashScreen() {
     boot();
   }, []);
 
-  // Animation Styles
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleOpacity.value, transform: [{ translateY: titleTranslate.value }, { scale: titleScale.value }] }));
   const taglineStyle = useAnimatedStyle(() => ({ opacity: taglineOpacity.value, transform: [{ translateY: taglineTranslate.value }] }));
   const underlineStyle = useAnimatedStyle(() => ({ width: underlineWidth.value }));
@@ -92,22 +87,14 @@ export default function SplashScreen() {
     <View style={styles.container}>
       <Animated.View style={[styles.topCurve, topCurveStyle]} />
       <Animated.View style={[styles.bottomCurve, bottomCurveStyle]} />
-
       <Animated.View style={titleStyle}>
-        {/* AppText ఇక్కడ వాడటం వల్ల ఫాంట్ ఆటోమేటిక్ గా వస్తుంది */}
-        <AppText style={styles.title} language={language}>AgriSnap</AppText>
+        <AppText style={styles.title} language={language}>AgriLog</AppText>
       </Animated.View>
-
       <Animated.View style={[styles.underline, underlineStyle]} />
-
       <Animated.View style={taglineStyle}>
-       <AppText style={styles.tagline} language={language}>
-         {language === "te" 
-           ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు" 
-           : "Our digital support for your farming"}
-       </AppText>
-       
-        
+        <AppText style={styles.tagline} language={language}>
+          {language === "te" ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు" : "Our digital support for your farming"}
+        </AppText>
       </Animated.View>
     </View>
   );
@@ -117,7 +104,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#1B5E20", justifyContent: "center", alignItems: "center" },
   title: { fontSize: 40, fontWeight: "800", color: "#FFFFFF", letterSpacing: 1.2 },
   underline: { height: 3, backgroundColor: "#E8F5E9", marginTop: 12, marginBottom: 20, borderRadius: 4 },
-  tagline: { fontSize: 16, color: "#E8F5E9", fontWeight: "500", textAlign: "center",   marginTop: -8 },
+  tagline: { fontSize: 16, color: "#E8F5E9", fontWeight: "500", textAlign: "center", marginTop: -8 },
   topCurve: { position: "absolute", top: -180, right: -140, width: width, height: width, backgroundColor: "#2E7D32", borderRadius: width, opacity: 0.25 },
   bottomCurve: { position: "absolute", bottom: -220, left: -160, width: width * 1.3, height: width * 1.3, backgroundColor: "#388E3C", borderRadius: width, opacity: 0.18 },
 });

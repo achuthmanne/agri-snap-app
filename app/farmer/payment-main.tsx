@@ -278,7 +278,7 @@ export default function PaymentWorkHistory() {
                   <View style={styles.valueBox}>
                     <Ionicons name="partly-sunny-outline" size={14} color="#3B82F6" />
                     <AppText style={styles.label} language={language}>
-                      {language === "te" ? "సాయంత్రం" : "Evening"}
+                      {language === "te" ? "మధ్యాహ్నం" : "Afternoon"}
                     </AppText>
                     <AppText style={styles.value}>
                       {item.evening || 0}

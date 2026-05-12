@@ -2,7 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState";
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -17,10 +17,18 @@ import {
   StatusBar,
   StyleSheet,
   TouchableOpacity,
-  View
+  TouchableWithoutFeedback,
+  View,
+  TextInput // 🔥 Needed for Reanimated Text
 } from "react-native";
-import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; // 🔥 PREMIUM MENU
+import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; 
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
+
+// 🔥 REANIMATED IMPORTS FOR SMOOTH COUNT UP
+import Animated, { useSharedValue, useAnimatedProps, withTiming, Easing } from "react-native-reanimated";
+
+Animated.addWhitelistedNativeProps({ text: true });
+const AnimatedText = Animated.createAnimatedComponent(TextInput);
 
 export default function SalesScreen() {
 
@@ -36,6 +44,24 @@ export default function SalesScreen() {
 
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
+
+  // 🔥 ANIMATION STATE FOR TOTAL INCOME
+  const animatedIncome = useSharedValue(0);
+
+  useEffect(() => {
+    // 2.5 Seconds smooth and constant count up animation
+    animatedIncome.value = withTiming(totalIncome, {
+        duration: 2500, 
+        easing: Easing.out(Easing.quad), // 🔥 Constant speed, smooth ending
+    });
+  }, [totalIncome]);
+
+  const animatedProps = useAnimatedProps(() => {
+    const formatted = Math.floor(animatedIncome.value).toLocaleString('en-IN');
+    return {
+        text: `₹ ${formatted}`,
+    } as any; // 🔥 TS Error Solution
+  });
 
   const unitMap: any = {
     kg: { en: "Kg", te: "కిలో" },
@@ -212,9 +238,14 @@ export default function SalesScreen() {
                 <AppText style={styles.statLabel}>
                   {language === "te" ? "మొత్తం ఆదాయం" : "Total Income"}
                 </AppText>
-                <AppText style={styles.statValue}>
-                  ₹ {totalIncome.toLocaleString("en-IN")}
-                </AppText>
+                
+                {/* 🔥 ANIMATED HERO VALUE */}
+                <AnimatedText 
+                  editable={false}
+                  animatedProps={animatedProps}
+                  style={styles.statValue}
+                />
+
                 <View style={styles.divider} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {Object.keys(cropQty).map((key) => {
@@ -496,7 +527,7 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
   statLabel: { color: "#bbf7d0", fontSize: 12 },
-  statValue: { color: "#fff", fontSize: 28, fontWeight: "600" },
+  statValue: { color: "#fff", fontSize: 28, fontWeight: "600", marginVertical: 2, fontFamily: 'System' },
   
   cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
