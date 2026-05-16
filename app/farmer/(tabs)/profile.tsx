@@ -3,9 +3,11 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import firestore from "@react-native-firebase/firestore";
-import { useRouter } from "expo-router";
+// 🔥 useFocusEffect ని ఇంపోర్ట్ చేశాం
+import { useRouter, useFocusEffect } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
-import React, { useEffect, useRef, useState } from "react";
+// 🔥 useCallback ని ఇంపోర్ట్ చేశాం
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   Dimensions,
   Image,
@@ -44,7 +46,6 @@ export default function ProfileScreen() {
   const [showAlert, setShowAlert] = useState(false);
   const [loaderType, setLoaderType] = useState<"loading" | "updating">("loading");
 
-  // 🔥 STANDARD PATTERN STATES
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isListening, setIsListening] = useState(false);
@@ -53,6 +54,37 @@ export default function ProfileScreen() {
 
   // Backup state for cancelling edits
   const [backupData, setBackupData] = useState({ name: "", state: "", language: "" });
+
+  // 🔥 REFS FOR CLEANUP (స్క్రీన్ మారినప్పుడు పాత డేటా ఫెచ్ చేయడం కోసం)
+  const isEditingRef = useRef(isEditing);
+  const backupDataRef = useRef(backupData);
+
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+
+  useEffect(() => {
+    backupDataRef.current = backupData;
+  }, [backupData]);
+
+  // 🔥 SILENTLY CLOSE EDIT MODE ON LEAVING SCREEN (నువ్వు అడిగిన మెయిన్ లాజిక్ ఇదే బ్రో)
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // యూజర్ స్క్రీన్ నుంచి బయటికి వెళ్ళగానే ఇది రన్ అవుతుంది
+        if (isEditingRef.current) {
+          const backup = backupDataRef.current;
+          // ఫస్ట్ టైమ్ యూజర్ కాకపోతే (పాత డేటా ఉంటే) సైలెంట్ గా క్లోజ్ చేసేయ్
+          if (backup.name && backup.name.trim().length >= 3) {
+            setIsEditing(false);
+            setName(backup.name);
+            setSelectedState(backup.state);
+            setErrors({});
+          }
+        }
+      };
+    }, [])
+  );
 
   const getDisplayRole = () => {
     const isFarmer = role?.toLowerCase() === "farmer" || role === "రైతు";
@@ -69,7 +101,6 @@ export default function ProfileScreen() {
     return require("../../../assets/images/default.jpg");
   };
 
-  // 🔥 MIC LOGIC
   useSpeechRecognitionEvent("result", (event) => {
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
@@ -104,24 +135,23 @@ export default function ProfileScreen() {
         const data = doc.data();
 
         if (data) {
-          setName(data.name || "");
+          const dbName = data.name || "";
+          const dbState = (data.state || "ap").toLowerCase() === "telangana" ? "Telangana" : "AP";
+          
+          setName(dbName);
           setRole(data.role || "");
-          const dbState = (data.state || "ap").toLowerCase();
-
-          if (dbState === "telangana") {
-            setSelectedState("Telangana");
-          } else {
-            setSelectedState("AP");
-          }
+          setSelectedState(dbState);
           setCreated(data.createdAt?.toDate()?.toLocaleDateString() || "--/--/----");
 
-          if (!data.name || data.name.trim().length < 3) {
+          setBackupData({ name: dbName, state: dbState, language });
+
+          if (!dbName || dbName.trim().length < 3) {
             setIsEditing(true);
             setTimeout(() => setShowAlert(true), 500);
           }
         }
       } catch (error) {
-        console.log(error);
+        console.log("Error loading profile:", error);
       } finally {
         setLoading(false);
       }
@@ -144,11 +174,15 @@ export default function ProfileScreen() {
 
   const handleEditToggle = () => {
     if (!isEditing) {
-      // Start editing: backup current values
       setBackupData({ name, state: selectedState, language });
       setIsEditing(true);
     } else {
-      // Cancel editing: revert to backup
+      if (!backupData.name || backupData.name.trim().length < 3) {
+        setErrors({ name: language === "te" ? "దయచేసి ముందుగా మీ పేరు నమోదు చేయండి*" : "Please enter your name first*" });
+        setShowAlert(true);
+        return;
+      }
+      
       setName(backupData.name);
       setSelectedState(backupData.state);
       if (backupData.language !== language) {
@@ -160,12 +194,20 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
-    // 🔥 INLINE VALIDATION
     if (!name || name.trim().length < 3) {
       setErrors({ name: language === "te" ? "కనీసం 3 అక్షరాలు ఉండాలి*" : "Name must be at least 3 characters*" });
       return;
     }
     setErrors({});
+
+    if (
+      name.trim() === backupData.name &&
+      selectedState === backupData.state &&
+      language === backupData.language
+    ) {
+      setIsEditing(false);
+      return; 
+    }
 
     setLoaderType("updating");
     setLoading(true);
@@ -176,13 +218,19 @@ export default function ProfileScreen() {
         state: selectedState.toLowerCase().trim(),
         updatedAt: firestore.FieldValue.serverTimestamp(),
       });
+      
       await AsyncStorage.setItem("APP_LANG", language);
+      
+      setBackupData({ name: name.trim(), state: selectedState, language });
       setIsEditing(false);
-      // Determine navigation based on role
-      const isFarmer = role?.toUpperCase() === "FARMER" || role === "రైతు";
-      router.replace(isFarmer ? "/farmer/(tabs)" : "/(tabs)");
+      
+      if (!backupData.name || backupData.name.trim().length < 3) {
+        const isFarmer = role?.toUpperCase() === "FARMER" || role === "రైతు";
+        router.replace(isFarmer ? "/farmer/(tabs)" : "/(tabs)");
+      }
     } catch (error) {
-      alert("Error saving data");
+      console.log("Error saving data:", error);
+      alert(language === "te" ? "సర్వర్ సమస్య, దయచేసి మళ్లీ ప్రయత్నించండి." : "Server error, please try again.");
     } finally {
       setLoading(false);
     }
@@ -416,7 +464,7 @@ export default function ProfileScreen() {
 
       {/* --- MODALS --- */}
 
-      {/* Name Alert Modal (Used only if user tries to go back without a name) */}
+      {/* Name Alert Modal */}
       <Modal visible={showAlert} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -598,8 +646,6 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 8,
   },
-  
-  // 🔥 STANDARD PATTERN INPUT STYLES
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -649,8 +695,6 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     includeFontPadding: false,
   },
-
-  // 🔥 ORIGINAL TAB & BUTTON STYLES (UNTOUCHED)
   toggleRow: {
     flexDirection: "row",
     gap: 12,

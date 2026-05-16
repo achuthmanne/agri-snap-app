@@ -6,7 +6,8 @@ type LangType = "te" | "en";
 const LanguageContext = createContext<any>(null);
 
 export const LanguageProvider = ({ children }: any) => {
-  const [language, setLanguage] = useState<LangType>("en");
+  // 1. 🔥 ఇక్కడ డీఫాల్ట్ గా "te" అని మార్చాను
+  const [language, setLanguage] = useState<LangType>("te");
 
   // 🔥 load saved language once
   useEffect(() => {
@@ -14,17 +15,21 @@ export const LanguageProvider = ({ children }: any) => {
       const saved = await AsyncStorage.getItem("APP_LANG");
       if (saved === "te" || saved === "en") {
         setLanguage(saved);
+      } else {
+        // 2. 🔥 ఫస్ట్ టైమ్ యాప్ ఓపెన్ చేస్తే స్టోరేజ్ లో ఏమీ ఉండదు కాబట్టి, ఆటోమేటిక్ గా 'te' సేవ్ అవుతుంది
+        setLanguage("te");
+        AsyncStorage.setItem("APP_LANG", "te");
       }
     };
     loadLang();
   }, []);
 
-const changeLanguage = (lang: LangType) => {
-  setLanguage(lang); // 🔥 instant UI
+  const changeLanguage = (lang: LangType) => {
+    setLanguage(lang); // 🔥 instant UI
 
-  // 🔥 background save (no await)
-  AsyncStorage.setItem("APP_LANG", lang);
-};
+    // 🔥 background save (no await)
+    AsyncStorage.setItem("APP_LANG", lang);
+  };
 
   return (
     <LanguageContext.Provider value={{ language, changeLanguage }}>
