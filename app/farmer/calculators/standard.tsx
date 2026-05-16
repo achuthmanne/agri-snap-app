@@ -2,21 +2,22 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import {
-    Dimensions,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TouchableOpacity,
-    Vibration,
-    View
+  Dimensions,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  Vibration,
+  View
 } from 'react-native';
 
 import AppHeader from '@/components/AppHeader';
 import AppText from '@/components/AppText';
 
-// బటన్స్ సైజు స్క్రీన్ ని బట్టి ఆటోమాటిక్ గా సెట్ అవ్వడానికి
-const { width } = Dimensions.get('window');
-const BUTTON_SIZE = (width - 64) / 4; // కొంచెం గ్యాప్ పెంచాను నీట్ గా ఉండటానికి
+// 🔥 రెస్పాన్సివ్ లాజిక్ (స్క్రీన్ సైజుని బట్టి)
+const { width, height } = Dimensions.get('window');
+const IS_SMALL_SCREEN = height < 700; // చిన్న ఫోన్లకి
+const BUTTON_SIZE = (width - (IS_SMALL_SCREEN ? 90 : 80)) / 4; 
 
 export default function StandardCalculator() {
   const [language, setLanguage] = useState<'te' | 'en'>('te');
@@ -29,7 +30,6 @@ export default function StandardCalculator() {
     });
   }, []);
 
-  // రియల్ టైమ్ లో లెక్క చేయడానికి
   useEffect(() => {
     if (input) {
       calculateResult(input, true);
@@ -120,13 +120,27 @@ export default function StandardCalculator() {
     return styles.textNumber;
   };
 
+  // 🔥 టైప్ చేసే నెంబర్ల సంఖ్య పెరిగే కొద్దీ ఫాంట్ సైజు ఆటోమేటిక్ గా తగ్గించే లాజిక్ (Overlap రాకుండా)
+  const getInputFontSize = () => {
+    if (input.length > 25) return IS_SMALL_SCREEN ? 22 : 26;
+    if (input.length > 15) return IS_SMALL_SCREEN ? 28 : 34;
+    if (input.length > 9) return IS_SMALL_SCREEN ? 36 : 44;
+    return IS_SMALL_SCREEN ? 44 : 56;
+  };
+
+  const getInputLineHeight = () => {
+    if (input.length > 25) return IS_SMALL_SCREEN ? 28 : 32;
+    if (input.length > 15) return IS_SMALL_SCREEN ? 34 : 40;
+    if (input.length > 9) return IS_SMALL_SCREEN ? 42 : 50;
+    return IS_SMALL_SCREEN ? 50 : 64;
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#F6F7F6" />
       
       <AppHeader
-        title={language === 'te' ? 'క్యాలిక్యులేటర్' : 'Calculator'}
-        subtitle={language === 'te' ? 'సాధారణ లెక్కలు' : 'Standard Calculations'}
+        title={language === 'te' ? 'సాధారణ లెక్కలు' : 'Standard Calc'}
         language={language}
       />
 
@@ -134,9 +148,20 @@ export default function StandardCalculator() {
         
         {/* 🔥 DISPLAY SECTION */}
         <View style={styles.displayContainer}>
-          <AppText style={[styles.inputText, input.length > 10 && { fontSize: 42 }, input.length > 15 && { fontSize: 32 }]} numberOfLines={2}>
+          <AppText 
+            style={[
+              styles.inputText, 
+              { 
+                fontSize: getInputFontSize(), 
+                lineHeight: getInputLineHeight() // 'మండలి' ఫాంట్ కి లైన్ గ్యాప్ పర్ఫెక్ట్ గా ఉండటానికి
+              }
+            ]} 
+            numberOfLines={3} // 3 లైన్ల కన్నా మించకుండా లాక్
+            adjustsFontSizeToFit // ఆండ్రాయిడ్/ఐఓఎస్ లో ఆటో స్కేల్ కోసం
+          >
             {input || '0'}
           </AppText>
+          
           <AppText style={styles.previewText} numberOfLines={1}>
             {resultPreview ? `= ${resultPreview}` : ''}
           </AppText>
@@ -144,13 +169,12 @@ export default function StandardCalculator() {
 
         <View style={styles.divider} />
 
-      {/* 🔥 KEYPAD SECTION (Flat & Clean) */}
+        {/* 🔥 KEYPAD SECTION */}
         <View style={styles.keypadContainer}>
           {buttons.map((row, rowIndex) => (
             <View key={rowIndex} style={styles.row}>
               {row.map((btn) => {
                 
-                // సింబల్స్ కి ఏ ఐకాన్ వాడాలో డిసైడ్ చేయడం
                 const isOperator = ['+', '-', '×', '÷', '='].includes(btn);
                 let iconName: any = '';
                 if (btn === '+') iconName = 'plus';
@@ -167,12 +191,11 @@ export default function StandardCalculator() {
                     onPress={() => handlePress(btn)}
                   >
                     {btn === '⌫' ? (
-                      <Ionicons name="backspace-outline" size={32} color="#374151" />
+                      <Ionicons name="backspace-outline" size={IS_SMALL_SCREEN ? 28 : 32} color="#374151" />
                     ) : isOperator ? (
-                      // 🔥 ఆపరేటర్స్ కి టెక్స్ట్ బదులు ఐకాన్స్ వాడుతున్నాం!
                       <MaterialCommunityIcons 
                         name={iconName} 
-                        size={30} 
+                        size={IS_SMALL_SCREEN ? 26 : 30} 
                         color={btn === '=' ? '#ffffff' : '#16A34A'} 
                       />
                     ) : (
@@ -204,42 +227,44 @@ const styles = StyleSheet.create({
   // DISPLAY
   displayContainer: {
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingVertical: IS_SMALL_SCREEN ? 10 : 20,
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
-    minHeight: 160,
+    flex: 1, // 🔥 హెడర్ మీదకి వెళ్లకుండా ఇదే కంట్రోల్ చేస్తుంది
+    overflow: 'hidden', // మరీ ఎక్కువైతే కట్ చేస్తుంది కానీ హెడర్ ని తగలదు
   },
   inputText: {
-    fontSize: 56,
     fontWeight: '300',
-    color: '#111827', // Darker for better visibility
+    color: '#111827',
     textAlign: 'right',
     fontFamily: 'Mandali',
+    includeFontPadding: false,
   },
   previewText: {
-    fontSize: 28,
+    fontSize: IS_SMALL_SCREEN ? 22 : 28,
     fontWeight: '400',
     color: '#9CA3AF',
     marginTop: 8,
-    minHeight: 34,
+    minHeight: IS_SMALL_SCREEN ? 28 : 34,
     fontFamily: 'Mandali',
+    includeFontPadding: false,
   },
   divider: {
     height: 1,
     backgroundColor: '#E5E7EB',
     marginHorizontal: 24,
-    marginBottom: 24,
+    marginBottom: IS_SMALL_SCREEN ? 16 : 24,
   },
 
   // KEYPAD
   keypadContainer: {
-    paddingHorizontal: 22,
-    paddingBottom: 35,
+    paddingHorizontal: IS_SMALL_SCREEN ? 16 : 22,
+    paddingBottom: IS_SMALL_SCREEN ? 20 : 35,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: IS_SMALL_SCREEN ? 12 : 16,
   },
   button: {
     width: BUTTON_SIZE,
@@ -247,55 +272,48 @@ const styles = StyleSheet.create({
     borderRadius: BUTTON_SIZE / 2,
     justifyContent: 'center',
     alignItems: 'center',
-    // 🔥 No shadows, no elevations! Pure flat design.
   },
   btnText: {
     fontFamily: 'Mandali',
     textAlign: 'center',
+    includeFontPadding: false,
   },
 
-  // 🔥 FLAT COLORS & BIG FONTS
+  // FLAT COLORS & FONTS
   btnNumber: {
-    backgroundColor: '#F3F4F6', // Light Flat Gray
+    backgroundColor: '#F3F4F6',
   },
   textNumber: {
-    color: '#111827', // Almost black
-    fontSize: 34,
+    color: '#111827',
+    fontSize: IS_SMALL_SCREEN ? 28 : 34,
     fontWeight: '400',
   },
 
   btnOperator: {
-    backgroundColor: '#DCFCE7', // Flat Light Green
+    backgroundColor: '#DCFCE7',
   },
   btnAction: {
-    backgroundColor: '#E5E7EB', // Slightly darker flat gray
+    backgroundColor: '#E5E7EB',
   },
   textAction: {
-    color: '#374151', // Dark Gray
-    fontSize: 30,
+    color: '#374151',
+    fontSize: IS_SMALL_SCREEN ? 24 : 30,
     fontWeight: '500',
   },
 
   btnEquals: {
-    backgroundColor: '#16A34A', // Solid Green Flat
+    backgroundColor: '#16A34A',
   },
- textOperator: {
+  textOperator: {
     color: '#16A34A', 
-    fontSize: 38,
+    fontSize: IS_SMALL_SCREEN ? 32 : 38,
     fontWeight: '500',
-    justifyContent: 'center',
-    includeFontPadding: false, // 🔥 ఇది ఆండ్రాయిడ్ లో ఎక్స్‌ట్రా ప్యాడింగ్ ని తీసేస్తుంది
     textAlignVertical: 'center',
-    lineHeight: 42, // 🔥 కరెక్ట్ గా సెంటర్ లో కూర్చోవడానికి
   },
-
   textEquals: {
     color: '#ffffff',
-    fontSize: 40,
+    fontSize: IS_SMALL_SCREEN ? 34 : 40,
     fontWeight: '500',
-    justifyContent: 'center',
-    includeFontPadding: false,
     textAlignVertical: 'center',
-    lineHeight: 44,
   },
 });

@@ -8,7 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  FlatList, Modal, SafeAreaView,
+  FlatList, Modal, SafeAreaView, ScrollView, // 🔥 ScrollView ని యాడ్ చేశాను
   StatusBar,
   StyleSheet,
   TextInput,
@@ -291,8 +291,11 @@ export default function MestriAttendance() {
         subtitle={language === "te" ? "వివరాలు నమోదు చేయండి" : "Enter Details"}
         language={language}
       />
-
-      <View style={styles.container}>
+{/* 🔥 ఇక్కడ View తీసేసి ScrollView పెట్టాను */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.container}
+      >
         <View style={styles.mestriBox}>
           <AppText style={styles.mestriName} language={language}>
             {mestriName} {village ? `| ${village}` : ""}
@@ -400,15 +403,15 @@ export default function MestriAttendance() {
           {errors.counts && <AppText style={[styles.errorText, {marginTop: 10, textAlign: 'center'}]} language={language}>{errors.counts}</AppText>}
         </View>
 
-        {/* SAVE */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
+      <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
           <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
             <AppText style={styles.saveText} language={language}>
               {language === "te" ? "భద్రపరచండి" : "Save"}
             </AppText>
           </LinearGradient>
         </TouchableOpacity>
-      </View>
+      </ScrollView> 
+      {/* 🔥 ScrollView ఇక్కడితో ఎండ్ అవుతుంది */}
 
       {/* DUPLICATE WARNING MODAL */}
       <Modal visible={showWarning} transparent animationType="fade">
@@ -590,7 +593,8 @@ export default function MestriAttendance() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  container: { padding: 20, overflow: "visible" },
+  // 🔥 కింద సేవ్ బటన్ కింద గ్యాప్ ఉండటానికి paddingBottom: 40 యాడ్ చేశాను
+  container: { padding: 20, paddingBottom: 40, overflow: "visible" },
   inputBox: {
     flexDirection: "row", alignItems: "center", backgroundColor: "white",
     borderRadius: 12, paddingHorizontal: 15, height: 55, marginBottom: 14,

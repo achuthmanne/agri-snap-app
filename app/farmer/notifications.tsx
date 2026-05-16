@@ -258,14 +258,20 @@ export default function Notifications() {
               <TouchableOpacity
                 activeOpacity={0.85}
                 style={styles.card}
-                onPress={async () => {
+               onPress={async () => {
                   setExpanded(isOpen ? null : item.id);
-                  // 🔥 mark as seen
-                  if (!item.seen) {
+                  // 🔥 NEW LOGIC: మెయిన్ డాక్యుమెంట్ మార్చకుండా, యూజర్ సబ్-కలెక్షన్ లో "seen" రికార్డ్ యాడ్ చేస్తున్నాం
+                  const phone = await AsyncStorage.getItem("USER_PHONE");
+                  if (phone && !item.seenLocally) {
                     await firestore()
-                      .collection("notifications")
+                      .collection("users")
+                      .doc(phone)
+                      .collection("seenNotifications") // కొత్త కలెక్షన్: యూజర్ చూసిన నోటిఫికేషన్ల జాబితా
                       .doc(item.id)
-                      .update({ seen: true });
+                      .set({ seenAt: firestore.FieldValue.serverTimestamp() });
+                    
+                    // కరెంట్ లిస్ట్ లో వెంటనే అప్‌డేట్ అవ్వడానికి (UI కోసం)
+                    setData(prev => prev.map(n => n.id === item.id ? { ...n, seenLocally: true } : n));
                   }
                 }}
               >

@@ -133,7 +133,6 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
 
       {/* All Services Header */}
       <View style={{ flexDirection: "row", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 15, gap: 8 }}>
-        <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E8F5E9", "#F1F8F1", "#E8F5E9"]} style={{ width: 32, height: 32, borderRadius: 10 }} />
         <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 110, height: 22, borderRadius: 6 }} />
       </View>
 
@@ -233,16 +232,22 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     const unsub = firestore()
       .collection("notifications")
       .onSnapshot(async snap => {
         const phone = await AsyncStorage.getItem("USER_PHONE");
         if (!phone) return;
+        
         const userDoc = await firestore().collection("users").doc(phone).get();
         const userState = userDoc.data()?.state;
+        
         const hiddenSnap = await firestore().collection("users").doc(phone).collection("hiddenNotifications").get();
         const hiddenIds = hiddenSnap.docs.map(d => d.id);
+
+        // 🔥 కొత్తగా ఇది యాడ్ చేశాం (యూజర్ ఇప్పటికే చూసేసిన ఐడీలు)
+        const seenSnap = await firestore().collection("users").doc(phone).collection("seenNotifications").get();
+        const seenIds = seenSnap.docs.map(d => d.id);
 
         let count = 0;
         const now = new Date();
@@ -251,6 +256,7 @@ export default function Dashboard() {
         snap.forEach(doc => {
           const data = doc.data();
           if (hiddenIds.includes(doc.id)) return;
+          
           let deleteTime = null;
           if (data.deleteAt && typeof data.deleteAt.toDate === "function") {
             deleteTime = data.deleteAt.toDate();
@@ -262,7 +268,8 @@ export default function Dashboard() {
           else if (data.userId) { if (data.userId !== phone) return; }
           else { return; }
 
-          if (!data.seen) { count++; }
+          // 🔥 ఇక్కడ మెయిన్ డాక్యుమెంట్ seen కి బదులు, మన seenIds లో ఉందో లేదో చెక్ చేస్తున్నాం
+          if (!seenIds.includes(doc.id)) { count++; }
         });
         setNotifCount(count);
       });
@@ -969,11 +976,8 @@ const getServices = () => [
       )}
     />
     
-    {/* ALL SERVICES 🔥 FIXED HEADING */}
-    <View style={styles.allServicesHeader}>
-      <View style={styles.allServicesIconBg}>
-        <Ionicons name="grid-outline" size={18} color="#1B5E20" />
-      </View>
+   {/* ALL SERVICES 🔥 FIXED HEADING */}
+    <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { fontFamily: "Mandali" }]}>
         {t.all}
       </Text>
@@ -1117,8 +1121,6 @@ const styles = StyleSheet.create({
   sessionBox: { marginHorizontal: 20, marginTop: 10, marginBottom: 10, backgroundColor: "#ffffff", padding: 14, borderRadius: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB" },
   sectionTitle:{ fontSize:20, color:"#1F2937" },
   sectionDivider:{ flex:1, height:1, backgroundColor:"#E5E7EB", marginLeft:10 },
-  allServicesHeader: { flexDirection: "row", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 15, gap: 8 },
-  allServicesIconBg: { width: 32, height: 32, borderRadius: 10, backgroundColor: "#E8F5E9", justifyContent: "center", alignItems: "center" },
   swipeContainer:{ flexDirection:"row", alignItems:"center", backgroundColor:"#F3F4F6", paddingHorizontal:10, paddingVertical:4, borderRadius:14 },
   swipeText:{ fontSize:12, color:"#6B7280", fontWeight:"500", marginHorizontal:4 },
   swipeIcon:{ justifyContent:"center", alignItems:"center" },
