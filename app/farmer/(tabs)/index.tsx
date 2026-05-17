@@ -1154,7 +1154,7 @@ const styles = StyleSheet.create({
     color: "#1F2937", 
     textAlign: "center", 
     includeFontPadding: false, 
-    lineHeight: 20 // 🔥 2-LINES PERFECTLY FITTED
+    lineHeight: 24 // 🔥 2-LINES PERFECTLY FITTED
   },
   grid:{ flexDirection:"row", flexWrap:"wrap", justifyContent:"flex-start", paddingHorizontal:20, paddingBottom: 60, marginBottom: 60, gap:14 },
   cardIcon:{ width:22, height:22, tintColor:"#2E7D32", resizeMode:"contain" },

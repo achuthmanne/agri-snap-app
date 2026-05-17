@@ -103,13 +103,20 @@ export default function SchemeDetailsScreen() {
     }, 3000);
   };
 
-  const openApplyLink = async () => {
+ const openApplyLink = async () => {
     setLinkError(false); 
     if (scheme?.applyLink) {
       try {
-        const supported = await Linking.canOpenURL(scheme.applyLink);
+        let finalUrl = scheme.applyLink.trim();
+        
+        // 🔥 ఆటోమేటిక్ గా https:// లేకపోతే యాడ్ చేసే లాజిక్
+        if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+          finalUrl = "https://" + finalUrl;
+        }
+
+        const supported = await Linking.canOpenURL(finalUrl);
         if (supported) {
-          await Linking.openURL(scheme.applyLink);
+          await Linking.openURL(finalUrl);
         } else {
           showInlineError(); 
         }
@@ -278,8 +285,8 @@ const styles = StyleSheet.create({
   // BULLET POINTS
   bulletRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   bulletPoint: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#16A34A", marginTop: 8, marginRight: 10 },
-  bulletText: { flex: 1, fontSize: 14, color: "#4B5563", lineHeight: 22 },
-  infoText: { fontSize: 14, color: "#4B5563", lineHeight: 22 },
+  bulletText: { flex: 1, fontSize: 14, color: "#4B5563", lineHeight: 24 },
+  infoText: { fontSize: 14, color: "#4B5563", lineHeight: 24 },
 
   // STICKY BOTTOM BAR
   bottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#ffffff", paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: "#E5E7EB", elevation: 10, shadowColor: "#000", shadowOffset: {width: 0, height: -3}, shadowOpacity: 0.05, shadowRadius: 10 },

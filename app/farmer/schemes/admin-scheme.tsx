@@ -1,6 +1,7 @@
 // app/farmer/schemes/admin-scheme.tsx
 
 import React, { useState, useEffect } from "react";
+import storage from "@react-native-firebase/storage";
 import {
   View,
   StyleSheet,
@@ -91,7 +92,7 @@ export default function AdminSchemeScreen() {
   };
 
   /* ---------------- VALIDATION & SAVE ---------------- */
-  const handleSave = async () => {
+ const handleSave = async () => {
     Keyboard.dismiss();
 
     const newErrors: any = {};
@@ -110,10 +111,22 @@ export default function AdminSchemeScreen() {
     try {
       setLoading(true);
 
+      let finalImageUrl = bannerImage || "";
+
+      // 🔥 Firebase Storage Upload Logic
+      if (bannerImage && !bannerImage.startsWith("http")) {
+        // ఇక్కడ ఫోటోని Firebase లో అప్‌లోడ్ చేసి పబ్లిక్ URL తెస్తున్నాం
+        const filename = bannerImage.substring(bannerImage.lastIndexOf('/') + 1);
+        const storageRef = storage().ref(`schemes/${Date.now()}_${filename}`);
+        
+        await storageRef.putFile(bannerImage);
+        finalImageUrl = await storageRef.getDownloadURL();
+      }
+
       const schemeData = {
         title: title.trim(),
         shortDesc: shortDesc.trim(),
-        bannerImage: bannerImage || "", 
+        bannerImage: finalImageUrl, // 🔥 ఇప్పుడు పబ్లిక్ లింక్ వెళ్తుంది
         state: targetState,
         howToApply: howToApply.trim(),
         applyLink: applyLink.trim(),
@@ -135,7 +148,7 @@ export default function AdminSchemeScreen() {
     } catch (error) {
       console.log("Error saving scheme:", error);
       setLoading(false);
-      Alert.alert("Error", "Failed to save scheme. Please try again.");
+      Alert.alert("Error", "Failed to save scheme. Please check internet and try again.");
     }
   };
 
