@@ -6,7 +6,7 @@ import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useLocalSearchParams } from "expo-router"; 
 import React, { useEffect, useRef, useState } from "react";
-import { Keyboard } from "react-native";
+import { Keyboard, Platform, KeyboardAvoidingView } from "react-native";
 import {
   FlatList, Modal, SafeAreaView, ScrollView, StatusBar,
   StyleSheet, TextInput, TouchableOpacity, View
@@ -16,6 +16,7 @@ import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { useIsFocused } from "@react-navigation/native";
 
 // URL params helper
 const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
@@ -23,6 +24,7 @@ const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val
 export default function AddField() {
   const router = useRouter();
   const params = useLocalSearchParams(); 
+  const isScreenFocused = useIsFocused(); // 🔥 Added to track screen focus
 
   const editId = getStr(params.editId);
 
@@ -49,15 +51,21 @@ export default function AddField() {
 
   const cropOptions = [
     { "en": "Acid Lime / Lemon", "te": "నిమ్మ" },
+    { "en": "Ajwain / Carom Seeds", "te": "వాము" },
+    { "en": "Amla / Gooseberry", "te": "ఉసిరి" },
     { "en": "Apple Gourd", "te": "దండకాయ" },
     { "en": "Areca Nut", "te": "పోక చెక్క" },
-    { "en": "Banana", "te": "అరటి" },
+    { "en": "Ash Gourd", "te": "బూడిద గుమ్మడికాయ" },
+    { "en": "Avocado", "te": "ఆవకాడో" },
     { "en": "Bajra / Pearl Millet", "te": "సజ్జలు" },
+    { "en": "Banana", "te": "అరటి" },
     { "en": "Beetroot", "te": "బీట్రూట్" },
     { "en": "Bengal Gram / Chickpea", "te": "శనగలు" },
+    { "en": "Betel Leaves", "te": "తమలపాకులు" },
     { "en": "Bhendi / Okra", "te": "బెండకాయ" },
     { "en": "Bitter Gourd", "te": "కాకరకాయ" },
     { "en": "Black Gram / Urad Dal", "te": "మినుములు" },
+    { "en": "Black Pepper", "te": "మిరియాలు" },
     { "en": "Bottle Gourd", "te": "సొరకాయ" },
     { "en": "Brinjal / Eggplant", "te": "వంకాయ" },
     { "en": "Broad Beans", "te": "చిక్కుడుకాయ" },
@@ -69,13 +77,18 @@ export default function AddField() {
     { "en": "Chilli", "te": "మిర్చి" },
     { "en": "Citrus / Sweet Orange", "te": "బత్తాయి" },
     { "en": "Cluster Beans", "te": "గోరు చిక్కుడు" },
+    { "en": "Cocoa", "te": "కోకో" },
     { "en": "Coconut", "te": "కొబ్బరి" },
+    { "en": "Coffee", "te": "కాఫీ" },
     { "en": "Coriander", "te": "కొత్తిమీర" },
     { "en": "Cotton", "te": "పత్తి" },
     { "en": "Cowpea", "te": "బొబ్బర్లు" },
     { "en": "Cucumber", "te": "దోసకాయ" },
     { "en": "Curry Leaves", "te": "కరివేపాకు" },
+    { "en": "Custard Apple", "te": "సీతాఫలం" },
+    { "en": "Dragon Fruit", "te": "డ్రాగన్ ఫ్రూట్" },
     { "en": "Drumstick", "te": "ములక్కాయ" },
+    { "en": "Fenugreek", "te": "మెంతికూర / మెంతులు" },
     { "en": "Flowers / Marigold", "te": "బంతి పూలు" },
     { "en": "Garlic", "te": "వెల్లుల్లి" },
     { "en": "Ginger", "te": "అల్లం" },
@@ -85,45 +98,71 @@ export default function AddField() {
     { "en": "Groundnut / Peanut", "te": "వేరుశనగ" },
     { "en": "Guava", "te": "జామ" },
     { "en": "Horse Gram", "te": "ఉలవలు" },
+    { "en": "Ivy Gourd", "te": "దొండకాయ" },
+    { "en": "Jackfruit", "te": "పనసకాయ" },
+    { "en": "Jasmine", "te": "మల్లె పూలు" },
     { "en": "Jowar / Sorghum", "te": "జొన్న" },
     { "en": "Jute", "te": "జనుము" },
+    { "en": "Linseed", "te": "అవిసెలు" },
     { "en": "Maize / Corn", "te": "మొక్కజొన్న" },
     { "en": "Mango", "te": "మామిడి" },
     { "en": "Mesta", "te": "గోగునార" },
     { "en": "Millets / Korra", "te": "కొర్రలు" },
+    { "en": "Mint", "te": "పుదీనా" },
+    { "en": "Mulberry", "te": "మల్బరీ" },
     { "en": "Muskmelon", "te": "కర్బూజా" },
     { "en": "Mustard", "te": "ఆవాలు" },
     { "en": "Oil Palm", "te": "పామాయిల్" },
     { "en": "Onion", "te": "ఉల్లిపాయ" },
     { "en": "Paddy / Rice", "te": "వరి" },
+    { "en": "Palm Fruit", "te": "తాటి ముంజలు" },
     { "en": "Papaya", "te": "బొప్పాయి" },
+    { "en": "Pineapple", "te": "అనాసపండు" },
     { "en": "Pomegranate", "te": "దానిమ్మ" },
     { "en": "Potato", "te": "బంగాళాదుంప" },
+    { "en": "Proso Millet", "te": "వరిగలు" },
+    { "en": "Pumpkin", "te": "గుమ్మడికాయ" },
     { "en": "Radish", "te": "ముల్లంగి" },
     { "en": "Ragi / Finger Millet", "te": "రాగులు" },
     { "en": "Red Gram / Pigeon Pea", "te": "కంది" },
     { "en": "Ridge Gourd", "te": "బీరకాయ" },
+    { "en": "Rose", "te": "గులాబీ" },
+    { "en": "Safflower", "te": "కుసుమ" },
+    { "en": "Sandalwood", "te": "గంధపు చెక్క" },
     { "en": "Sapota", "te": "సపోటా" },
     { "en": "Sesame / Gingelly", "te": "నువ్వులు" },
+    { "en": "Small Millet / Sama", "te": "సామలు" },
     { "en": "Snake Gourd", "te": "పొట్లకాయ" },
     { "en": "Soybean", "te": "సోయాబీన్" },
+    { "en": "Spinach", "te": "పాలకూర" },
     { "en": "Sugarcane", "te": "చెరకు" },
     { "en": "Sunflower", "te": "పొద్దుతిరుగుడు" },
+    { "en": "Sweet Potato", "te": "చిలగడదుంప" },
+    { "en": "Tamarind", "te": "చింతపండు" },
+    { "en": "Tapioca", "te": "కర్రపెండలం" },
+    { "en": "Teak", "te": "టేకు" },
     { "en": "Tobacco", "te": "పొగాకు" },
     { "en": "Tomato", "te": "టమాటా" },
     { "en": "Turmeric", "te": "పసుపు" },
     { "en": "Watermelon", "te": "పుచ్చకాయ" },
-    { "en": "Wheat", "te": "గోధుమ" }
+    { "en": "Wheat", "te": "గోధుమ" },
+    { "en": "Wood Apple", "te": "వెలగపండు" }
   ];
+
   
-  const soilOptions = [
-    { "en": "Black Soil", "te": "నల్ల రేగడి నేల" },
-    { "en": "Red Soil", "te": "ఎర్ర నేల" },
-    { "en": "Sandy Soil", "te": "ఇసుక నేల" },
-    { "en": "Clay Soil", "te": "బంక మట్టి నేల" },
-    { "en": "Alluvial Soil", "te": "ఒండ్రు నేల" },
-    { "en": "Laterite Soil", "te": "లేటరైట్ నేల" },
-  ];
+const soilOptions = [
+  { "en": "Black Soil", "te": "నల్ల రేగడి నేల" },
+  { "en": "Red Soil", "te": "ఎర్ర నేల" },
+  { "en": "Sandy Soil", "te": "ఇసుక నేల" },
+  { "en": "Clay Soil", "te": "బంక మట్టి నేల" },
+  { "en": "Alluvial Soil", "te": "ఒండ్రు నేల" },
+  { "en": "Laterite Soil", "te": "లేటరైట్ నేల" },
+  { "en": "Red Sandy Soil", "te": "ఎర్ర ఇసుక నేల" },
+  { "en": "Saline Soil", "te": "చవుడు నేల" },
+  { "en": "Coastal Alluvial Soil", "te": "తీర ప్రాంత ఒండ్రు నేల" },
+  { "en": "Delta Alluvial Soil", "te": "డెల్టా ఒండ్రు నేల" },
+  { "en": "Rocky Soil", "te": "రాతి నేల" }
+];
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
@@ -208,16 +247,22 @@ export default function AddField() {
   };
 
   useSpeechRecognitionEvent("result", (event) => {
-    const text = event.results?.[0]?.transcript;
+    if (!isListening) return; // 🔥 Safety check
+    const text = event.results?.[0]?.transcript?.replace(/[.,?!]/g, ""); // 🔥 Punctuation fix
     if (text) setSearchText(text);
   });
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
+  // 🔥 PRO FIX 3: Stop mic if screen loses focus or unmounts
   useEffect(() => {
+    if (!isScreenFocused) {
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    }
     return () => {
       ExpoSpeechRecognitionModule.stop();
     };
-  }, []);
+  }, [isScreenFocused]);
 
   const filteredData = modalType === "crop" 
     ? cropOptions.filter(i => (language === "te" ? i.te : i.en).toLowerCase().includes(searchText.toLowerCase().trim()))
@@ -231,6 +276,8 @@ export default function AddField() {
       setSearchText("");
       setModalType(null);
       setActiveInput(null);
+      ExpoSpeechRecognitionModule.stop(); // 🔥 Stop mic when closing modal
+      setIsListening(false);
     }
   };
 
@@ -243,160 +290,185 @@ export default function AddField() {
         language={language}
       />
 
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      {/* 🔥 PRO FIX 2: Added KeyboardAvoidingView so keyboard doesn't hide rent inputs */}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : undefined} 
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
-        {/* 🌾 CROP BOX */}
-        <TouchableOpacity 
-          activeOpacity={1}
-          style={[styles.inputBox, activeInput === "crop" && styles.inputFocused, errors.crop && styles.inputError]} 
-          onPress={() => { setModalType("crop"); setActiveInput("crop"); if (errors.crop) setErrors({...errors, crop: ""}); }}
-        >
-          <Ionicons name="leaf-outline" size={20} color={crop ? "#16A34A" : "#9CA3AF"} />
-          <View style={styles.inputWrapper}>
-            <AppText style={{ color: crop ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
-              {crop || (language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop*")}
-            </AppText>
-          </View>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-        {errors.crop && <AppText style={styles.errorText} language={language}>{errors.crop}</AppText>}
-
-        {/* 🪨 SOIL TYPE BOX */}
-        <TouchableOpacity 
-          activeOpacity={1}
-          style={[styles.inputBox, activeInput === "soil" && styles.inputFocused, errors.soilType && styles.inputError]} 
-          onPress={() => { setModalType("soil"); setActiveInput("soil"); if (errors.soilType) setErrors({...errors, soilType: ""}); }}
-        >
-          <Ionicons name="layers-outline" size={20} color={soilType ? "#16A34A" : "#9CA3AF"} />
-          <View style={styles.inputWrapper}>
-            <AppText style={{ color: soilType ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
-              {soilType || (language === "te" ? "నేల రకాన్ని ఎంచుకోండి*" : "Select Soil Type*")}
-            </AppText>
-          </View>
-          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-        {errors.soilType && <AppText style={styles.errorText} language={language}>{errors.soilType}</AppText>}
-
-        {/* 📏 ACRES BOX */}
-        <TouchableOpacity
-          style={[styles.inputBox, activeInput === "acres" && styles.inputFocused, errors.acres && styles.inputError]}
-          activeOpacity={1}
-          onPress={() => {
-            setActiveInput("acres");
-            setTimeout(() => acresRef.current?.focus(), 50); 
-          }}
-        >
-          <Ionicons name="resize-outline" size={20} color={acres ? "#16A34A" : "#9CA3AF"} />
-          <View style={styles.inputWrapper}>
-            {!acres && activeInput !== "acres" && (
-              <AppText style={styles.placeholder}>
-                {language === "te" ? "ఎన్ని ఎకరాలు?*" : "Enter acres*"}
+          {/* 🌾 CROP BOX */}
+          <TouchableOpacity 
+            activeOpacity={1}
+            style={[styles.inputBox, activeInput === "crop" && styles.inputFocused, errors.crop && styles.inputError]} 
+            onPress={() => { setModalType("crop"); setActiveInput("crop"); if (errors.crop) setErrors({...errors, crop: ""}); }}
+          >
+            <Ionicons name="leaf-outline" size={20} color={crop ? "#16A34A" : "#9CA3AF"} />
+            <View style={styles.inputWrapper}>
+              <AppText style={{ color: crop ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
+                {crop || (language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop*")}
               </AppText>
-            )}
-            <TextInput
-              ref={acresRef}
-              value={acres}
-              onChangeText={(txt) => {
-                setAcres(txt);
-                if (errors.acres) setErrors({ ...errors, acres: "" });
-              }}
-              keyboardType="numeric"
-              cursorColor="#16A34A"
-              selectionColor="#16A34A40"
-              style={[styles.input, { display: (acres || activeInput === "acres") ? "flex" : "none" }]}
-              onFocus={() => setActiveInput("acres")}
-              onBlur={() => setActiveInput(null)}
-            />
-          </View>
-        </TouchableOpacity>
-        {errors.acres && <AppText style={styles.errorText} language={language}>{errors.acres}</AppText>}
-
-        {/* 🔘 TYPE SELECTION */}
-        <AppText style={styles.label}>{language === "te" ? "పొలం రకం*" : "Field Type*"}</AppText>
-        <View style={styles.row}>
-          <TouchableOpacity activeOpacity={0.8}
-            style={[styles.pill, type === "own" && styles.activePill, errors.type && !type && { borderColor: "#EF4444" }]} 
-            onPress={() => { setType("own"); setActiveInput(null); if (errors.type) setErrors({ ...errors, type: "" }); }}
-          >
-            <AppText style={[styles.pillText, { color: type === "own" ? "#fff" : "#4B5563" }]}>
-              {language === "te" ? "సొంతం" : "Own"}
-            </AppText>
+            </View>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
           </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.8}
-            style={[styles.pill, type === "rent" && styles.activePill, errors.type && !type && { borderColor: "#EF4444" }]} 
-            onPress={() => { setType("rent"); setActiveInput(null); if (errors.type) setErrors({ ...errors, type: "" }); }}
-          >
-            <AppText style={[styles.pillText, { color: type === "rent" ? "#fff" : "#4B5563" }]}>
-              {language === "te" ? "కౌలు" : "Rent"}
-            </AppText>
-          </TouchableOpacity>
-        </View>
-        {errors.type && <AppText style={[styles.errorText, {marginTop: -10, marginBottom: 16}]} language={language}>{errors.type}</AppText>}
+          {errors.crop && <AppText style={styles.errorText} language={language}>{errors.crop}</AppText>}
 
-        {/* 💰 RENT BOX */}
-        {type === "rent" && (
-          <View>
-            <TouchableOpacity
-              style={[styles.inputBox, activeInput === "rent" && styles.inputFocused, errors.rent && styles.inputError]}
-              activeOpacity={1}
-              onPress={() => {
-                setActiveInput("rent");
-                setTimeout(() => rentRef.current?.focus(), 50);
+          {/* 🪨 SOIL TYPE BOX */}
+          <TouchableOpacity 
+            activeOpacity={1}
+            style={[styles.inputBox, activeInput === "soil" && styles.inputFocused, errors.soilType && styles.inputError]} 
+            onPress={() => { setModalType("soil"); setActiveInput("soil"); if (errors.soilType) setErrors({...errors, soilType: ""}); }}
+          >
+            <Ionicons name="layers-outline" size={20} color={soilType ? "#16A34A" : "#9CA3AF"} />
+            <View style={styles.inputWrapper}>
+              <AppText style={{ color: soilType ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
+                {soilType || (language === "te" ? "నేల రకాన్ని ఎంచుకోండి*" : "Select Soil Type*")}
+              </AppText>
+            </View>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+          {errors.soilType && <AppText style={styles.errorText} language={language}>{errors.soilType}</AppText>}
+
+          {/* 📏 ACRES BOX */}
+          <TouchableOpacity
+            style={[styles.inputBox, activeInput === "acres" && styles.inputFocused, errors.acres && styles.inputError]}
+            activeOpacity={1}
+            onPress={() => {
+              setActiveInput("acres");
+              setTimeout(() => acresRef.current?.focus(), 50); 
+            }}
+          >
+            <Ionicons name="resize-outline" size={20} color={acres ? "#16A34A" : "#9CA3AF"} />
+            <View style={styles.inputWrapper}>
+              {!acres && activeInput !== "acres" && (
+                <AppText style={styles.placeholder}>
+                  {language === "te" ? "ఎన్ని ఎకరాలు?*" : "Enter acres*"}
+                </AppText>
+              )}
+              <TextInput
+                ref={acresRef}
+                value={acres}
+                onChangeText={(txt) => {
+                  setAcres(txt);
+                  if (errors.acres) setErrors({ ...errors, acres: "" });
+                }}
+                keyboardType="numeric"
+                cursorColor="#16A34A"
+                selectionColor="#16A34A40"
+                style={[styles.input, { display: (acres || activeInput === "acres") ? "flex" : "none" }]}
+                onFocus={() => setActiveInput("acres")}
+                onBlur={() => setActiveInput(null)}
+              />
+            </View>
+          </TouchableOpacity>
+          {errors.acres && <AppText style={styles.errorText} language={language}>{errors.acres}</AppText>}
+
+          {/* 🔘 TYPE SELECTION */}
+          <AppText style={styles.label}>{language === "te" ? "పొలం రకం*" : "Field Type*"}</AppText>
+          <View style={styles.row}>
+            <TouchableOpacity activeOpacity={0.8}
+              style={[styles.pill, type === "own" && styles.activePill, errors.type && !type && { borderColor: "#EF4444" }]} 
+              onPress={() => { 
+                setType("own"); 
+                setRent(""); // 🔥 PRO FIX 1: Clear rent if switched to own
+                setActiveInput(null); 
+                if (errors.type) setErrors({ ...errors, type: "", rent: "" }); 
               }}
             >
-              <Ionicons name="cash-outline" size={20} color={rent ? "#16A34A" : "#9CA3AF"} />
-              <View style={styles.inputWrapper}>
-                {!rent && activeInput !== "rent" && (
-                  <AppText style={styles.placeholder}>
-                    {language === "te" 
-                      ? `${acres || 0} ఎకరాలకు కలిపి మొత్తం కౌలు (రూ!!)*` 
-                      : `Total rent for ${acres || 0} acres (₹)*`}
-                  </AppText>
-                )}
-                <TextInput
-                  ref={rentRef}
-                  value={rent}
-                  onChangeText={(txt) => {
-                    setRent(txt);
-                    if (errors.rent) setErrors({ ...errors, rent: "" });
-                  }}
-                  keyboardType="numeric"
-                  cursorColor="#16A34A"
-                  selectionColor="#16A34A40"
-                  style={[styles.input, { display: (rent || activeInput === "rent") ? "flex" : "none" }]}
-                  onFocus={() => setActiveInput("rent")}
-                  onBlur={() => setActiveInput(null)}
-                />
-              </View>
+              <AppText style={[styles.pillText, { color: type === "own" ? "#fff" : "#4B5563" }]}>
+                {language === "te" ? "సొంతం" : "Own"}
+              </AppText>
             </TouchableOpacity>
-            {errors.rent && <AppText style={styles.errorText} language={language}>{errors.rent}</AppText>}
+            <TouchableOpacity activeOpacity={0.8}
+              style={[styles.pill, type === "rent" && styles.activePill, errors.type && !type && { borderColor: "#EF4444" }]} 
+              onPress={() => { 
+                setType("rent"); 
+                setActiveInput(null); 
+                if (errors.type) setErrors({ ...errors, type: "" }); 
+              }}
+            >
+              <AppText style={[styles.pillText, { color: type === "rent" ? "#fff" : "#4B5563" }]}>
+                {language === "te" ? "కౌలు" : "Rent"}
+              </AppText>
+            </TouchableOpacity>
           </View>
-        )}
+          {errors.type && <AppText style={[styles.errorText, {marginTop: -10, marginBottom: 16}]} language={language}>{errors.type}</AppText>}
 
-        {/* 💾 SAVE BUTTON (🔥 REPLACED WITH STANDARD PREM BUTTON) */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.8}>
-          <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
-            <AppText style={styles.saveText}>
-              {editId 
-                ? (language === "te" ? "వివరాలు మార్చండి" : "Update Details") 
-                : (language === "te" ? "భద్రపరచండి" : "Save Details")}
-            </AppText>
-          </LinearGradient>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* 💰 RENT BOX */}
+          {type === "rent" && (
+            <View>
+              <TouchableOpacity
+                style={[styles.inputBox, activeInput === "rent" && styles.inputFocused, errors.rent && styles.inputError]}
+                activeOpacity={1}
+                onPress={() => {
+                  setActiveInput("rent");
+                  setTimeout(() => rentRef.current?.focus(), 50);
+                }}
+              >
+                <Ionicons name="cash-outline" size={20} color={rent ? "#16A34A" : "#9CA3AF"} />
+                <View style={styles.inputWrapper}>
+                  {!rent && activeInput !== "rent" && (
+                    <AppText style={styles.placeholder}>
+                      {language === "te" 
+                        ? `${acres || 0} ఎకరాలకు కలిపి మొత్తం కౌలు (రూ!!)*` 
+                        : `Total rent for ${acres || 0} acres (₹)*`}
+                    </AppText>
+                  )}
+                  <TextInput
+                    ref={rentRef}
+                    value={rent}
+                    onChangeText={(txt) => {
+                      setRent(txt);
+                      if (errors.rent) setErrors({ ...errors, rent: "" });
+                    }}
+                    keyboardType="numeric"
+                    cursorColor="#16A34A"
+                    selectionColor="#16A34A40"
+                    style={[styles.input, { display: (rent || activeInput === "rent") ? "flex" : "none" }]}
+                    onFocus={() => setActiveInput("rent")}
+                    onBlur={() => setActiveInput(null)}
+                  />
+                </View>
+              </TouchableOpacity>
+              {errors.rent && <AppText style={styles.errorText} language={language}>{errors.rent}</AppText>}
+            </View>
+          )}
 
-      {/* 🟢 LOADER (🔥 Corrected Type) */}
+          {/* 💾 SAVE BUTTON */}
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.8}>
+            <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
+              <AppText style={styles.saveText}>
+                {editId 
+                  ? (language === "te" ? "వివరాలు మార్చండి" : "Update Details") 
+                  : (language === "te" ? "భద్రపరచండి" : "Save Details")}
+              </AppText>
+            </LinearGradient>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* 🟢 LOADER */}
       <AgriLoader visible={loading} type={editId ? "updating" : "saving"} language={language} />
       
       {/* 🔥 MODAL WRAPPER */}
-      <Modal visible={modalType !== null} transparent animationType="slide" onRequestClose={() => setModalType(null)}>
+      <Modal visible={modalType !== null} transparent animationType="slide" onRequestClose={() => {
+        setModalType(null);
+        ExpoSpeechRecognitionModule.stop(); // 🔥 Mic Stop Safety
+        setIsListening(false);
+      }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <AppText style={{ fontSize: 18, fontWeight: "600", fontFamily: "Mandali" }}>
                 {modalType === "crop" ? (language === "te" ? "పంటను ఎంచుకోండి" : "Select Crop") : (language === "te" ? "నేల రకాన్ని ఎంచుకోండి" : "Select Soil Type")}
               </AppText>
-              <TouchableOpacity onPress={() => { setModalType(null); setActiveInput(null); setSearchText(""); }}>
+              <TouchableOpacity onPress={() => { 
+                setModalType(null); 
+                setActiveInput(null); 
+                setSearchText(""); 
+                ExpoSpeechRecognitionModule.stop(); // 🔥 Mic Stop
+                setIsListening(false);
+              }}>
                 <Ionicons name="close-circle" size={30} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
@@ -424,6 +496,7 @@ export default function AddField() {
 
             <FlatList
               data={filteredData}
+              keyboardShouldPersistTaps="handled" // 🔥 Better UX for search
               ListEmptyComponent={() => (
                 searchText.length > 0 ? (
                   <TouchableOpacity style={styles.item} onPress={() => handleAddItem(searchText)}>
@@ -448,6 +521,8 @@ export default function AddField() {
                     setModalType(null);
                     setSearchText("");
                     setActiveInput(null);
+                    ExpoSpeechRecognitionModule.stop(); // 🔥 Mic Stop
+                    setIsListening(false);
                   }}
                 >
                   <AppText style={styles.itemText}>{language === "te" ? item.te : item.en}</AppText>
@@ -464,10 +539,10 @@ export default function AddField() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  container: { padding: 20 },
+  container: { padding: 20, paddingBottom: 40 }, // 🔥 Added paddingBottom for keyboard
   label: { fontSize: 14, color: "#6B7280", marginBottom: 6, marginLeft: 4, fontWeight: '500', fontFamily: 'Mandali' },
   
-  // 🔥 STANDARD PATTERN INPUT STYLES (Grey Bg, Thin Border, Green Focus)
+  // 🔥 STANDARD PATTERN INPUT STYLES
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -523,7 +598,7 @@ const styles = StyleSheet.create({
     flex: 1, padding: 15, borderRadius: 12, backgroundColor: "#F9FAFB", 
     alignItems: "center", borderWidth: 1, borderColor: "#D1D5DB"
   },
-  activePill: { backgroundColor: "#16A34A", borderColor: "#16A34A" },
+  activePill: { backgroundColor: "#1B5E20"},
   pillText: { fontSize: 16, fontWeight: "600", fontFamily: "Mandali" },
 
   // 🔥 STANDARD SAVE BUTTON

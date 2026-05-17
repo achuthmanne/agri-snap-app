@@ -7,8 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   Dimensions,
   Modal,
@@ -23,11 +23,11 @@ import {
 import { PieChart } from "react-native-chart-kit";
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 
-// 🔥 REANIMATED IMPORTS FOR SMOOTH COUNT UP
+// 🔥 REANIMATED
 import Animated, { Easing, FadeInDown, useAnimatedProps, useSharedValue, withTiming } from "react-native-reanimated";
 
-Animated.addWhitelistedNativeProps({ text: true });
-const AnimatedText = Animated.createAnimatedComponent(TextInput);
+// 🔥 PRO FIX 2: Correct way to create Animated TextInput without crashing older Androids
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -56,104 +56,125 @@ export default function FieldsScreen() {
   const animatedAcres = useSharedValue(0);
 
   useEffect(() => {
-    // 1.5 Seconds smooth and constant count up animation
     animatedAcres.value = withTiming(totalAcres, {
-        duration: 1500, // Reduced to 1.5s for a snappier feel
-        easing: Easing.out(Easing.quad), // 🔥 Constant speed, smooth ending
+        duration: 1500,
+        easing: Easing.out(Easing.quad), 
     });
   }, [totalAcres]);
 
   const animatedProps = useAnimatedProps(() => {
     const val = animatedAcres.value;
-    // ఎకరాలు పాయింట్స్ లో (2.5) ఉంటే అలానే చూపించడానికి, లేదంటే నార్మల్ గా (2) చూపించడానికి
     const formatted = totalAcres % 1 !== 0 ? val.toFixed(1) : Math.floor(val).toString();
     return {
         text: formatted,
-    } as any; // 🔥 TS Error సాల్వ్ చేయడానికి
+        // 🔥 Some RN versions require value instead of text for TextInput animations
+        value: formatted
+    } as any; 
   });
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
   }, []);
 
-  useEffect(() => {
-    let unsubscribe: any;
-    const load = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
-      const userDoc = await firestore()
-        .collection("users")
-        .doc(phone)
-        .get();
+  // 🔥 PRO FIX 1: useFocusEffect for Realtime Listener to save Firebase reads & prevent Memory Leaks
+  useFocusEffect(
+    useCallback(() => {
+      let unsubscribe: (() => void) | undefined;
+      let isMounted = true; // Safety flag
 
-      const activeSession = userDoc.data()?.activeSession;
+      const load = async () => {
+        setLoading(true);
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (!phone) {
+          if (isMounted) setLoading(false);
+          return;
+        }
 
-      if (!activeSession) {
-        setLoading(false);
-        return;
-      }
+        const userDoc = await firestore().collection("users").doc(phone).get();
+        const activeSession = userDoc.data()?.activeSession;
 
-      unsubscribe = firestore()
-        .collection("users").doc(phone).collection("fields")
-        .where("session", "==", activeSession)
-        .where("createdAt", "!=", null)  
-        .orderBy("createdAt", "desc")
-        .onSnapshot((snap) => {
-          if (snap && !snap.empty) {
-            const list: any[] = [];
-            let total = 0, own = 0, rent = 0;
-            const cropsMap: any = {};
-            const soilMap: any = {};
-
-            snap.forEach((doc) => {
-              const d: any = doc.data();
-              list.push({ id: doc.id, ...d });
-
-              const acres = Number(d.acres) || 0; 
-              total += acres;
-
-              if (d.type === "own") {
-                own += acres;
-              } else {
-                rent += acres;
-              }
-
-              const cropName = d.crop || "Others";
-              if (!cropsMap[cropName]) cropsMap[cropName] = 0;
-              cropsMap[cropName] += acres;
-
-              const soilName = d.soilType || "Others";
-              if (!soilMap[soilName]) soilMap[soilName] = 0;
-              soilMap[soilName] += acres;
-            });
-
-            setData(list);
-            setTotalAcres(total);
-            setOwnAcres(own);
-            setRentAcres(rent);
-            
-            setSoilStats(Object.keys(soilMap).map((name, index) => ({
-              name, population: soilMap[name],
-              color: PREM_COLORS[(index + 4) % PREM_COLORS.length],
-              legendFontColor: "#475569", legendFontSize: 12
-            })));
-
-            setCropStats(Object.keys(cropsMap).map((name, index) => ({
-              name, population: cropsMap[name],
-              color: PREM_COLORS[index % PREM_COLORS.length],
-              legendFontColor: "#475569", legendFontSize: 12
-            })));
-
-          } else {
+        if (!activeSession) {
+          if (isMounted) {
             setData([]);
+            setLoading(false);
           }
-          setLoading(false);
-        }, (err) => setLoading(false));
-    };
+          return;
+        }
 
-    load();
-    return () => unsubscribe && unsubscribe();
-  }, [language]); 
+        if (isMounted) {
+          unsubscribe = firestore()
+            .collection("users").doc(phone).collection("fields")
+            .where("session", "==", activeSession)
+            .where("createdAt", "!=", null)  
+            .orderBy("createdAt", "desc")
+            .onSnapshot((snap) => {
+              if (snap && !snap.empty) {
+                const list: any[] = [];
+                let total = 0, own = 0, rent = 0;
+                const cropsMap: any = {};
+                const soilMap: any = {};
+
+                snap.forEach((doc) => {
+                  const d: any = doc.data();
+                  list.push({ id: doc.id, ...d });
+
+                  const acres = Number(d.acres) || 0; 
+                  total += acres;
+
+                  if (d.type === "own") {
+                    own += acres;
+                  } else {
+                    rent += acres;
+                  }
+
+                  const cropName = d.crop || "Others";
+                  if (!cropsMap[cropName]) cropsMap[cropName] = 0;
+                  cropsMap[cropName] += acres;
+
+                  const soilName = d.soilType || "Others";
+                  if (!soilMap[soilName]) soilMap[soilName] = 0;
+                  soilMap[soilName] += acres;
+                });
+
+                setData(list);
+                setTotalAcres(total);
+                setOwnAcres(own);
+                setRentAcres(rent);
+                
+                setSoilStats(Object.keys(soilMap).map((name, index) => ({
+                  name, population: soilMap[name],
+                  color: PREM_COLORS[(index + 4) % PREM_COLORS.length],
+                  legendFontColor: "#475569", legendFontSize: 12
+                })));
+
+                setCropStats(Object.keys(cropsMap).map((name, index) => ({
+                  name, population: cropsMap[name],
+                  color: PREM_COLORS[index % PREM_COLORS.length],
+                  legendFontColor: "#475569", legendFontSize: 12
+                })));
+
+              } else {
+                setData([]);
+                setTotalAcres(0);
+                setOwnAcres(0);
+                setRentAcres(0);
+              }
+              setLoading(false);
+            }, (err) => {
+              console.log(err);
+              setLoading(false);
+            });
+        }
+      };
+
+      load();
+
+      return () => {
+        isMounted = false; // Prevent state updates if unmounted
+        if (unsubscribe) unsubscribe(); // Kill Firebase listener safely
+      };
+    }, [language]) 
+  );
   
   const PremiumDonutChart = ({ chartData, title }: any) => {
     const totalPop = chartData.reduce((a: any, b: any) => a + Number(b.population), 0);
@@ -262,6 +283,21 @@ export default function FieldsScreen() {
     }
   };
 
+  // 🔥 PRO FIX 3: Safe Delete Function
+  const handleDelete = async () => {
+    try {
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (phone && selectedItem) {
+        await firestore().collection("users").doc(phone).collection("fields").doc(selectedItem.id).delete();
+      }
+    } catch (e) {
+      console.log("Delete error", e);
+    } finally {
+      setDeleteVisible(false);
+      setSelectedItem(null);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -295,10 +331,10 @@ export default function FieldsScreen() {
                 
                 {/* 🔥 ANIMATED ACRES HERO VALUE */}
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 5 }}>
-                  <AnimatedText 
+                  <AnimatedTextInput 
                     editable={false}
                     animatedProps={animatedProps}
-                    style={{ color: "#fff", fontSize: 32, fontWeight: "600", fontFamily: 'System', padding: 0, margin: 0 }}
+                    style={{ color: "#fff", fontSize: 32, fontWeight: "600", padding: 0, margin: 0 }}
                   />
                   <AppText style={{fontSize: 18, color: '#ef86e4', marginLeft: 6}}>
                     {language === "te" ? "ఎకరాలు" : "Acres"}
@@ -502,14 +538,7 @@ export default function FieldsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.deleteBtn}
-                onPress={async () => {
-                  const phone = await AsyncStorage.getItem("USER_PHONE");
-                  if (phone && selectedItem) {
-                    await firestore().collection("users").doc(phone).collection("fields").doc(selectedItem.id).delete();
-                  }
-                  setDeleteVisible(false);
-                  setSelectedItem(null);
-                }}
+                onPress={handleDelete}
               >
                 <AppText style={styles.deleteText}>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
               </TouchableOpacity>
@@ -573,8 +602,9 @@ const styles = StyleSheet.create({
   deleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center" },
   deleteText: { fontSize: 14, fontWeight: "600", color: "#fff" },
 
-  fab: { position: "absolute", bottom: 30, right: 20 },
+  fab: { position: "absolute", bottom: 30, right: 20, elevation: 5, shadowColor: '#16A34A', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
   fabGradient: { width: 64, height: 64, borderRadius: 35, justifyContent: "center", alignItems: "center" },
+  
   shimmerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 20, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
   shimmerSideBar: { width: 5, height: '100%', backgroundColor: '#E2E8F0' },
   shimmerContent: { flex: 1, padding: 16 },
@@ -583,6 +613,7 @@ const styles = StyleSheet.create({
   shimmerRight: { flexDirection: 'row', alignItems: 'center', paddingRight: 10, gap: 10 },
   shimmerPriceBox: { width: 55, height: 30, backgroundColor: '#F1F5F9', borderRadius: 8 },
   shimmerMenuCircle: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F1F5F9' },
+  
   donutHole: { position: 'absolute', width: 90, height: 90, borderRadius: 50, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
   donutText: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
   semiChartWrapper: { height: 160, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-start', marginTop: -20 },
