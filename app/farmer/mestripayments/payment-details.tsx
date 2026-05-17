@@ -1,7 +1,8 @@
-//payment details
+// app/farmer/payment-details.tsx
+
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -24,7 +25,7 @@ export default function PaymentDetails() {
   const router = useRouter();
 
   const [grouped, setGrouped] = useState<any>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
 
   const [openCrops, setOpenCrops] = useState<any>({});
@@ -42,35 +43,52 @@ export default function PaymentDetails() {
 
   /* ---------------- LOAD DATA ---------------- */
   const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
-
     setLoading(true);
+    try {
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) return;
 
-    const snap = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("mestris")
-      .doc(id as string)
-      .collection("attendance")
-      .get();
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .get();
 
-    const list = snap.docs.map(d => d.data());
+      const activeSession = userDoc.data()?.activeSession;
+      if (!activeSession) {
+        setGrouped({});
+        return;
+      }
 
-    const cropGroup: any = {};
+      const snap = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("mestris")
+        .doc(id as string)
+        .collection("attendance")
+        .where("session", "==", activeSession) 
+        .get();
 
-    list.forEach(item => {
-      const crop = item.crop || "Other";
-      const work = item.work || "Other";
+      const list = snap.docs.map(d => d.data());
 
-      if (!cropGroup[crop]) cropGroup[crop] = {};
-      if (!cropGroup[crop][work]) cropGroup[crop][work] = [];
+      const cropGroup: any = {};
 
-      cropGroup[crop][work].push(item);
-    });
+      list.forEach(item => {
+        const crop = item.crop || "Other";
+        const work = item.work || "Other";
 
-    setGrouped(cropGroup);
-    setLoading(false);
+        if (!cropGroup[crop]) cropGroup[crop] = {};
+        if (!cropGroup[crop][work]) cropGroup[crop][work] = [];
+
+        cropGroup[crop][work].push(item);
+      });
+
+      setGrouped(cropGroup);
+      
+    } catch (error) {
+      console.log("Error loading payment details:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useFocusEffect(
@@ -118,14 +136,19 @@ export default function PaymentDetails() {
       <StatusBar barStyle="light-content" />
 
       <AppHeader
-        title={language === "te" ? "చెల్లింపు వివరాలు" : "Payment Details"}
-        subtitle={language === "te" ? "పని వివరాలు" : "Work Summary"}
+        title={language === "te" ? "పని వివరాలు" : "Work Details"}
+        subtitle={language === "te" ? "చెల్లింపు ఎంపిక" : "Payment Selection"}
         language={language}
       />
 
+      {/* 🔥 UX: Simple and Clean Top Info Box */}
       <View style={styles.topInfoBox}>
         <AppText style={styles.mainTitle} language={language}>
-          {name} | {village}
+          {name}
+        </AppText>
+        
+        <AppText style={styles.subTitle} language={language}>
+          {village}
         </AppText>
       </View>
 
@@ -142,16 +165,16 @@ export default function PaymentDetails() {
           keyExtractor={(item) => item}
           contentContainerStyle={[
             { paddingBottom: 100 },
-            // 🔥 సెంటర్ లో రావడానికి లాజిక్
             Object.keys(grouped).length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
+          showsVerticalScrollIndicator={false}
 
           /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="folder-open-outline"
               title={language === "te" ? "డేటా లేదు" : "No Data"}
-              subtitle={language === "te" ? "ఈ మేస్త్రీకి సంబంధించి ఇంకా ఎలాంటి పని వివరాలు లేవు" : "No work details found for this mestri yet"}
+              subtitle={language === "te" ? "ఈ మేస్త్రీకి సంబంధించి ఇంకా ఎలాంటి పని వివరాలు నమోదు కాలేదు" : "No work details found for this mestri yet"}
               language={language}
             />
           }
@@ -160,15 +183,14 @@ export default function PaymentDetails() {
             const cropColor = getCropColor(item);
             const isCropOpen = openCrops[item];
             const works = grouped[item];
-            // 🔥 crop total days
-            const workCount = Object.keys(works).length; // 🔥 number of works
+            const workCount = Object.keys(works).length; 
             
             return (
               <View>
 
                 {/* 🌾 CROP */}
                 <TouchableOpacity
-                  activeOpacity={0.5}
+                  activeOpacity={0.7}
                   style={[styles.crop, { borderLeftColor: cropColor }]}
                   onPress={() => toggleCrop(item)}
                 >
@@ -176,17 +198,18 @@ export default function PaymentDetails() {
                     <AppText style={styles.cropName} language={language}>
                       {item}
                     </AppText>
-
                     <AppText style={styles.cropDays} language={language}>
-                      {workCount} {language === "te" ? "పనులు" : "works"}
+                      {workCount} {language === "te" ? "పనులు" : "Works"}
                     </AppText>
                   </View>
 
-                  <Ionicons
-                    name={isCropOpen ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color="#6B7280"
-                  />
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name={isCropOpen ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color="#6B7280"
+                    />
+                  </View>
                 </TouchableOpacity>
 
                 {/* 🔹 WORKS */}
@@ -200,7 +223,6 @@ export default function PaymentDetails() {
 
                   return (
                     <View key={work}>
-
                       <TouchableOpacity
                         style={[styles.work, { borderLeftColor: workColor }]}
                         onPress={() => {
@@ -223,13 +245,12 @@ export default function PaymentDetails() {
                           </AppText>
 
                           <AppText style={styles.workDays} language={language}>
-                            {workDays} {language === "te" ? "రోజులు" : "days"}
+                            {workDays} {language === "te" ? "రోజులు" : "Days"}
                           </AppText>
                         </View>
 
-                        <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                        <Ionicons name="arrow-forward-circle" size={24} color={workColor} />
                       </TouchableOpacity>
-
                     </View>
                   );
                 })}
@@ -239,7 +260,6 @@ export default function PaymentDetails() {
           }}
         />
       )}
-
     </SafeAreaView>
   );
 }
@@ -248,37 +268,62 @@ export default function PaymentDetails() {
 
 const styles = StyleSheet.create({
 
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },
+  safe: { flex: 1, backgroundColor: "#F9FAFB" },
 
-  crop: {
+ topInfoBox: {
     marginHorizontal: 20,
     marginTop: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-
-    borderWidth: 1,
-    borderLeftWidth: 4,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
+    padding: 14,
     backgroundColor: "#fff",
-
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between" 
+  },
+  
+  mainTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  
+  subTitle: {
+    fontSize: 14, // కొద్దిగా సైజ్ పెంచాను
+    color: "#6B7280",
+    fontWeight: "500" // కొద్దిగా థిక్ గా కనపడటానికి
+    // marginTop తీసేశాను బ్రో, అప్పుడే రెండు ఒకే లైన్ లో పర్ఫెక్ట్ గా ఉంటాయి
+  },
+  crop: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderLeftWidth: 5,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    backgroundColor: "#fff",
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center" 
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
   },
 
   work: {
-    marginHorizontal: 30,
-    marginTop: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-
+    marginHorizontal: 20,
+    marginLeft: 35, // Indented for hierarchy
+    marginTop: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderLeftWidth: 3,
+    borderLeftWidth: 4,
     borderColor: "#E5E7EB",
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: "#fff",
-
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center" 
@@ -294,57 +339,48 @@ const styles = StyleSheet.create({
     justifyContent: "center" 
   },
 
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+
   shimmerCard: {
     marginHorizontal: 20,
-    marginVertical: 6,
-    padding: 14,
+    marginVertical: 8,
+    padding: 18,
     borderRadius: 14,
     backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E5E7EB"
   },
   
   cropName: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: "600",
-    color: "#111827"
+    color: "#1F2937"
   },
 
   cropDays: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#6B7280",
-    marginTop: 2
+    marginTop: 4,
+    fontWeight: "500"
   },
 
   workName: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "600",
     color: "#374151"
   },
 
   workDays: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#6B7280",
-    marginTop: 2
-  },
-
-  historyBtn: {
-    marginHorizontal: 40,
-    padding: 8
-  },
-
-  topInfoBox: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    padding: 14,
-  },
-
-  mainTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-    textAlign: "center"
-  },
-
-  cropText: {
-    fontWeight: "600"
+    marginTop: 4,
+    fontWeight: "500"
   },
 });

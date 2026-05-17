@@ -2,13 +2,13 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   FlatList,
   SafeAreaView,
@@ -26,9 +26,10 @@ export default function PaymentWorkHistory() {
 
   const [data, setData] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
+  // 🔥 BUG FIX: Initial state MUST be true to prevent UI flash
+  const [loading, setLoading] = useState(true); 
   const [language, setLanguage] = useState<"te" | "en">("te");
-  const [infoVisible, setInfoVisible] = useState(true);
+  const [infoVisible, setInfoVisible] = useState(false); // 🔥 Modal is hidden initially
 
   useFocusEffect(
     useCallback(() => {
@@ -42,20 +43,19 @@ export default function PaymentWorkHistory() {
 
   /* ---------------- LOAD DATA ---------------- */
   const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
+    setLoading(true); // 🔥 పక్కాగా స్టార్టింగ్ లోనే లోడింగ్ పెట్టాలి
+    try {
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) return;
 
-    const userDoc = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .get();
+      const userDoc = await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .get();
 
-    const activeSession = userDoc.data()?.activeSession;
-    if (!activeSession) return;
+      const activeSession = userDoc.data()?.activeSession;
+      if (!activeSession) return;
 
-    setLoading(true);
-
-    try{
       // 🔥 STEP 1: GET ALL ATTENDANCE
       const snap = await firestore()
         .collection("users")
@@ -63,7 +63,7 @@ export default function PaymentWorkHistory() {
         .collection("mestris")
         .doc(id as string)
         .collection("attendance")
-        .where("session", "==", activeSession) // 🔥 ADD THIS
+        .where("session", "==", activeSession) 
         .get();
 
       // 🔥 STEP 2: GET PAID IDS
@@ -79,8 +79,8 @@ export default function PaymentWorkHistory() {
       let paidIds: string[] = [];
 
       paymentSnap.docs.forEach(doc => {
-        const data = doc.data();
-        paidIds.push(...(data.selectedAttendanceIds || []));
+        const paymentData = doc.data();
+        paidIds.push(...(paymentData.selectedAttendanceIds || []));
       });
 
       // 🔥 STEP 3: FILTER DATA
@@ -89,25 +89,28 @@ export default function PaymentWorkHistory() {
         .filter(item =>
           item.crop?.trim().toLowerCase() === (crop as string)?.trim().toLowerCase() &&
           item.work?.trim().toLowerCase() === (work as string)?.trim().toLowerCase() &&
-          !paidIds.includes(item.id) // 🔥 MAIN LOGIC
+          !paidIds.includes(item.id) // 🔥 DOUBLE SPEND PREVENTION LOGIC
         );
 
       setData(list);
 
-      // డేటా లేకపోతే ఇన్ఫో మోడల్ చూపించవద్దు
-      if (list.length === 0) {
-        setInfoVisible(false); 
+    // 🔥 INFO MODAL SYNC (Forced for testing)
+      if (list.length > 0) {
+          // ఇలా పెడితే ప్రతిసారీ వస్తుంది
+          setInfoVisible(true); 
       }
-    }catch(e){
+
+    } catch (e) {
       console.log("Error loading data:", e);
-    }finally{
+    } finally {
+      // 🔥 పని పూర్తయినా, ఎర్రర్ వచ్చినా లోడింగ్ ఆగిపోవాలి
       setLoading(false);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      setSelected([]); // 🔥 RESET
+      setSelected([]); // 🔥 RESET PREVIOUS SELECTIONS
       loadData();
     }, [])
   );
@@ -124,19 +127,6 @@ export default function PaymentWorkHistory() {
   /* ---------------- WORK COLOR ---------------- */
   const colors = ["#06B6D4","#84CC16","#F97316","#6366F1","#EC4899"];
   const workColor = colors[(work as string).charCodeAt(0) % colors.length];
-
-  useEffect(() => {
-    const check = async () => {
-      const seen = await AsyncStorage.getItem("PAYMENT_INFO_SEEN");
-
-      if (!seen) {
-        setInfoVisible(true);
-        await AsyncStorage.setItem("PAYMENT_INFO_SEEN", "1");
-      }
-    };
-
-    check();
-  }, []);
 
   //shimmer
   const ShimmerCard = () => (
@@ -220,7 +210,7 @@ export default function PaymentWorkHistory() {
               iconName="checkmark-done-circle-outline"
               title={language === "te" ? "అన్ని చెల్లింపులు పూర్తయ్యాయి 🎉" : "All Payments Cleared 🎉"}
               subtitle={language === "te" ? "ఈ పని కోసం అన్ని రోజులకు చెల్లింపులు పూర్తయ్యాయి" : "All attendance for this work has been paid"}
-              onRetry={() => router.back()} // మోడల్ బదులు ఇక్కడే బటన్ పెట్టాం
+              onRetry={() => router.back()} 
               retryText={language === "te" ? "వెనుకకు వెళ్ళండి" : "Go Back"}
               language={language}
             />
@@ -518,20 +508,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB"
+    borderColor: "#E5E7EB",
+    flexDirection: "row", // 🔥 ADD THIS
+    alignItems: "center", // 🔥 ADD THIS
+    justifyContent: "space-between" // 🔥 ADD THIS
   },
-
+  
   mainTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-    textAlign: "center"
+    // textAlign: "center" // 🔥 దీన్ని కామెంట్ లేదా డిలీట్ చేసేయ్
   },
   subTitle: {
     fontSize: 13,
     color: "#6B7280",
     marginTop: 4,
-    textAlign: "center"
+    // textAlign: "center" // 🔥 దీన్ని కూడా తీసేయ్
   },
   overlay: {
     position: "absolute",
@@ -541,7 +534,8 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    zIndex: 999
   },
 
   modalBox: {

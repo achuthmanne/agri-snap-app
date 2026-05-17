@@ -2,7 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -27,7 +27,8 @@ export default function PaymentSummary() {
   const [data, setData] = useState<any[]>([]);
   const [errorModal, setErrorModal] = useState(false);
   const [errorType, setErrorType] = useState("");
-  const [loading, setLoading] = useState(false);
+  // 🔥 BUG FIX: Initial loading must be true for smooth Shimmer transition
+  const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [modeModal, setModeModal] = useState(false);
   const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "">("");
@@ -47,19 +48,18 @@ export default function PaymentSummary() {
 
   /* ---------------- LOAD DATA ---------------- */
   const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
-    const userDoc = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .get();
-
-    const activeSession = userDoc.data()?.activeSession;
-    if (!activeSession) return;
-
     setLoading(true);
-
     try {
+        const userPhone = await AsyncStorage.getItem("USER_PHONE");
+        if (!userPhone) return;
+        const userDoc = await firestore()
+          .collection("users")
+          .doc(userPhone)
+          .get();
+
+        const activeSession = userDoc.data()?.activeSession;
+        if (!activeSession) return;
+
         const selectedIds = JSON.parse(ids as string);
         const snap = await firestore()
           .collection("users")
@@ -67,7 +67,7 @@ export default function PaymentSummary() {
           .collection("mestris")
           .doc(id as string)
           .collection("attendance")
-          .where("session", "==", activeSession) // 🔥 ADD THIS
+          .where("session", "==", activeSession) 
           .get();
 
         const list = snap.docs
@@ -76,7 +76,7 @@ export default function PaymentSummary() {
 
         setData(list);
     } catch (err) {
-        console.log(err);
+        console.log("Error loading payment summary:", err);
     } finally {
         setLoading(false);
     }
@@ -156,7 +156,7 @@ export default function PaymentSummary() {
           </View>
           <View style={styles.valueBox}>
             <Ionicons name="partly-sunny-outline" size={14} color="#3B82F6" />
-            <AppText style={styles.label} language={language}>{language === "te" ? "సాయంత్రం" : "Evening"}</AppText>
+            <AppText style={styles.label} language={language}>{language === "te" ? "మధ్యాహ్నం" : "Afternoon"}</AppText>
             <AppText style={styles.value}>{item.evening || 0}</AppText>
           </View>
           <View style={styles.valueBox}>
@@ -224,12 +224,11 @@ export default function PaymentSummary() {
             data.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
 
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="wallet-outline"
               title={language === "te" ? "హాజరు ఎంచుకోలేదు" : "No Attendance Selected"}
-              subtitle={language === "te" ? "చెల్లింపు చేయడానికి ముందు స్క్రీన్ లో హాజరును ఎంచుకోండి" : "Please select attendance from the previous screen to make a payment"}
+              subtitle={language === "te" ? "చెల్లింపు చేయడానికి ముందు హాజరును ఎంచుకోండి" : "Please select attendance to make a payment"}
               language={language}
             />
           }
@@ -240,58 +239,61 @@ export default function PaymentSummary() {
               <View style={styles.footer}>
                 <View style={[styles.ratesBox, { borderColor: workColor }]}>
                   <AppText style={styles.sectionTitle} language={language}>
-                    {language === "te" ? "రేట్లు నమోదు చేయండి" : "Enter Rates"}
+                    {language === "te" ? "కూలీ రేట్లు నమోదు చేయండి" : "Enter Daily Rates"}
                   </AppText>
                   <View style={styles.inputRow}>
                     {/* MORNING */}
-                    <View style={[styles.inputBox, { borderColor: focused === "morning" ? workColor : "#E5E7EB" }]}>
-                      <Ionicons name="sunny-outline" size={16} color="#F59E0B" />
+                    <View style={[styles.inputBox, { borderColor: focused === "morning" ? workColor : "#E5E7EB", opacity: totalMorning > 0 ? 1 : 0.5 }]}>
+                      <Ionicons name="sunny-outline" size={16} color={totalMorning > 0 ? "#F59E0B" : "#9CA3AF"} />
                       <AppText style={styles.rs}>₹</AppText>
                       <TextInput
                         value={morningRate}
                         onChangeText={setMorningRate}
                         keyboardType="numeric"
                         placeholder="0"
-                        placeholderTextColor={'black'}
+                        placeholderTextColor={'#9CA3AF'}
                         cursorColor={workColor}
                         selectionColor={workColor}
                         style={styles.inputText}
                         onFocus={() => setFocused("morning")}
                         onBlur={() => setFocused("")}
+                        editable={totalMorning > 0}
                       />
                     </View>
                     {/* EVENING */}
-                    <View style={[styles.inputBox, { borderColor: focused === "evening" ? workColor : "#E5E7EB" }]}>
-                      <Ionicons name="partly-sunny-outline" size={16} color="#3B82F6" />
+                    <View style={[styles.inputBox, { borderColor: focused === "evening" ? workColor : "#E5E7EB", opacity: totalEvening > 0 ? 1 : 0.5 }]}>
+                      <Ionicons name="partly-sunny-outline" size={16} color={totalEvening > 0 ? "#3B82F6" : "#9CA3AF"} />
                       <AppText style={styles.rs}>₹</AppText>
                       <TextInput
                         value={eveningRate}
                         onChangeText={setEveningRate}
                         keyboardType="numeric"
                         placeholder="0"
-                        placeholderTextColor={'black'}
+                        placeholderTextColor={'#9CA3AF'}
                         cursorColor={workColor}
                         selectionColor={workColor}
                         style={styles.inputText}
                         onFocus={() => setFocused("evening")}
                         onBlur={() => setFocused("")}
+                        editable={totalEvening > 0}
                       />
                     </View>
                     {/* FULL */}
-                    <View style={[styles.inputBox, { borderColor: focused === "full" ? workColor : "#E5E7EB" }]}>
-                      <Ionicons name="moon-outline" size={16} color="#8B5CF6" />
+                    <View style={[styles.inputBox, { borderColor: focused === "full" ? workColor : "#E5E7EB", opacity: totalFull > 0 ? 1 : 0.5 }]}>
+                      <Ionicons name="moon-outline" size={16} color={totalFull > 0 ? "#8B5CF6" : "#9CA3AF"} />
                       <AppText style={styles.rs}>₹</AppText>
                       <TextInput
                         value={fullRate}
                         onChangeText={setFullRate}
                         keyboardType="numeric"
                         placeholder="0"
-                        placeholderTextColor={'black'}
+                        placeholderTextColor={'#9CA3AF'}
                         cursorColor={workColor}
                         selectionColor={workColor}
                         style={styles.inputText}
                         onFocus={() => setFocused("full")}
                         onBlur={() => setFocused("")}
+                        editable={totalFull > 0}
                       />
                     </View>
                   </View>
@@ -299,7 +301,7 @@ export default function PaymentSummary() {
 
                 <View style={styles.totalBox}>
                   <AppText style={styles.totalLabel} language={language}>
-                    {language === "te" ? "మొత్తం చెల్లింపు:" : "Total Amount:"}
+                    {language === "te" ? "మొత్తం చెల్లించాల్సిన మొత్తం:" : "Total Payable Amount:"}
                   </AppText>
                   <AppText style={styles.totalValue}>
                     ₹ {amount || 0}
@@ -311,7 +313,6 @@ export default function PaymentSummary() {
         />
       )}
 
-      {/* డేటా ఉంటేనే బటన్ చూపిస్తాం */}
       {data.length > 0 && (
         <TouchableOpacity
           activeOpacity={0.9}
@@ -326,7 +327,7 @@ export default function PaymentSummary() {
           <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.confirmBtn}>
             <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
             <AppText style={styles.confirmText} language={language}>
-              {language === "te" ? "చెల్లింపు చేయండి" : "Proceed to Pay"}
+              {language === "te" ? "లెక్కలు భద్రపరచండి" : "Save Payment Record"}
             </AppText>
           </LinearGradient>
         </TouchableOpacity>
@@ -339,10 +340,10 @@ export default function PaymentSummary() {
               <Ionicons name="alert-circle" size={30} color="#DC2626" />
             </View>
             <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "రేటు అవసరం" : "Rate Required"}
+              {language === "te" ? "రేటు నమోదు చేయండి" : "Rate Required"}
             </AppText>
             <AppText style={styles.modalSub} language={language}>
-              {language === "te" ? "దయచేసి అవసరమైన రేటు నమోదు చేయండి" : "Please enter required rate"}
+              {language === "te" ? "దయచేసి కూలీలందరికీ రేటు ఎంటర్ చేయండి" : "Please enter the daily rate for the workers"}
             </AppText>
             <TouchableOpacity style={styles.okBtn} onPress={() => setErrorModal(false)}>
               <AppText style={styles.okText} language={language}>{language === "te" ? "సరే" : "OK"}</AppText>
@@ -351,18 +352,25 @@ export default function PaymentSummary() {
         </View>
       )}
 
+      {/* 🔥 UX UPGRADED PAYMENT MODE MODAL */}
       {modeModal && (
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
 
-            {/* ICON */}
             <View style={[styles.iconBg, { backgroundColor: workColor + "20" }]}>
               <Ionicons name="wallet-outline" size={34} color={workColor} />
             </View>
 
-            {/* TITLE */}
+            {/* 🔥 CLEAR QUESTION FOR THE FARMER */}
             <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "చెల్లింపు విధానం ఎంచుకోండి" : "Select Payment Mode"}
+              {language === "te" ? `మీరు ${name} కి ఎలా చెల్లించారు?` : `How did you pay ${name}?`}
+            </AppText>
+
+            {/* 🔥 ASSURANCE TEXT */}
+            <AppText style={[styles.modalSub, { color: '#DC2626', fontWeight: '500' }]} language={language}>
+              {language === "te" 
+                ? "గమనిక: ఇది కేవలం మీ లెక్కల కోసం మాత్రమే. యాప్ ద్వారా డబ్బులు కట్ అవ్వవు." 
+                : "Note: This is only for your records. No money will be deducted from the app."}
             </AppText>
 
             {/* CASH OPTION */}
@@ -376,9 +384,7 @@ export default function PaymentSummary() {
                   <View style={[styles.radioInner, { backgroundColor: workColor }]} />
                 )}
               </View>
-
               <Ionicons name="cash-outline" size={18} color={workColor} />
-
               <AppText style={styles.radioText} language={language}>
                 {language === "te" ? "నగదు (Cash)" : "Cash"}
               </AppText>
@@ -395,11 +401,9 @@ export default function PaymentSummary() {
                   <View style={[styles.radioInner, { backgroundColor: workColor }]} />
                 )}
               </View>
-
-              <Ionicons name="card-outline" size={18} color={workColor} />
-
+              <Ionicons name="phone-portrait-outline" size={18} color={workColor} />
               <AppText style={styles.radioText} language={language}>
-                UPI
+                {language === "te" ? "ఫోన్ పే / గూగుల్ పే (UPI)" : "PhonePe / GPay (UPI)"}
               </AppText>
             </TouchableOpacity>
 
@@ -409,9 +413,7 @@ export default function PaymentSummary() {
               activeOpacity={0.9}
               style={[
                 styles.continueBtn,
-                {
-                  backgroundColor: paymentMode ? workColor : "#D1D5DB"
-                }
+                { backgroundColor: paymentMode ? workColor : "#D1D5DB" }
               ]}
               onPress={() => {
                 setModeModal(false);
@@ -419,7 +421,7 @@ export default function PaymentSummary() {
               }}
             >
               <AppText style={styles.continueText} language={language}>
-                {language === "te" ? "కొనసాగించండి" : "Continue"}
+                {language === "te" ? "లెక్క భద్రపరచండి" : "Save Record"}
               </AppText>
             </TouchableOpacity>
 
@@ -434,10 +436,10 @@ export default function PaymentSummary() {
               <Ionicons name="shield-checkmark-outline" size={30} color={workColor} />
             </View>
             <AppText style={styles.modalTitle} language={language}>
-              {language === "te" ? "చెల్లింపు నిర్ధారణ" : "Confirm Payment"}
+              {language === "te" ? "చెల్లింపు నిర్ధారణ" : "Confirm Record"}
             </AppText>
             <AppText style={styles.modalSub} language={language}>
-              {language === "te" ? "ఈ చెల్లింపును కొనసాగించాలా?" : "Do you want to proceed with this payment?"}
+              {language === "te" ? "ఈ లెక్కను మీ యాప్ లో భద్రపరచాలా?" : "Do you want to save this record?"}
             </AppText>
             <AppText style={[styles.modalAmount, { color: workColor }]}>₹ {amount}</AppText>
             <View style={styles.modalBtns}>
@@ -519,9 +521,9 @@ const styles = StyleSheet.create({
   overlay: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center", zIndex: 999, elevation: 10 },
   modalBox: { width: "85%", backgroundColor: "#fff", borderRadius: 18, padding: 20, alignItems: "center" },
   iconBg: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  modalTitle: { fontSize: 18, fontWeight: "600" },
-  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 6 },
-  modalAmount: { fontSize: 22, fontWeight: "700", marginTop: 10 },
+  modalTitle: { fontSize: 18, fontWeight: "600", textAlign: 'center', lineHeight: 34 },
+  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8, lineHeight: 20 },
+  modalAmount: { fontSize: 24, fontWeight: "700", marginTop: 10 },
   modalBtns: { flexDirection: "row", marginTop: 20 },
   cancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB", marginRight: 6, backgroundColor: "#F9FAFB" },
   cancelText: { color: "#374151", fontWeight: "500" },
@@ -535,58 +537,10 @@ const styles = StyleSheet.create({
   shimmerSmall: { width: 50, height: 20, borderRadius: 6 },
   shimmerRates: { marginHorizontal: 20, padding: 14, borderRadius: 14, backgroundColor: "#fff", marginTop: 10 },
   shimmerInput: { flex: 1, height: 40, borderRadius: 10, marginHorizontal: 4 },
-  modeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginTop: 10
-  },
-  deleteBtn: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    marginLeft: 6
-  },
-  radioRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 16,
-    width: "100%"
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    justifyContent: "center",
-    alignItems: "center"
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5
-  },
-  radioText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#111827"
-  },
-  continueBtn: {
-    marginTop: 20,
-    paddingVertical: 13,
-    borderRadius: 12,
-    alignItems: "center",
-    width: "100%"
-  },
-  continueText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600"
-  },
+  radioRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, width: "100%", paddingHorizontal: 10 },
+  radioOuter: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, justifyContent: "center", alignItems: "center" },
+  radioInner: { width: 12, height: 12, borderRadius: 6 },
+  radioText: { fontSize: 15, fontWeight: "600", color: "#111827" },
+  continueBtn: { marginTop: 24, paddingVertical: 14, borderRadius: 12, alignItems: "center", width: "100%" },
+  continueText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 });

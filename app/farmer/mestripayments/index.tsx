@@ -2,7 +2,7 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -16,7 +16,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard
 } from "react-native";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 import { useEffect } from "react";
@@ -31,22 +32,27 @@ export default function PaymentsScreen() {
   const [search, setSearch] = useState("");
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [isFocused, setIsFocused] = useState(false);
-  const [loading, setLoading] = useState(false);
+  
+  // 🔥 FIX 1: Initial loading must be TRUE to avoid Empty State flash
+  const [loading, setLoading] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const isScreenFocused = useIsFocused();
 
+  // 🔥 FIX 2: Voice Search Punctuation Bug Fix
   useSpeechRecognitionEvent("result", (event) => {
-    // 🔥 FIX: only current screen lo unna appude work avvali
     if (!isScreenFocused || !isListening) return;
 
     if (event.results && event.results.length > 0) {
-      setSearch(event.results[0].transcript);
+      // వాయిస్ సెర్చ్ లో చివర వచ్చే ఫుల్ స్టాప్ (.), కామా (,) లాంటివి తీసేస్తున్నాం
+      const transcript = event.results[0].transcript.replace(/[.,?!]/g, "");
+      setSearch(transcript);
     }
   });
 
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
   const handleVoiceSearch = async () => {
+    Keyboard.dismiss(); // మైక్ ఆన్ అవ్వగానే కీబోర్డ్ క్లోజ్ అవ్వాలి
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
 
@@ -62,9 +68,8 @@ export default function PaymentsScreen() {
       ExpoSpeechRecognitionModule.stop();
       setIsListening(false);
     }
-
     return () => {
-      ExpoSpeechRecognitionModule.stop(); // 🔥 ADD
+      ExpoSpeechRecognitionModule.stop(); 
     };
   }, [isScreenFocused]);
 
@@ -93,25 +98,28 @@ export default function PaymentsScreen() {
 
   /* ---------------- LOAD DATA ---------------- */
   const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
-
     setLoading(true);
 
     try {
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) return;
+
       const userDoc = await firestore()
         .collection("users")
         .doc(userPhone)
         .get();
 
       const activeSession = userDoc.data()?.activeSession;
-      if (!activeSession) return;
+      if (!activeSession) {
+        setMestris([]);
+        return;
+      }
 
       const snap = await firestore()
         .collection("users")
         .doc(userPhone)
         .collection("mestris")
-        .where(`attendanceSessions.${activeSession}`, "==", true) // 🔥 KEY
+        .where(`attendanceSessions.${activeSession}`, "==", true) 
         .get();
 
       const result = snap.docs.map(doc => ({
@@ -134,10 +142,14 @@ export default function PaymentsScreen() {
     }, [])
   );
 
-  /* ---------------- SEARCH FILTER ---------------- */
-  const filtered = mestris.filter(item =>
-    (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
-  );
+  /* ---------------- SEARCH FILTER (ROBUST) ---------------- */
+  // 🔥 FIX 3: టెక్స్ట్ లో ఎక్స్‌ట్రా స్పేసులు, స్పెషల్ క్యారెక్టర్స్ ఉన్నా ఇగ్నోర్ చేసే సూపర్ ఫిల్టర్
+  const cleanSearchTerm = search.replace(/[.,?!]/g, "").trim().toLowerCase();
+  
+  const filtered = mestris.filter(item => {
+    const dbName = (item.name || "").replace(/[.,?!]/g, "").trim().toLowerCase();
+    return dbName.includes(cleanSearchTerm);
+  });
 
   /* ---------------- AVATAR COLOR ---------------- */
   const colors = [
@@ -148,18 +160,6 @@ export default function PaymentsScreen() {
   const getColor = (id: string) => {
     const index = id.charCodeAt(0) % colors.length;
     return colors[index];
-  };
-
-  const optionsStyles = {
-    optionsContainer: {
-      borderRadius: 10,
-      padding: 4,
-      backgroundColor: "#fff",
-      shadowColor: "#000",
-      shadowOpacity: 0.08,
-      shadowRadius: 10,
-      elevation: 5
-    }
   };
 
   /* ---------------- UI ---------------- */
@@ -179,6 +179,7 @@ export default function PaymentsScreen() {
           <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
 
           <TextInput
+            ref={inputRef}
             value={search}
             onChangeText={setSearch}
             placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
@@ -192,7 +193,10 @@ export default function PaymentsScreen() {
 
           {search.trim().length > 0 ? (
             <TouchableOpacity 
-              onPress={() => setSearch("")} 
+              onPress={() => {
+                setSearch("");
+                inputRef.current?.focus(); // క్లియర్ చేయగానే మళ్ళీ టైప్ చేయడానికి
+              }} 
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons name="close-circle" size={20} color="#9CA3AF" />
@@ -223,15 +227,14 @@ export default function PaymentsScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled" // 🔥 PREVENT KEYBOARD CLOSING
+          keyboardShouldPersistTaps="handled" 
+          keyboardDismissMode="on-drag" 
           contentContainerStyle={[
             { paddingBottom: 100, paddingTop: 10 },
-            // 🔥 డేటా లేనప్పుడు సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
             filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
           showsVerticalScrollIndicator={false}
 
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName={search.trim().length > 0 ? "search-outline" : "wallet-outline"}
@@ -255,6 +258,7 @@ export default function PaymentsScreen() {
               style={styles.row}
               activeOpacity={0.8}
               onPress={() => {
+                Keyboard.dismiss(); // స్క్రీన్ మారే ముందు కీబోర్డ్ క్లోజ్ అవ్వాలి
                 router.push({
                   pathname: "/farmer/mestripayments/payment-details",
                   params: {
@@ -287,9 +291,9 @@ export default function PaymentsScreen() {
                 </View>
               </View>
 
-              {/* RIGHT */}
-              <View style={styles.right}>
-                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+              {/* RIGHT - PREMIUM ROUND ICON BG */}
+              <View style={styles.iconCircle}>
+                <Ionicons name="chevron-forward" size={18} color="#6B7280" />
               </View>
 
             </TouchableOpacity>
@@ -303,9 +307,9 @@ export default function PaymentsScreen() {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },
+  safe: { flex: 1, backgroundColor: "#F9FAFB" },
 
-  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+ // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -325,15 +329,15 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    height: "100%",
+    height: "100%", 
     marginLeft: 10,
     fontSize: 15,
-    paddingTop: 0,
-    paddingBottom: 0,
-    textAlignVertical: "center",
+    paddingTop: 0, 
+    paddingBottom: 0, 
+    textAlignVertical: "center", 
     color: "#1F2937",
     fontFamily: "Mandali",
-    includeFontPadding: false,
+    includeFontPadding: false, 
   },
 
   row: {
@@ -346,8 +350,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderRadius: 14, 
     backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
   },
 
   left: {
@@ -357,9 +364,9 @@ const styles = StyleSheet.create({
   },
 
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12
@@ -367,38 +374,40 @@ const styles = StyleSheet.create({
 
   avatarText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600"
   },
 
   details: {
     flex: 1,
-    gap: 4,
-    marginLeft: 8
+    gap: 2,
+    marginLeft: 4
   },
 
   name: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0F172A",
-    lineHeight: 24
+    color: "#111827",
   },
 
   sub: {
-    fontSize: 12,
-    color: "#64748B",
-    lineHeight: 20
+    fontSize: 13,
+    color: "#6B7280",
   },
 
-  right: {
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center"
   },
 
   shimmerAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21
+    width: 44,
+    height: 44,
+    borderRadius: 22
   },
 
   shimmerText: {
@@ -414,8 +423,8 @@ const styles = StyleSheet.create({
   },
 
   shimmerRight: {
-    width: 20,
-    height: 20,
-    borderRadius: 10
+    width: 32,
+    height: 32,
+    borderRadius: 16
   }
 });
