@@ -22,6 +22,7 @@ import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
+import { useIsFocused } from "@react-navigation/native";
 
 // URL params helper
 const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
@@ -29,6 +30,7 @@ const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val
 export default function AddSale() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const isScreenFocused = useIsFocused(); // 🔥 Lifecycle Fixes
 
   const editId = getStr(params.editId);
 
@@ -93,32 +95,47 @@ export default function AddSale() {
 
   const startVoice = async () => {
     try {
+      ExpoSpeechRecognitionModule.stop(); // Safe restart
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!res.granted) return;
       setVoiceTarget("crop");
       setIsListening(true);
-      ExpoSpeechRecognitionModule.start({ lang: language === "te" ? "te-IN" : "en-US" });
+      ExpoSpeechRecognitionModule.start({ lang: language === "te" ? "te-IN" : "en-US", interimResults: true });
     } catch (e) { console.log(e); }
   };
 
   useSpeechRecognitionEvent("result", (event) => {
+    if (!isListening) return;
     const text = event.results?.[0]?.transcript;
+    // 🔥 Punctuation bug fix
     if (text && voiceTarget === "crop" && modalType === "crop") {
-      setSearchText(text);
+      setSearchText(text.replace(/[.,?!]/g, "").trim());
     }
   });
 
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
+  // 🔥 Cleanup listener to prevent memory leaks
+  useEffect(() => {
+    if (!isScreenFocused) {
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    }
+    return () => {
+      ExpoSpeechRecognitionModule.stop();
+    };
+  }, [isScreenFocused]);
+
+  // 🔥 Safe Calculation
   const total = (Number(quantity) || 0) * (Number(rate) || 0);
-// ఈ లాజిక్ ని యాడ్ చెయ్ బ్రో
-const filteredCrops = userCrops.filter(c =>
-  c.toLowerCase().includes(searchText.toLowerCase().trim())
-);
+
+  const filteredCrops = userCrops.filter(c =>
+    c.toLowerCase().includes(searchText.toLowerCase().trim())
+  );
 
   const handleSave = async () => {
+    Keyboard.dismiss(); // 🔥 Close keyboard on save
     if (loading) return;
-    Keyboard.dismiss();
 
     const newErrors: any = {};
     if (!crop.trim()) newErrors.crop = language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop Name*";
@@ -156,7 +173,9 @@ const filteredCrops = userCrops.filter(c =>
 
       router.back();
     } catch (e) { console.log(e); }
-    setLoading(false);
+    finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -224,8 +243,8 @@ const filteredCrops = userCrops.filter(c =>
                 <TextInput
                   ref={qtyRef}
                   value={quantity}
-                   cursorColor="#16A34A"
-              selectionColor="#16A34A40"
+                  cursorColor="#16A34A"
+                  selectionColor="#16A34A40"
                   onChangeText={(txt) => {
                     setQuantity(txt);
                     if (errors.quantity) setErrors({ ...errors, quantity: "" });
@@ -278,7 +297,7 @@ const filteredCrops = userCrops.filter(c =>
             <TextInput
               ref={rateRef}
               value={rate}
-               cursorColor="#16A34A"
+              cursorColor="#16A34A"
               selectionColor="#16A34A40"
               onChangeText={(txt) => {
                 setRate(txt);
@@ -319,7 +338,7 @@ const filteredCrops = userCrops.filter(c =>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <AppText style={{ fontSize: 18, fontWeight: "600" }} language={language}>{language === "te" ? "పంటను ఎంచుకోండి" : "Select Crop"}</AppText>
-              <TouchableOpacity onPress={() => { setModalType(null); setActiveInput(null); }}>
+              <TouchableOpacity onPress={() => { setModalType(null); setActiveInput(null); ExpoSpeechRecognitionModule.stop(); setIsListening(false); }}>
                 <Ionicons name="close-circle" size={30} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
@@ -329,7 +348,7 @@ const filteredCrops = userCrops.filter(c =>
                 autoFocus
                 value={searchText}
                 cursorColor="#16A34A"
-              selectionColor="#16A34A40"
+                selectionColor="#16A34A40"
                 placeholderTextColor={"black"}
                 onChangeText={setSearchText}
                 placeholder={language === "te" ? "పంట పేరు టైప్ చేయండి..." : "Search crop..."}
@@ -342,36 +361,37 @@ const filteredCrops = userCrops.filter(c =>
 
             <FlatList
               data={filteredCrops}
+              keyboardShouldPersistTaps="handled" // 🔥 Important fix
               ListEmptyComponent={() => {
-                                           if (modalType === "crop") {
-                                             return (
-                                               <View style={{ padding: 20, alignItems: "center" }}>
-                                                 <View style={{ padding: 20, alignItems: 'center' }}>
-                                                   <Ionicons name="information-circle-outline" size={24} color="#6B7280" style={{ marginBottom: 10 }} />
-                                                   <AppText style={{ color: "#4B5563", textAlign: "center", fontSize: 15, fontWeight: '500', lineHeight: 22 }}>
-                                                     {language === "te" ? "మొదట 'పొలాలు' విభాగంలో\nపంట వివరాలను నమోదు చేయండి." : "First, register your crop details in the\n'Fields' section."}
-                                                   </AppText>
-                                                   <AppText style={{ color: "#9CA3AF", textAlign: "center", fontSize: 13, marginTop: 8 }}>
-                                                     {language === "te" ? "అక్కడ జోడించిన పంటలు మాత్రమే ఇక్కడ కనిపిస్తాయి." : "Only crops added there will appear here for selection."}
-                                                   </AppText>
-                                                   <TouchableOpacity
-                                                     activeOpacity={0.85}
-                                                     onPress={() => { setModalType(null); router.push("/farmer/fields"); }}
-                                                     style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#16A34A", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 }}
-                                                   >
-                                                     <Ionicons name="add-circle-outline" size={18} color="#fff" />
-                                                     <AppText style={{ color: "#fff", fontWeight: "600" }}>
-                                                       {language === "te" ? "పంట జోడించండి" : "Add Crop"}
-                                                     </AppText>
-                                                   </TouchableOpacity>
-                                                 </View>
-                                               </View>
-                                             );
-                                           }
-                                          
-                                         }}
+                  if (modalType === "crop") {
+                      return (
+                          <View style={{ padding: 20, alignItems: "center" }}>
+                              <View style={{ padding: 20, alignItems: 'center' }}>
+                                  <Ionicons name="information-circle-outline" size={24} color="#6B7280" style={{ marginBottom: 10 }} />
+                                  <AppText style={{ color: "#4B5563", textAlign: "center", fontSize: 15, fontWeight: '500', lineHeight: 22 }}>
+                                      {language === "te" ? "మొదట 'నా పొలాలు' విభాగంలో\nపంట వివరాలను నమోదు చేయండి." : "First, register your crop details in the\n'My Fields' section."}
+                                  </AppText>
+                                  <AppText style={{ color: "#9CA3AF", textAlign: "center", fontSize: 13, marginTop: 8 }}>
+                                      {language === "te" ? "అక్కడ జోడించిన పంటలు మాత్రమే ఇక్కడ కనిపిస్తాయి." : "Only crops added there will appear here for selection."}
+                                  </AppText>
+                                  <TouchableOpacity
+                                      activeOpacity={0.85}
+                                      onPress={() => { setModalType(null); router.push("/farmer/fields"); }}
+                                      style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#16A34A", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 }}
+                                  >
+                                      <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                                      <AppText style={{ color: "#fff", fontWeight: "600" }}>
+                                          {language === "te" ? "పంట జోడించండి" : "Add Crop"}
+                                      </AppText>
+                                  </TouchableOpacity>
+                              </View>
+                          </View>
+                      );
+                  }
+                  return null;
+              }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.item} onPress={() => { setCrop(item); setModalType(null); setActiveInput(null); }}>
+                <TouchableOpacity style={styles.item} onPress={() => { setCrop(item); setModalType(null); setActiveInput(null); ExpoSpeechRecognitionModule.stop(); setIsListening(false); }}>
                   <AppText style={styles.itemText}>{item}</AppText>
                 </TouchableOpacity>
               )}

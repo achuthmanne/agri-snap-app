@@ -1,4 +1,5 @@
-//expenses/index.tsx
+// app/farmer/expenses/index.tsx
+
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
 import AppEmptyState from "@/components/AppEmptyState";
@@ -6,8 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList, Modal, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, TouchableOpacity, View
@@ -15,17 +16,32 @@ import {
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
-// 🔥 REANIMATED తో SUPER SMOOTH COUNT UP (No Lag)
+// 🔥 REANIMATED తో SUPER SMOOTH COUNT UP
 import Animated, { useSharedValue, useAnimatedProps, withTiming, Easing } from "react-native-reanimated";
-import { TextInput } from "react-native"; // We animate a hidden TextInput for the number
+import { TextInput } from "react-native"; 
 
-Animated.addWhitelistedNativeProps({ text: true });
+Animated.addWhitelistedNativeProps({ text: true, value: true });
 const AnimatedText = Animated.createAnimatedComponent(TextInput);
+
+// 🔥 PRO FIX 1: Reanimated UI Thread లో toLocaleString పనిచేయదు, కాబట్టి Custom Worklet రాయాలి
+const formatIndianCurrency = (val: number) => {
+  'worklet';
+  let numStr = Math.floor(val).toString();
+  if (numStr.length <= 3) return numStr;
+  let lastThree = numStr.slice(-3);
+  let otherNumbers = numStr.slice(0, -3);
+  let formattedOther = "";
+  while (otherNumbers.length > 2) {
+    formattedOther = "," + otherNumbers.slice(-2) + formattedOther;
+    otherNumbers = otherNumbers.slice(0, -2);
+  }
+  return otherNumbers + formattedOther + "," + lastThree;
+};
 
 export default function ExpensesScreen() {
     const router = useRouter();
     const [data, setData] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true); // 🔥 Initial loading must be true
     const [language, setLanguage] = useState<"te" | "en">("te");
     
     const [totalExpense, setTotalExpense] = useState(0);
@@ -41,17 +57,18 @@ export default function ExpensesScreen() {
     // Trigger animation whenever totalExpense changes
     useEffect(() => {
         animatedAmount.value = withTiming(totalExpense, {
-            duration: 2500, // 3 Seconds for slow, premium feel
-            easing: Easing.out(Easing.exp), // Starts fast, ends slow & smooth
+            duration: 2000, // 2 Seconds for snappier premium feel
+            easing: Easing.out(Easing.exp), 
         });
     }, [totalExpense]);
 
-   // Format the number properly with Indian commas
+    // 🔥 PRO FIX 1 applied here
     const animatedProps = useAnimatedProps(() => {
-        const formatted = Math.floor(animatedAmount.value).toLocaleString('en-IN');
+        const formatted = formatIndianCurrency(animatedAmount.value);
         return {
             text: `₹ ${formatted}`,
-        } as any; // 🔥 TypeScript Error సాల్వ్ చేయడానికి ఇది పెట్టాలి బ్రో!
+            value: `₹ ${formatted}` // 🔥 Android crashes safety
+        } as any; 
     });
 
     const EmptyShimmer = () => (
@@ -67,42 +84,44 @@ export default function ExpensesScreen() {
       <View style={[styles.card, { borderColor: '#F1F5F9' }]}>
         <ShimmerPlaceholder
           LinearGradient={LinearGradient}
-          shimmerColors={['#ebebeb', '#f5f5f5', '#ebebeb']}
           style={{ width: 4, height: 40, borderRadius: 2 }}
         />
         <View style={{ flex: 1, marginLeft: 15 }}>
           <ShimmerPlaceholder
             LinearGradient={LinearGradient}
-            shimmerColors={['#ebebeb', '#f5f5f5', '#ebebeb']}
             style={{ height: 18, width: "50%", borderRadius: 6 }}
           />
           <ShimmerPlaceholder
             LinearGradient={LinearGradient}
-            shimmerColors={['#f1f5f9', '#f8fafc', '#f1f5f9']}
             style={{ height: 12, width: "70%", marginTop: 8, borderRadius: 4 }}
           />
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <ShimmerPlaceholder
             LinearGradient={LinearGradient}
-            shimmerColors={['#ebebeb', '#f5f5f5', '#ebebeb']}
             style={{ width: 70, height: 18, borderRadius: 6 }}
           />
         </View>
       </View>
     );
 
-    useEffect(() => {
-        let unsubscribe: any;
+    // 🔥 PRO FIX 2: useFocusEffect prevents memory leaks when navigating away
+    useFocusEffect(
+      useCallback(() => {
+        let unsubscribe: (() => void) | undefined;
+        let isMounted = true;
+
         const load = async () => {
+            setLoading(true);
             const phone = await AsyncStorage.getItem("USER_PHONE");
             const lang = await AsyncStorage.getItem("APP_LANG");
             if (lang) setLanguage(lang as any);
+            
             if (!phone) {
-              setLoading(false);
+              if (isMounted) setLoading(false);
               return;
             }
-            setLoading(true);
+            
             const userDoc = await firestore()
               .collection("users")
               .doc(phone)
@@ -111,11 +130,12 @@ export default function ExpensesScreen() {
             const session = userDoc.data()?.activeSession;
 
             if (!session) {
-              setLoading(false);
+              if (isMounted) setLoading(false);
               return;
             }
 
-            setActiveSession(session);
+            if (isMounted) setActiveSession(session);
+
             unsubscribe = firestore()
                 .collection("users").doc(phone).collection("expenses")
                 .where("session", "==", session)
@@ -124,7 +144,7 @@ export default function ExpensesScreen() {
                 .limit(100)
               .onSnapshot((snap) => {
                 if (!snap || !snap.docs) {
-                  setLoading(false);
+                  if (isMounted) setLoading(false);
                   return;
                 }
 
@@ -145,16 +165,50 @@ export default function ExpensesScreen() {
                     list.push({ id: doc.id, ...d });
                 });
 
-                setData(list);
-                setTotalExpense(total);
-                setCropTotals(cropMap);
-                setCategoryTotals(catMap);
-                setLoading(false);
+                if (isMounted) {
+                  setData(list);
+                  setTotalExpense(total);
+                  setCropTotals(cropMap);
+                  setCategoryTotals(catMap);
+                  setLoading(false);
+                }
+              }, (error) => {
+                console.log(error);
+                if (isMounted) setLoading(false);
               });
         };
+        
         load();
-        return () => unsubscribe && unsubscribe();
-    }, []);
+        
+        return () => {
+          isMounted = false;
+          if (unsubscribe) unsubscribe();
+        };
+      }, [])
+    );
+
+    // 🔥 PRO FIX 3: Safe Delete Function
+    const handleDelete = async () => {
+      if (!selectedItem?.id) return;
+      try {
+        setLoading(true);
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (phone) {
+          await firestore()
+            .collection("users")
+            .doc(phone)
+            .collection("expenses")
+            .doc(selectedItem.id)
+            .delete();
+        }
+      } catch (e) {
+        console.log("Delete error", e);
+      } finally {
+        setDeleteVisible(false);
+        setSelectedItem(null);
+        setLoading(false);
+      }
+    };
 
     const getColor = (str: string) => {
         const colors = ["#10B981", "#3B82F6", "#F59E0B", "#950f52", "#8B5CF6", "#EC4899"];
@@ -192,6 +246,7 @@ export default function ExpensesScreen() {
               data={loading ? [1, 2, 3, 4, 5] : data} 
               keyExtractor={(item, index) => (loading ? index.toString() : item.id)} 
               contentContainerStyle={{ paddingBottom: 120, flexGrow: 1 }}
+              showsVerticalScrollIndicator={false}
                 
               ListEmptyComponent={
                 loading ? (
@@ -288,7 +343,6 @@ export default function ExpensesScreen() {
                                         category: item.category || "",
                                         crop: item.crop || "",
                                         date: item.date || "",
-                                        notes: item.notes || ""
                                       } 
                                   });
                                 }}>
@@ -322,6 +376,7 @@ export default function ExpensesScreen() {
               }}
             />
 
+            {/* 🔥 PREMIUM DELETE MODAL */}
             <Modal visible={deleteVisible} transparent animationType="fade">
               <View style={styles.overlay}>
                 <View style={styles.deleteBox}>
@@ -349,19 +404,7 @@ export default function ExpensesScreen() {
                     <TouchableOpacity
                       activeOpacity={0.85}
                       style={styles.deleteBtn}
-                      onPress={async () => {
-                        const phone = await AsyncStorage.getItem("USER_PHONE");
-                        if (phone && selectedItem?.id) {
-                          await firestore()
-                            .collection("users")
-                            .doc(phone)
-                            .collection("expenses")
-                            .doc(selectedItem.id)
-                            .delete();
-                        }
-                        setDeleteVisible(false);
-                        setSelectedItem(null);
-                      }}
+                      onPress={handleDelete}
                     >
                       <AppText style={styles.deleteText} language={language}>
                         {language === "te" ? "అవును" : "Delete"}
@@ -385,8 +428,9 @@ const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F8FAFC" },
     mainStatsCard: { margin: 20, padding: 22, borderRadius: 24, elevation: 5 },
     statLabel: { color: "#f7bbbb", fontSize: 12 },
+    
     // Animated Text Styles
-    statValue: { color: "#fff", fontSize: 32, fontWeight: "600", marginVertical: 2, marginTop: -5, fontFamily: 'System' },
+    statValue: { color: "#fff", fontSize: 32, fontWeight: "600", marginVertical: 2, marginTop: -5, fontFamily: 'System', padding: 0 },
     divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 12},
     cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
     dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },

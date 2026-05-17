@@ -7,8 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -17,9 +17,8 @@ import {
   StatusBar,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
-  TextInput // 🔥 Needed for Reanimated Text
+  TextInput 
 } from "react-native";
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; 
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
@@ -27,16 +26,30 @@ import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 // 🔥 REANIMATED IMPORTS FOR SMOOTH COUNT UP
 import Animated, { useSharedValue, useAnimatedProps, withTiming, Easing } from "react-native-reanimated";
 
-Animated.addWhitelistedNativeProps({ text: true });
+Animated.addWhitelistedNativeProps({ text: true, value: true });
 const AnimatedText = Animated.createAnimatedComponent(TextInput);
 
-export default function SalesScreen() {
+// 🔥 PRO FIX 1: Reanimated UI Thread లో toLocaleString పనిచేయదు, కాబట్టి Custom Worklet రాయాలి
+const formatIndianCurrency = (val: number) => {
+  'worklet';
+  let numStr = Math.floor(val).toString();
+  if (numStr.length <= 3) return numStr;
+  let lastThree = numStr.slice(-3);
+  let otherNumbers = numStr.slice(0, -3);
+  let formattedOther = "";
+  while (otherNumbers.length > 2) {
+    formattedOther = "," + otherNumbers.slice(-2) + formattedOther;
+    otherNumbers = otherNumbers.slice(0, -2);
+  }
+  return otherNumbers + formattedOther + "," + lastThree;
+};
 
+export default function SalesScreen() {
   const router = useRouter();
 
   const [data, setData] = useState<any[]>([]);
   const [language, setLanguage] = useState<"te" | "en">("te");
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true); // 🔥 Initial loading must be true
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalQty, setTotalQty] = useState(0);
   const [cropQty, setCropQty] = useState<any>({});
@@ -49,18 +62,18 @@ export default function SalesScreen() {
   const animatedIncome = useSharedValue(0);
 
   useEffect(() => {
-    // 2.5 Seconds smooth and constant count up animation
     animatedIncome.value = withTiming(totalIncome, {
-        duration: 2500, 
-        easing: Easing.out(Easing.quad), // 🔥 Constant speed, smooth ending
+        duration: 2000, 
+        easing: Easing.out(Easing.exp), 
     });
   }, [totalIncome]);
 
   const animatedProps = useAnimatedProps(() => {
-    const formatted = Math.floor(animatedIncome.value).toLocaleString('en-IN');
+    const formatted = formatIndianCurrency(animatedIncome.value);
     return {
         text: `₹ ${formatted}`,
-    } as any; // 🔥 TS Error Solution
+        value: `₹ ${formatted}` // 🔥 Android crashes safety
+    } as any; 
   });
 
   const unitMap: any = {
@@ -70,87 +83,126 @@ export default function SalesScreen() {
     ton: { en: "Ton", te: "టన్ను" }
   };
 
-  /* ---------------- LOAD ---------------- */
-
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
       if (l) setLanguage(l as any);
     });
   }, []);
 
-  useEffect(() => {
-    let unsubscribe: any;
+  // 🔥 PRO FIX 2: useFocusEffect prevents memory leaks when navigating away
+  useFocusEffect(
+    useCallback(() => {
+      let unsubscribe: (() => void) | undefined;
+      let isMounted = true;
 
-    const load = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone) return;
+      const load = async () => {
+        setLoading(true);
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (!phone) {
+          if (isMounted) setLoading(false);
+          return;
+        }
 
-      const userDoc = await firestore()
-        .collection("users")
-        .doc(phone)
-        .get();
+        const userDoc = await firestore()
+          .collection("users")
+          .doc(phone)
+          .get();
 
-      const activeSession = userDoc.data()?.activeSession;
+        const activeSession = userDoc.data()?.activeSession;
 
-      if (!activeSession) return;
+        if (!activeSession) {
+          if (isMounted) setLoading(false);
+          return;
+        }
 
+        unsubscribe = firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("sales")
+          .where("session", "==", activeSession) 
+          .where("createdAt", "!=", null)        
+          .orderBy("createdAt", "desc")
+          .onSnapshot(
+            (snap) => {
+              if (!snap || !snap.docs) {
+                if (isMounted) setLoading(false);
+                return;
+              }
+
+              const list: any[] = [];
+              let tIncome = 0;
+              let tQty = 0;
+
+              const cropQtyMap: any = {};
+              const cropIncomeMap: any = {};
+
+              snap.forEach(doc => {
+                const d: any = doc.data();
+
+                const qty = Number(d.quantity) || 0;
+                const total = Number(d.total) || 0;
+                const unit = d.unit || "";
+
+                tIncome += total;
+                tQty += qty;
+
+                const key = `${d.crop}_${unit}`;
+                cropQtyMap[key] = (cropQtyMap[key] || 0) + qty;
+                cropIncomeMap[d.crop] = (cropIncomeMap[d.crop] || 0) + total;
+
+                list.push({ id: doc.id, ...d });
+              });
+
+              if (isMounted) {
+                setData(list);
+                setTotalIncome(tIncome);
+                setTotalQty(tQty);
+                setCropQty(cropQtyMap);
+                setCropIncome(cropIncomeMap);
+                setLoading(false);
+              }
+            },
+            (error: any) => {
+              console.log(error);
+              if (isMounted) setLoading(false);
+            }
+          );
+      };
+
+      load();
+
+      return () => {
+        isMounted = false;
+        if (unsubscribe) unsubscribe();
+      };
+
+    }, [])
+  );
+
+  // 🔥 PRO FIX 3: Safe Delete Function
+  const handleDelete = async () => {
+    if (!selectedItem?.id) return;
+    try {
       setLoading(true);
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (phone) {
+        await firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("sales")
+          .doc(selectedItem.id)
+          .delete();
+      }
+    } catch (e) {
+      console.log("Delete error", e);
+    } finally {
+      setDeleteVisible(false);
+      setSelectedItem(null);
+      setLoading(false);
+    }
+  };
 
-      unsubscribe = firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("sales")
-        .where("session", "==", activeSession) 
-        .where("createdAt", "!=", null)        
-        .orderBy("createdAt", "desc")
-        .onSnapshot(
-          (snap) => {
-            const list: any[] = [];
-
-            let totalIncome = 0;
-            let totalQty = 0;
-
-            const cropQtyMap: any = {};
-            const cropIncomeMap: any = {};
-
-            snap.forEach(doc => {
-              const d: any = doc.data();
-
-              const qty = Number(d.quantity) || 0;
-              const total = Number(d.total) || 0;
-              const unit = d.unit || "";
-
-              totalIncome += total;
-              totalQty += qty;
-
-              const key = `${d.crop}_${unit}`;
-              cropQtyMap[key] = (cropQtyMap[key] || 0) + qty;
-              cropIncomeMap[d.crop] = (cropIncomeMap[d.crop] || 0) + total;
-
-              list.push({ id: doc.id, ...d });
-            });
-
-            setData(list);
-            setTotalIncome(totalIncome);
-            setTotalQty(totalQty);
-            setCropQty(cropQtyMap);
-            setCropIncome(cropIncomeMap);
-            setLoading(false);
-          },
-          (error: any) => {
-            console.log(error);
-            setLoading(false);
-          }
-        );
-    };
-
-    load();
-
-    return () => unsubscribe && unsubscribe();
-
-  }, []);
-
-  /* ---------------- COLOR ---------------- */
+  /* ---------------- COLOR & SHIMMERS ---------------- */
   const EmptyShimmer = () => (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 100 }}>
       <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 120, height: 120, borderRadius: 60 }} />
@@ -177,7 +229,6 @@ export default function SalesScreen() {
     return colors[code % colors.length];
   };
 
-  // 🔥 MODERN MENU OPTIONS STYLE
   const optionsStyles = {
     optionsContainer: {
       borderRadius: 14,
@@ -213,6 +264,7 @@ export default function SalesScreen() {
           paddingBottom: 120,
           flexGrow: 1 
         }}
+        showsVerticalScrollIndicator={false}
         
         ListEmptyComponent={
           loading ? (
@@ -317,14 +369,12 @@ export default function SalesScreen() {
                   + ₹{item.total?.toLocaleString("en-IN")}
                 </AppText>
                 
-                {/* 🔥 NEW PREMIUM MENU */}
                 <Menu>
                   <MenuTrigger style={styles.menuBtn}>
                     <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
                   </MenuTrigger>
 
                   <MenuOptions customStyles={optionsStyles}>
-                    {/* 🔥 INSTANT DATA PASSING */}
                     <MenuOption onSelect={() => {
                       router.push({ 
                         pathname: "/farmer/sales/add-sale", 
@@ -395,19 +445,7 @@ export default function SalesScreen() {
 
               <TouchableOpacity
                 style={styles.deleteBtn}
-                onPress={async () => {
-                  const phone = await AsyncStorage.getItem("USER_PHONE");
-                  if (phone && selectedItem) {
-                    await firestore()
-                      .collection("users")
-                      .doc(phone)
-                      .collection("sales")
-                      .doc(selectedItem.id)
-                      .delete();
-                  }
-                  setDeleteVisible(false);
-                  setSelectedItem(null);
-                }}
+                onPress={handleDelete}
               >
                 <Ionicons name="trash-outline" size={16} color="#fff" />
                 <AppText style={styles.deleteText} language={language}>
@@ -527,7 +565,7 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 15 },
   statLabel: { color: "#bbf7d0", fontSize: 12 },
-  statValue: { color: "#fff", fontSize: 28, fontWeight: "600", marginVertical: 2, fontFamily: 'System' },
+  statValue: { color: "#fff", fontSize: 28, fontWeight: "600", marginVertical: 2, fontFamily: 'System', padding: 0 },
   
   cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
