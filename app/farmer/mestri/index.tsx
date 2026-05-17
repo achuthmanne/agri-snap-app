@@ -1,4 +1,5 @@
 // app/farmer/attendance.tsx
+
 import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
@@ -19,7 +20,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard
 } from "react-native";
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
@@ -29,7 +31,9 @@ export default function AttendanceScreen() {
   const inputRef = useRef<TextInput>(null);
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [mestris, setMestris] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  
+  // 🔥 FIX 1: Initial loading must be true to prevent Empty State flash
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [deleteItem, setDeleteItem] = useState<any>(null);
@@ -38,21 +42,23 @@ export default function AttendanceScreen() {
   const isScreenFocused = useIsFocused();
   const [activeSession, setActiveSession] = useState("");
 
-  // 🔥 NEW STATES FOR LOGIC
   const [actionLoading, setActionLoading] = useState(false);
   const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
 
+  // 🔥 FIX 2: Voice Search Punctuation Bug
   useSpeechRecognitionEvent("result", (event) => {
     if (!isScreenFocused || !isListening) return;
 
     if (event.results && event.results.length > 0) {
-      setSearch(event.results[0].transcript);
+      const transcript = event.results[0].transcript.replace(/[.,?!]/g, "").trim();
+      setSearch(transcript);
     }
   });
 
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
   const handleVoiceSearch = async () => {
+    Keyboard.dismiss(); // 🔥 FIX 3: Close keyboard on voice search
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
 
@@ -73,10 +79,6 @@ export default function AttendanceScreen() {
     };
   }, [isScreenFocused]);
 
-  const filteredMestris = mestris.filter((item) =>
-    (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
-  );
-
   useEffect(() => {
     const loadLang = async () => {
       const lang = await AsyncStorage.getItem("APP_LANG");
@@ -86,18 +88,21 @@ export default function AttendanceScreen() {
   }, []);
 
   useEffect(() => {
-    let unsubscribe: any;
+    let unsubscribe: (() => void) | undefined;
 
     const loadData = async () => {
-      const userPhone = (await AsyncStorage.getItem("USER_PHONE")) ?? "";
-      if (!userPhone) return;
-
       setLoading(true);
+      const userPhone = (await AsyncStorage.getItem("USER_PHONE")) ?? "";
+      if (!userPhone) {
+        setLoading(false);
+        return;
+      }
 
       const userDoc = await firestore().collection("users").doc(userPhone).get();
       const session = userDoc.data()?.activeSession;
 
       if (!session) {
+        setMestris([]);
         setLoading(false);
         return;
       }
@@ -123,6 +128,9 @@ export default function AttendanceScreen() {
           }));
           setMestris(list);
           setLoading(false);
+        }, (error) => {
+          console.log(error);
+          setLoading(false);
         });
     };
 
@@ -145,7 +153,7 @@ export default function AttendanceScreen() {
         .collection("mestris").doc(mestriId)
         .collection("attendance")
         .where("session", "==", activeSession)
-        .limit(1) // ఒక్క రికార్డ్ ఉన్నా చాలు
+        .limit(1) 
         .get();
 
       if (!attSnap.empty) return true;
@@ -161,37 +169,36 @@ export default function AttendanceScreen() {
 
       if (!paySnap.empty) return true;
 
-      return false; // ఏమీ లేకపోతే
+      return false; 
     } catch (error) {
       console.log("Error checking records", error);
-      return true; // సేఫ్టీ కోసం ఎర్రర్ వస్తే true (బ్లాక్) చేస్తాం
+      return true; // Safety Lock
     }
   };
 
-  // 🔥 Action: Handle Edit Click
   const handleEditClick = async (item: any) => {
+    Keyboard.dismiss();
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
     setActionLoading(false);
 
     router.push({
       pathname: "/farmer/mestri/edit/[id]",
-      // 🔥 Send hasRecords flag to Edit Screen to disable Name Input
       params: { id: item.id, hasRecords: hasRecords ? "true" : "false" } 
     });
   };
 
-  // 🔥 Action: Handle Delete Click
   const handleDeleteClick = async (item: any) => {
+    Keyboard.dismiss();
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
     setActionLoading(false);
 
     if (hasRecords) {
-      setShowCannotDeleteModal(true); // రికార్డ్స్ ఉంటే వార్నింగ్
+      setShowCannotDeleteModal(true); 
     } else {
       setDeleteItem(item);
-      setShowDeleteModal(true); // ఏమీ లేకపోతే డిలీట్ కన్ఫర్మేషన్
+      setShowDeleteModal(true); 
     }
   };
 
@@ -222,6 +229,13 @@ export default function AttendanceScreen() {
     }
   };
 
+  /* ---------------- SEARCH FILTER (ROBUST) ---------------- */
+  const cleanSearchTerm = search.replace(/[.,?!]/g, "").trim().toLowerCase();
+  const filteredMestris = mestris.filter(item => {
+    const dbName = (item.name || "").replace(/[.,?!]/g, "").trim().toLowerCase();
+    return dbName.includes(cleanSearchTerm);
+  });
+
   const avatarColors = [
     "#22C55E", "#3B82F6", "#F59E0B", "#EF4444",
     "#8B5CF6", "#14B8A6", "#F97316", "#6366F1",
@@ -235,7 +249,8 @@ export default function AttendanceScreen() {
 
   const handleCall = (phone: string) => {
     if (!phone) return;
-    const url = `tel:${phone}`;
+    const cleanPhone = phone.replace(/\D/g, "");
+    const url = `tel:${cleanPhone}`;
     Linking.canOpenURL(url)
       .then((supported) => {
         if (supported) Linking.openURL(url);
@@ -243,7 +258,6 @@ export default function AttendanceScreen() {
       .catch((err) => console.log(err));
   };
 
-  // 🔥 MODERN MENU STYLES
   const optionsStyles = {
     optionsContainer: {
       borderRadius: 14,
@@ -261,7 +275,6 @@ export default function AttendanceScreen() {
   };
 
   const ShimmerRow = () => (
-    // 🔥 ఒరిజినల్ కార్డ్ కి ఉన్న "styles.row" నే ఇక్కడ కూడా వాడుతున్నాం!
     <View style={styles.row}>
       <View style={styles.left}>
         <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 42, height: 42, borderRadius: 21, marginRight: 12 }} />
@@ -271,8 +284,6 @@ export default function AttendanceScreen() {
           <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: "30%", height: 12, borderRadius: 6, marginTop: 2 }} />
         </View>
       </View>
-      
-      {/* రైట్ సైడ్ లో ఉండే కాల్ బటన్ మరియు మెనూ ఐకాన్ కోసం షిమ్మర్స్ */}
       <View style={styles.right}>
         <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 34, height: 34, borderRadius: 10 }} />
         <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 20, height: 20, borderRadius: 10, marginLeft: 5 }} />
@@ -291,9 +302,10 @@ export default function AttendanceScreen() {
         </View>
       )}
 
+      {/* 🔥 FIX 4: Header Update */}
       <AppHeader
-        title={language === "te" ? "మేస్త్రీల నిర్వహణ" : "Mestri Management"}
-        subtitle={language === "te" ? "రోజువారీ హాజరు & వివరాలు" : "Daily Attendance & Records"}
+        title={language === "te" ? "మేస్త్రీల జాబితా" : "Mestri List"}
+        subtitle={language === "te" ? "హాజరు నిర్వహణ" : "Manage Attendance"}
         language={language}
       />
 
@@ -302,6 +314,7 @@ export default function AttendanceScreen() {
         <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
           <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
           <TextInput
+            ref={inputRef}
             value={search}
             onChangeText={setSearch}
             placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestri name..."}
@@ -329,7 +342,6 @@ export default function AttendanceScreen() {
       )}
 
       {loading ? (
-        // 🔥 FIX: FlatList ki unna same padding ikkada isthe, shimmer exact ga card size ki vastundi!
         <View style={{ padding: 20, paddingTop: 10 }}>
           <ShimmerRow />
           <ShimmerRow />
@@ -341,9 +353,9 @@ export default function AttendanceScreen() {
           data={filteredMestris}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled" 
+          keyboardDismissMode="on-drag"
           contentContainerStyle={[
             { padding: 20, paddingBottom: 100 },
-            // 🔥 సెంటర్ లోకి రావడానికి లాజిక్
             filteredMestris.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
           showsVerticalScrollIndicator={false}
@@ -369,12 +381,13 @@ export default function AttendanceScreen() {
               <TouchableOpacity
                 style={styles.left}
                 activeOpacity={0.7}
-                onPress={() =>
+                onPress={() => {
+                  Keyboard.dismiss(); // 🔥 Close Keyboard on navigation
                   router.push({
                     pathname: "/farmer/mestri/[id]",
                     params: { id: item.id }
-                  })
-                }
+                  });
+                }}
               >
                 <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
                   <AppText style={styles.avatarText} language={language}>
@@ -431,9 +444,12 @@ export default function AttendanceScreen() {
         />
       )}
 
-      <TouchableOpacity activeOpacity={0.8}
+      <TouchableOpacity activeOpacity={0.9}
         style={styles.addBtn}
-        onPress={() => router.push("/farmer/mestri/add-mestri")}
+        onPress={() => {
+          Keyboard.dismiss(); // 🔥 Close Keyboard on plus click
+          router.push("/farmer/mestri/add-mestri");
+        }}
       >
         <LinearGradient
           colors={["#16A34A","#166534"]}
@@ -504,22 +520,22 @@ export default function AttendanceScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#F9FAFB", marginHorizontal: 20, marginTop: 15, marginBottom: 0, paddingHorizontal: 12, height: 50, borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB" },
+  safe: { flex: 1, backgroundColor: "#F9FAFB" }, // 🔥 Premium Background Update
+  searchContainer: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFFFF", marginHorizontal: 20, marginTop: 15, marginBottom: 0, paddingHorizontal: 12, height: 50, borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB" },
   searchFocused: { borderColor: "#16A34A", backgroundColor: "#FFFFFF" },
   searchInput: { flex: 1, height: "100%", marginLeft: 10, fontSize: 15, paddingTop: 0, paddingBottom: 0, textAlignVertical: "center", color: "#1F2937", fontFamily: "Mandali", includeFontPadding: false },
-  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, justifyContent: "space-between", marginVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor:"#E5E7EB", borderRadius: 12, backgroundColor:"#ffffff" },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, justifyContent: "space-between", marginVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor:"#E5E7EB", borderRadius: 14, backgroundColor:"#ffffff", shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 3 },
   left: { flexDirection: "row", alignItems: "center", flex: 1 },
-  avatar: { width: 42, height: 42, borderRadius: 21, justifyContent: "center", alignItems: "center", marginRight: 12 },
-  avatarText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  details: { flex: 1, gap: 4, marginLeft: 8 },
+  avatar: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center", marginRight: 12 },
+  avatarText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  details: { flex: 1, gap: 2, marginLeft: 4 },
   right: { flexDirection: "row", alignItems: "center", gap: 8 },
   callBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#ECFDF5", justifyContent: "center", alignItems: "center" },
-  name: { fontSize: 15, fontWeight: "600", color: "#0F172A", lineHeight: 24 },
-  sub: { fontSize: 12, color: "#64748B", lineHeight: 20 },
-  phone: { fontSize: 12, color: "#16A34A", lineHeight: 14 },
-  addBtn: { position: "absolute", bottom: 30, right: 20 },
-  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset:{width:0, height:2}, shadowOpacity:0.2, shadowRadius:4 },
+  name: { fontSize: 15, fontWeight: "600", color: "#111827" },
+  sub: { fontSize: 13, color: "#6B7280" },
+  phone: { fontSize: 12, color: "#16A34A", fontWeight: '500' },
+  addBtn: { position: "absolute", bottom: 30, right: 20, elevation: 5, shadowColor: '#16A34A', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: {width: 0, height: 4} },
+  addGradient: { width: 64, height: 64, borderRadius: 32, justifyContent: "center", alignItems: "center" },
   
   // MENU STYLES
   modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },

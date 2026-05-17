@@ -8,12 +8,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  FlatList, Modal, SafeAreaView, ScrollView, // 🔥 ScrollView ని యాడ్ చేశాను
+  FlatList, Modal, SafeAreaView, ScrollView, 
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard
 } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -106,6 +107,7 @@ export default function MestriAttendance() {
 
   const handleVoiceSearch = async () => {
     try {
+      Keyboard.dismiss(); // 🔥 Keyboard dismiss bug fix
       ExpoSpeechRecognitionModule.stop();
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!res.granted) return;
@@ -121,7 +123,8 @@ export default function MestriAttendance() {
   useSpeechRecognitionEvent("result", (event) => {
     if (!isListening || modalType === null) return;
     if (event.results?.length) {
-      const text = event.results[0].transcript;
+      // 🔥 Punctuation Bug fix
+      const text = event.results[0].transcript.replace(/[.,?!]/g, "").trim();
       setSearchText(text);
       if (modalType === "crop") { setCrop(text); if (errors.crop) setErrors({ ...errors, crop: "" }); }
       if (modalType === "work") { setWork(text); if (errors.work) setErrors({ ...errors, work: "" }); }
@@ -153,7 +156,7 @@ export default function MestriAttendance() {
 
   /* ---------------- COUNT ---------------- */
   const inc = (type: string) => {
-    if (errors.counts) setErrors({ ...errors, counts: "" }); // Clear count error
+    if (errors.counts) setErrors({ ...errors, counts: "" }); 
     if (type === "morning") setMorning((p) => p + 1);
     if (type === "evening") setEvening((p) => p + 1);
     if (type === "full") setFull((p) => p + 1);
@@ -184,6 +187,7 @@ export default function MestriAttendance() {
 
   /* ---------------- SAVE ---------------- */
   const handleSave = async () => {
+    Keyboard.dismiss(); // 🔥 Keyboard dismiss bug fix
     if (!validate()) return;
 
     try {
@@ -291,14 +295,19 @@ export default function MestriAttendance() {
         subtitle={language === "te" ? "వివరాలు నమోదు చేయండి" : "Enter Details"}
         language={language}
       />
-{/* 🔥 ఇక్కడ View తీసేసి ScrollView పెట్టాను */}
+
       <ScrollView 
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled" // 🔥 Keyboard bug fix
       >
-        <View style={styles.mestriBox}>
-          <AppText style={styles.mestriName} language={language}>
-            {mestriName} {village ? `| ${village}` : ""}
+        {/* 🔥 PREMIUM MESTRI INFO BOX */}
+        <View style={styles.topInfoBox}>
+          <AppText style={styles.mainTitle} language={language}>
+            {mestriName}
+          </AppText>
+          <AppText style={styles.subTitle} language={language}>
+            {village}
           </AppText>
         </View>
 
@@ -411,14 +420,13 @@ export default function MestriAttendance() {
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView> 
-      {/* 🔥 ScrollView ఇక్కడితో ఎండ్ అవుతుంది */}
 
-      {/* DUPLICATE WARNING MODAL */}
+      {/* 🔥 APP THEMED DUPLICATE WARNING MODAL */}
       <Modal visible={showWarning} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.warningBox}>
             <View style={styles.iconBg}>
-              <Ionicons name="warning" size={36} color="#1B5E20" />
+              <Ionicons name="warning" size={36} color="#16A34A" /> 
             </View>
             <AppText style={styles.warningTitle} language={language}>
               {language === "te" ? "ఇప్పటికే ఉంది" : "Already Exists"}
@@ -495,6 +503,7 @@ export default function MestriAttendance() {
 
             <FlatList
               data={filteredData}
+              keyboardShouldPersistTaps="handled" // 🔥 Keyboard Fix
               keyExtractor={(item, i) => i.toString()}
               ListEmptyComponent={() => {
                 if (modalType === "crop") {
@@ -593,8 +602,31 @@ export default function MestriAttendance() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  // 🔥 కింద సేవ్ బటన్ కింద గ్యాప్ ఉండటానికి paddingBottom: 40 యాడ్ చేశాను
   container: { padding: 20, paddingBottom: 40, overflow: "visible" },
+  
+  // 🔥 PREMIUM TOP INFO BOX
+  topInfoBox: {
+    marginBottom: 16,
+    padding: 14,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between" 
+  },
+  mainTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  subTitle: {
+    fontSize: 14,
+    color: "#6B7280",
+    fontWeight: "500"
+  },
+
   inputBox: {
     flexDirection: "row", alignItems: "center", backgroundColor: "white",
     borderRadius: 12, paddingHorizontal: 15, height: 55, marginBottom: 14,
@@ -617,7 +649,7 @@ const styles = StyleSheet.create({
   counter: { flexDirection: "row", alignItems: "center", gap: 20 },
   count: { fontSize: 20, fontWeight: "700", color: "#111827", width: 24, textAlign: 'center' },
 
-  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#E8F5E9", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginBottom: 10 },
   saveBtn: { marginTop: 35, borderRadius: 18, overflow: "hidden", elevation: 4 },
   saveGradient: { height: 56, justifyContent: "center", alignItems: "center" },
   saveText: { color: "white", fontSize: 16, fontWeight: "600" },
@@ -635,8 +667,8 @@ const styles = StyleSheet.create({
   warningTitle: { fontSize: 18, fontWeight: "600", color: "#111827", marginBottom: 6 },
   warningText: { fontSize: 13, color: "#6B7280", textAlign: "center", marginBottom: 20, lineHeight: 20 },
   rowBtns: { flexDirection: "row", gap: 10, marginTop: 10 },
-  helpBtn: { flex: 1, backgroundColor: "#E8F5E9", paddingVertical: 12, borderRadius: 12, alignItems: "center" },
-  helpText: { color: "#2E7D32", fontWeight: "600" },
+  helpBtn: { flex: 1, backgroundColor: "#F1F5F9", paddingVertical: 12, borderRadius: 12, alignItems: "center" },
+  helpText: { color: "#4B5563", fontWeight: "600" },
   noBtn: { flex: 1, backgroundColor: "#16A34A", paddingVertical: 12, borderRadius: 12, alignItems: "center" },
   noText: { color: "white", fontWeight: "600" },
   
@@ -650,7 +682,4 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: "row", justifyContent: "space-between", padding: 20, alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
   modalTitleText: { fontSize: 18, fontWeight: "600", color: "#1F2937" },
   option: { padding: 20, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
-  
-  mestriBox: { alignItems: "center", marginTop: 5, marginBottom: 15 },
-  mestriName: { fontSize: 18, fontWeight: "600", color: "#1F2937", includeFontPadding: false },
 });

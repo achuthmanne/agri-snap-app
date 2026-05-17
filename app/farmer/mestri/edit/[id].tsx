@@ -1,4 +1,5 @@
-//app/farmer/mestri/edit/[id].tsx
+// app/farmer/mestri/edit/[id].tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -8,13 +9,17 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-spe
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
-  Modal
+  View
 } from "react-native";
 
 import AgriLoader from "@/components/AgriLoader";
@@ -26,7 +31,7 @@ export default function EditMestri() {
   
   // 🔥 GET hasRecords FROM PARAMS
   const { id, hasRecords } = useLocalSearchParams();
-  const isLocked = hasRecords === "true"; // 🔥 Boolean గా మారుస్తున్నాం
+  const isLocked = hasRecords === "true"; 
 
   const [activeSession, setActiveSession] = useState("");
   const [name, setName] = useState("");
@@ -38,9 +43,8 @@ export default function EditMestri() {
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ name?: string; phone?: string; village?: string }>({});
   
-  // Modals state
   const [showWarning, setShowWarning] = useState(false);
-  const [showLockInfo, setShowLockInfo] = useState(false); // 🔥 కొత్త లాక్ ఇన్ఫో మోడల్
+  const [showLockInfo, setShowLockInfo] = useState(false); 
 
   const nameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
@@ -53,12 +57,20 @@ export default function EditMestri() {
   };
   const [isListening, setIsListening] = useState(false);
 
-  // వాయిస్ రిజల్ట్ ని హ్యాండిల్ చేయడం
+  // 🔥 PRODUCTION FIX 1: Voice input punctuation cleanup 
   useSpeechRecognitionEvent("result", (event) => {
+    if (!isListening) return;
+
     if (event.results && event.results.length > 0) {
-      const transcript = event.results[0].transcript;
-      if (activeInput === "name" && !isLocked) setName(transcript); // లాక్ ఉంటే వాయిస్ కూడా అప్లై అవ్వదు
-      else if (activeInput === "village") setVillage(transcript);
+      const transcript = event.results[0].transcript.replace(/[.,?!]/g, "").trim();
+      if (activeInput === "name" && !isLocked) {
+        setName(transcript);
+        if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+      }
+      else if (activeInput === "village") {
+        setVillage(transcript);
+        if (errors.village) setErrors((prev) => ({ ...prev, village: undefined }));
+      }
     }
   });
 
@@ -69,6 +81,7 @@ export default function EditMestri() {
       setShowLockInfo(true);
       return;
     }
+    Keyboard.dismiss(); // మైక్ ఆన్ చేసే ముందు కీబోర్డ్ దించేయాలి
     setActiveInput(target);
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
@@ -128,6 +141,8 @@ export default function EditMestri() {
           setPhone(data.phone || "");
           setVillage(data.village || "");
         }
+      } catch (err) {
+        console.log("Load error:", err);
       } finally {
         setLoading(false);
       }
@@ -135,14 +150,18 @@ export default function EditMestri() {
     loadData();
   }, []);
 
+  // 🔥 PRODUCTION FIX 2: Stop listening on unmount to prevent leaks
   useEffect(() => {
     return () => {
       ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
     };
   }, []);
 
   /* ---------------- UPDATE ---------------- */
   const handleUpdate = async () => {
+    Keyboard.dismiss();
+    
     const newErrors: { name?: string; phone?: string; village?: string } = {};
     if (!name.trim()) {
       newErrors.name = language === "te" ? "పేరు నమోదు చేయండి*" : "Name is required*";
@@ -185,7 +204,7 @@ export default function EditMestri() {
         .collection("mestris")
         .doc(id as string)
         .update({
-          name: name.trim(), // లాక్ ఉన్నా కూడా పాత పేరే సేవ్ అవుతుంది, ఇబ్బంది లేదు
+          name: name.trim(), 
           phone: cleanPhone,
           village: village.trim(),
           session: activeSession 
@@ -200,7 +219,6 @@ export default function EditMestri() {
     }
   };
 
-  /* ---------------- UI ---------------- */
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
@@ -211,168 +229,177 @@ export default function EditMestri() {
         language={language}
       />
 
-      <View style={styles.container}>
+      {/* 🔥 PRODUCTION FIX 3: Added KeyboardAvoidingView + ScrollView to avoid fields blocking */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
-        {/* 🔥 NAME (LOCKED IF hasRecords === true) */}
-        <TouchableOpacity
-          style={[
-            styles.inputBox,
-            activeInput === "name" && !isLocked && styles.inputFocused,
-            errors.name && styles.inputError,
-            isLocked && styles.inputLocked // లాక్ ఐనప్పుడు గ్రే కలర్ కోసం
-          ]}
-          activeOpacity={1}
-          onPress={() => {
-            if (isLocked) setShowLockInfo(true);
-            else nameRef.current?.focus();
-          }}
-        >
-          {isLocked ? (
-             <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
-          ) : (
-             <Ionicons name="person-outline" size={20} color={activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
-          )}
-
-          <TextInput
-            ref={nameRef}
-            placeholder={isListening && activeInput === "name" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.name}
-            placeholderTextColor={isListening && activeInput === "name" ? "#EF4444" : "#9CA3AF"}
-            value={name}
-            editable={!isLocked} // 🔥 THE MAIN LOCK
-            onChangeText={(txt) => {
-              setName(txt);
-              if (errors.name) setErrors({ ...errors, name: undefined });
-            }}
-            cursorColor="#16A34A"
-            selectionColor="#16A34A40"
-            style={[styles.input, isLocked && { color: "#6B7280" }]} // లాక్ అయితే కలర్ డిమ్ గా
-            onFocus={() => setActiveInput("name")}
-            onBlur={() => setActiveInput(null)}
-            returnKeyType="next"
-            onSubmitEditing={() => phoneRef.current?.focus()}
-          />
-          
+          {/* 👤 NAME (LOCKED IF hasRecords === true) */}
           <TouchableOpacity
+            style={[
+              styles.inputBox,
+              activeInput === "name" && !isLocked && styles.inputFocused,
+              errors.name && styles.inputError,
+              isLocked && styles.inputLocked 
+            ]}
+            activeOpacity={1}
             onPress={() => {
               if (isLocked) setShowLockInfo(true);
-              else handleVoiceInput("name");
+              else nameRef.current?.focus();
             }}
-            style={styles.micBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             {isLocked ? (
-              <Ionicons name="information-circle-outline" size={24} color="#F59E0B" />
+               <Ionicons name="lock-closed" size={20} color="#9CA3AF" />
             ) : (
-              <Ionicons
-                name={isListening && activeInput === "name" ? "mic" : "mic-outline"}
-                size={24}
-                color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")}
-              />
+               <Ionicons name="person-outline" size={20} color={activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
             )}
+
+            <TextInput
+              ref={nameRef}
+              placeholder={isListening && activeInput === "name" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.name}
+              placeholderTextColor={isListening && activeInput === "name" ? "#EF4444" : "#9CA3AF"}
+              value={name}
+              editable={!isLocked} 
+              onChangeText={(txt) => {
+                setName(txt);
+                if (errors.name) setErrors({ ...errors, name: undefined });
+              }}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              style={[styles.input, isLocked && { color: "#6B7280" }]} 
+              onFocus={() => setActiveInput("name")}
+              onBlur={() => setActiveInput(null)}
+              returnKeyType="next"
+              onSubmitEditing={() => phoneRef.current?.focus()}
+            />
+            
+            <TouchableOpacity
+              onPress={() => {
+                if (isLocked) setShowLockInfo(true);
+                else handleVoiceInput("name");
+              }}
+              style={styles.micBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              {isLocked ? (
+                <Ionicons name="information-circle-outline" size={24} color="#F59E0B" />
+              ) : (
+                <Ionicons
+                  name={isListening && activeInput === "name" ? "mic" : "mic-outline"}
+                  size={24}
+                  color={isListening && activeInput === "name" ? "#EF4444" : (activeInput === "name" ? "#16A34A" : "#6B7280")}
+                />
+              )}
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
-        {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
+          {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
 
-        {/* PHONE */}
-        <TouchableOpacity
-          style={[
-            styles.inputBox,
-            activeInput === "phone" && styles.inputFocused,
-            errors.phone && styles.inputError
-          ]}
-          activeOpacity={1}
-          onPress={() => phoneRef.current?.focus()}
-        >
-          <Ionicons name="call-outline" size={20} color={activeInput === "phone" ? "#16A34A" : "#9CA3AF"} />
-
-          <TextInput
-            ref={phoneRef}
-            placeholder={t.phone}
-            placeholderTextColor="#9CA3AF"
-            value={phone}
-            onChangeText={(txt) => {
-              setPhone(txt);
-              if (errors.phone) setErrors({ ...errors, phone: undefined });
-            }}
-            cursorColor="#16A34A"
-            selectionColor="#16A34A40"
-            style={styles.input}
-            onFocus={() => setActiveInput("phone")}
-            onBlur={() => setActiveInput(null)}
-            keyboardType="number-pad"
-            maxLength={10}
-            returnKeyType="next"
-            onSubmitEditing={() => villageRef.current?.focus()}
-          />
-        </TouchableOpacity>
-        {errors.phone && <AppText style={styles.errorText} language={language}>{errors.phone}</AppText>}
-
-        {/* VILLAGE */}
-        <TouchableOpacity
-          style={[
-            styles.inputBox,
-            activeInput === "village" && styles.inputFocused,
-            errors.village && styles.inputError
-          ]}
-          activeOpacity={1}
-          onPress={() => villageRef.current?.focus()}
-        >
-          <Ionicons name="location-outline" size={20} color={activeInput === "village" ? "#16A34A" : "#9CA3AF"} />
-
-          <TextInput
-            ref={villageRef}
-            placeholder={isListening && activeInput === "village" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.village}
-            placeholderTextColor={isListening && activeInput === "village" ? "#EF4444" : "#9CA3AF"}
-            value={village}
-            onChangeText={(txt) => {
-              setVillage(txt);
-              if (errors.village) setErrors({ ...errors, village: undefined });
-            }}
-            cursorColor="#16A34A"
-            selectionColor="#16A34A40"
-            style={styles.input}
-            onFocus={() => setActiveInput("village")}
-            onBlur={() => setActiveInput(null)}
-            returnKeyType="done"
-          />
+          {/* 📞 PHONE */}
           <TouchableOpacity
-            onPress={() => handleVoiceInput("village")}
-            style={styles.micBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={[
+              styles.inputBox,
+              activeInput === "phone" && styles.inputFocused,
+              errors.phone && styles.inputError
+            ]}
+            activeOpacity={1}
+            onPress={() => phoneRef.current?.focus()}
           >
-            <Ionicons
-              name={isListening && activeInput === "village" ? "mic" : "mic-outline"}
-              size={24}
-              color={isListening && activeInput === "village" ? "#EF4444" : (activeInput === "village" ? "#16A34A" : "#6B7280")}
+            <Ionicons name="call-outline" size={20} color={activeInput === "phone" ? "#16A34A" : "#9CA3AF"} />
+
+            <TextInput
+              ref={phoneRef}
+              placeholder={t.phone}
+              placeholderTextColor="#9CA3AF"
+              value={phone}
+              onChangeText={(txt) => {
+                setPhone(txt);
+                if (errors.phone) setErrors({ ...errors, phone: undefined });
+              }}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              style={styles.input}
+              onFocus={() => setActiveInput("phone")}
+              onBlur={() => setActiveInput(null)}
+              keyboardType="number-pad"
+              maxLength={10}
+              returnKeyType="next"
+              onSubmitEditing={() => villageRef.current?.focus()}
             />
           </TouchableOpacity>
-        </TouchableOpacity>
-        {errors.village && <AppText style={styles.errorText} language={language}>{errors.village}</AppText>}
+          {errors.phone && <AppText style={styles.errorText} language={language}>{errors.phone}</AppText>}
 
-        {/* UPDATE BUTTON */}
-        <TouchableOpacity
-          style={styles.saveBtn}
-          onPress={handleUpdate}
-          disabled={loading} 
-        >
-          <LinearGradient
-            colors={["#2E7D32", "#1B5E20"]}
-            style={styles.saveGradient}
+          {/* 📍 VILLAGE */}
+          <TouchableOpacity
+            style={[
+              styles.inputBox,
+              activeInput === "village" && styles.inputFocused,
+              errors.village && styles.inputError
+            ]}
+            activeOpacity={1}
+            onPress={() => villageRef.current?.focus()}
           >
-            <AppText style={styles.saveText} language={language}>
-              {language === "te" ? "సవరించండి" : "Update"}
-            </AppText>
-          </LinearGradient>
-        </TouchableOpacity>
+            <Ionicons name="location-outline" size={20} color={activeInput === "village" ? "#16A34A" : "#9CA3AF"} />
 
-      </View>
+            <TextInput
+              ref={villageRef}
+              placeholder={isListening && activeInput === "village" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.village}
+              placeholderTextColor={isListening && activeInput === "village" ? "#EF4444" : "#9CA3AF"}
+              value={village}
+              onChangeText={(txt) => {
+                setVillage(txt);
+                if (errors.village) setErrors({ ...errors, village: undefined });
+              }}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              style={styles.input}
+              onFocus={() => setActiveInput("village")}
+              onBlur={() => setActiveInput(null)}
+              returnKeyType="done"
+              onSubmitEditing={handleUpdate}
+            />
+            <TouchableOpacity
+              onPress={() => handleVoiceInput("village")}
+              style={styles.micBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={isListening && activeInput === "village" ? "mic" : "mic-outline"}
+                size={24}
+                color={isListening && activeInput === "village" ? "#EF4444" : (activeInput === "village" ? "#16A34A" : "#6B7280")}
+              />
+            </TouchableOpacity>
+          </TouchableOpacity>
+          {errors.village && <AppText style={styles.errorText} language={language}>{errors.village}</AppText>}
+
+          {/* UPDATE BUTTON */}
+          <TouchableOpacity
+            style={styles.saveBtn}
+            onPress={handleUpdate}
+            disabled={loading} 
+            activeOpacity={0.9}
+          >
+            <LinearGradient
+              colors={["#2E7D32", "#1B5E20"]}
+              style={styles.saveGradient}
+            >
+              <AppText style={styles.saveText} language={language}>
+                {language === "te" ? "సవరించండి" : "Update"}
+              </AppText>
+            </LinearGradient>
+          </TouchableOpacity>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+
       <AgriLoader
         visible={loading}
         type={loaderType}
         language={language}
       />
 
-      {/* 🔥 LOCK INFO MODAL */}
+      {/* 🔒 LOCK INFO MODAL */}
       <Modal visible={showLockInfo} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
@@ -406,7 +433,7 @@ export default function EditMestri() {
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  container: { padding: 20 },
+  container: { padding: 20, paddingBottom: 40 },
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -418,9 +445,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1D5DB"
   },
-  // 🔥 NEW STYLE FOR LOCKED INPUT
   inputLocked: {
-    backgroundColor: "#F3F4F6", // Slight gray
+    backgroundColor: "#F3F4F6", 
     borderColor: "#E5E7EB",
   },
   input: {
@@ -450,7 +476,7 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   micBtn: { marginLeft: 10, padding: 4 },
-  saveBtn: { marginTop: 25, borderRadius: 18, overflow: "hidden" },
+  saveBtn: { marginTop: 25, borderRadius: 18, overflow: "hidden", elevation: 4 },
   saveGradient: { height: 52, justifyContent: "center", alignItems: "center" },
   saveText: { color: "white", fontSize: 15, fontWeight: "600" },
   overlay: {
@@ -461,10 +487,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 999
   },
-  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center" },
+  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 20, padding: 24, alignItems: "center", elevation: 10 },
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#E8F5E9", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  modalTitle: { fontSize: 16, fontWeight: "600" },
-  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 6 },
-  okBtn: { marginTop: 20, backgroundColor: "#1B5E20", paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
-  okText: { color: "white", fontWeight: "600" }
+  modalTitle: { fontSize: 18, fontWeight: "600", color: "#111827" },
+  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8 },
+  okBtn: { marginTop: 20, paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12, width: "100%", alignItems: "center" },
+  okText: { color: "white", fontWeight: "600", fontSize: 15 }
 });

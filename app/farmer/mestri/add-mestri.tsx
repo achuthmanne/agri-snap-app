@@ -1,5 +1,5 @@
-//app/farmer/mestri/add-mestri.tsx
-// This screen allows the farmer to add a new Mestri. It includes fields for name, phone, and village. It validates the input, saves the new Mestri to Firestore under the current user's collection, and handles loading states and error messages.
+// app/farmer/mestri/add-mestri.tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -14,7 +14,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard
 } from "react-native";
 
 import AgriLoader from "@/components/AgriLoader";
@@ -40,26 +41,27 @@ export default function AddMestri() {
   const villageRef = useRef<TextInput>(null);
   
   const [activeSession, setActiveSession] = useState("");
-  
+  const [isListening, setIsListening] = useState(false);
+
   const t = {
     name: language === "te" ? "పేరు నమోదు చేయండి*" : "Enter name*",
     phone: language === "te" ? "ఫోన్ నంబర్ నమోదు చేయండి" : "Enter phone number",
     village: language === "te" ? "గ్రామం నమోదు చేయండి*" : "Enter village*"
   };
-  
-  const [isListening, setIsListening] = useState(false);
 
-  // వాయిస్ రిజల్ట్ ని హ్యాండిల్ చేయడం
+  // 🔥 PRODUCTION FIX 1: Voice Input Punctuation and Formatting Fix
   useSpeechRecognitionEvent("result", (event) => {
+    if (!isListening) return;
+
     if (event.results && event.results.length > 0) {
-      const transcript = event.results[0].transcript;
+      const transcript = event.results[0].transcript.replace(/[.,?!]/g, "").trim();
       if (activeInput === "name") {
         setName(transcript);
-        if (errors.name) setErrors({ ...errors, name: undefined });
+        if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
       }
       else if (activeInput === "village") {
         setVillage(transcript);
-        if (errors.village) setErrors({ ...errors, village: undefined });
+        if (errors.village) setErrors((prev) => ({ ...prev, village: undefined }));
       }
     }
   });
@@ -67,9 +69,11 @@ export default function AddMestri() {
   useSpeechRecognitionEvent("end", () => setIsListening(false));
 
   const handleVoiceInput = async (target: string) => {
+    Keyboard.dismiss(); // వాయిస్ స్టార్ట్ చేసే ముందు కీబోర్డ్ క్లోజ్ అవ్వాలి
     setActiveInput(target);
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!result.granted) return;
+    
     setIsListening(true);
     ExpoSpeechRecognitionModule.start({
       lang: language === "te" ? "te-IN" : "en-US",
@@ -80,10 +84,7 @@ export default function AddMestri() {
   useEffect(() => {
     const loadSession = async () => {
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
-      if (!userPhone) {
-        console.log("User not found");
-        return;
-      }
+      if (!userPhone) return;
 
       const doc = await firestore()
         .collection("users")
@@ -107,6 +108,8 @@ export default function AddMestri() {
 
   /* ---------------- SAVE ---------------- */
   const handleSave = async () => {
+    Keyboard.dismiss();
+
     // 🔥 INLINE VALIDATION LOGIC
     const newErrors: { name?: string; phone?: string; village?: string } = {};
     if (!name.trim()) {
@@ -130,7 +133,6 @@ export default function AddMestri() {
 
     try {
       setLoading(true);
-
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
 
       if (!userPhone) {
@@ -175,9 +177,11 @@ export default function AddMestri() {
     }
   };
 
+  // 🔥 PRODUCTION FIX 2: Strong Cleanup Listener on screen blur/unmount
   useEffect(() => {
     return () => {
-      ExpoSpeechRecognitionModule.stop(); // 🔥 cleanup
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
     };
   }, []);
 
@@ -206,7 +210,7 @@ export default function AddMestri() {
           <Ionicons name="person-outline" size={20} color={name || activeInput === "name" ? "#16A34A" : "#9CA3AF"} />
 
           <View style={styles.inputWrapper}>
-            {!name && activeInput !== "name" && (
+            {!name && (
               <AppText style={styles.placeholder}>
                 {isListening && activeInput === "name" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.name}
               </AppText>
@@ -220,7 +224,7 @@ export default function AddMestri() {
               }}
               cursorColor="#16A34A"
               selectionColor="#16A34A40"
-              style={[styles.input, { display: (name || activeInput === "name") ? "flex" : "none" }]}
+              style={styles.input} // 🔥 FIX 3: Display toggle బగ్ తీసేశాను
               onFocus={() => setActiveInput("name")}
               onBlur={() => setActiveInput(null)}
               returnKeyType="next"
@@ -259,7 +263,7 @@ export default function AddMestri() {
           />
 
           <View style={styles.inputWrapper}>
-            {!phone && activeInput !== "phone" && (
+            {!phone && (
               <AppText style={styles.placeholder}>{t.phone}</AppText>
             )}
             <TextInput
@@ -269,7 +273,7 @@ export default function AddMestri() {
                 setPhone(txt);
                 if (errors.phone) setErrors({ ...errors, phone: undefined });
               }}
-              style={[styles.input, { display: (phone || activeInput === "phone") ? "flex" : "none" }]}
+              style={styles.input}
               keyboardType="number-pad"
               cursorColor="#16A34A"
               selectionColor="#16A34A40"
@@ -300,7 +304,7 @@ export default function AddMestri() {
           />
 
           <View style={styles.inputWrapper}>
-            {!village && activeInput !== "village" && (
+            {!village && (
               <AppText style={styles.placeholder}>
                 {isListening && activeInput === "village" ? (language === "te" ? "వింటున్నాను..." : "Listening...") : t.village}
               </AppText>
@@ -312,12 +316,13 @@ export default function AddMestri() {
                 setVillage(txt);
                 if (errors.village) setErrors({ ...errors, village: undefined });
               }}
-              style={[styles.input, { display: (village || activeInput === "village") ? "flex" : "none" }]}
+              style={styles.input}
               cursorColor="#16A34A"
               selectionColor="#16A34A40"
               onFocus={() => setActiveInput("village")}
               onBlur={() => setActiveInput(null)}
               returnKeyType="done"
+              onSubmitEditing={handleSave}
             />
           </View>
 
@@ -364,8 +369,6 @@ const styles = StyleSheet.create({
   container: {
     padding: 20
   },
-
-  // 🔥 STANDARD PATTERN INPUT STYLES
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -419,8 +422,6 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     fontFamily: "Mandali"
   },
-
-  // ORIGINAL BUTTON STYLES (UNTOUCHED)
   saveBtn: {
     marginTop: 25,
     borderRadius: 18,
