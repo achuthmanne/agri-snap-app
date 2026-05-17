@@ -1,4 +1,5 @@
 // app/farmer/(tabs)/index.tsx
+
 import { setDrawer } from "@/assets/stores/drawerStore";
 import { useLanguage } from "@/context/LanguageContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,7 +35,6 @@ import AppText from "../../../components/AppText";
 const { width } = Dimensions.get("window");
 
 /* ---------------- TRANSLATIONS ---------------- */
-
 const translations = {
   te:{
     morning:"శుభోదయం", afternoon:"శుభ మధ్యాహ్నం", evening:"శుభ సాయంత్రం", night:"శుభ రాత్రి",
@@ -58,13 +58,9 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
   <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7F6" }}>
     <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
     
-    {/* 1. GREEN HEADER SKELETON (Exact Match with Absolute Positioning) */}
     <LinearGradient colors={["#1B5E20", "#1B5E20"]} style={{ position: "absolute", top: 0, width: "100%", zIndex: 50, paddingTop: 60, paddingHorizontal: 20, paddingBottom: 10 }}>
-      
-      {/* Profile Row */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          {/* Transparent Shimmer over Green Background */}
           <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 50, height: 50, borderRadius: 25, marginRight: 10 }} />
           <View>
             <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 100, height: 14, borderRadius: 4, marginBottom: 8 }} />
@@ -73,16 +69,11 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
         </View>
         <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 42, height: 42, borderRadius: 12 }} />
       </View>
-
     </LinearGradient>
 
-    {/* 2. BODY CONTENT SKELETON (Using paddingTop to exactly match ScrollView) */}
     <View style={{ flex: 1, paddingTop: 110 }}>
-      
-      {/* ScrollView Header Extension with SVG */}
       <View>
         <LinearGradient colors={["#1B5E20","#1B5E20"]} style={{ paddingTop: 40, paddingBottom: 5, paddingHorizontal: 20, justifyContent: "center" }}>
-          {/* Weather/Market Glass Card Placeholder */}
           <View style={{ alignItems: "center", justifyContent: "center" }}>
             <ShimmerPlaceholder 
               LinearGradient={LinearGradient} 
@@ -91,20 +82,17 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
               style={{ width: width - 40, height: 120, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }} 
             />
           </View>
-          {/* Dots below card */}
           <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 8 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.8)", marginHorizontal: 4 }} />
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.4)", marginHorizontal: 4 }} />
           </View>
         </LinearGradient>
         
-        {/* SVG Curve perfectly aligned */}
         <Svg width={width + 40} height={40} viewBox={`0 0 ${width + 40} 40`} style={{ marginTop: -1, alignSelf: "center", marginLeft: -20 }}>
           <Path d={`M0 0 H${width + 40} V20 Q${(width + 40)/2} 60 0 20 Z`} fill="#1B5E20" />
         </Svg>
       </View>
 
-      {/* Active Session Box */}
       <ShimmerPlaceholder 
         LinearGradient={LinearGradient} 
         duration={1200}
@@ -112,13 +100,11 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
         style={{ width: width - 40, height: 74, borderRadius: 20, marginHorizontal: 20, marginTop: 10, borderWidth: 1, borderColor: "#E5E7EB" }} 
       />
 
-      {/* Quick Services Header */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 8 }}>
         <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 140, height: 22, borderRadius: 6 }} />
         <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 60, height: 24, borderRadius: 14 }} />
       </View>
       
-      {/* Quick Services Chips */}
       <View style={{ flexDirection: "row", paddingLeft: 20, paddingTop: 12, gap: 12 }}>
         {[1, 2, 3].map((i) => (
           <ShimmerPlaceholder 
@@ -131,12 +117,10 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
         ))}
       </View>
 
-      {/* All Services Header */}
       <View style={{ flexDirection: "row", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 15, gap: 8 }}>
         <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 110, height: 22, borderRadius: 6 }} />
       </View>
 
-      {/* All Services Grid (Exact 120px height) */}
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", paddingHorizontal: 20, gap: 14 }}>
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <ShimmerPlaceholder 
@@ -148,13 +132,11 @@ const DashboardSkeleton = ({ width }: { width: number }) => (
           />
         ))}
       </View>
-      
     </View>
   </SafeAreaView>
 );
 
 export default function Dashboard() {
-
   const router = useRouter();
   const quickRef = useRef<any>(null);
   const scrollY = useRef(new Animated.Value(0)).current; 
@@ -232,49 +214,67 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
- useEffect(() => {
-    const unsub = firestore()
-      .collection("notifications")
-      .onSnapshot(async snap => {
-        const phone = await AsyncStorage.getItem("USER_PHONE");
-        if (!phone) return;
-        
-        const userDoc = await firestore().collection("users").doc(phone).get();
-        const userState = userDoc.data()?.state;
-        
-        const hiddenSnap = await firestore().collection("users").doc(phone).collection("hiddenNotifications").get();
-        const hiddenIds = hiddenSnap.docs.map(d => d.id);
+  // 🔥 PRO FIX 3: Safe Firebase Snapshot Listener
+  useEffect(() => {
+    let isMounted = true;
 
-        // 🔥 కొత్తగా ఇది యాడ్ చేశాం (యూజర్ ఇప్పటికే చూసేసిన ఐడీలు)
-        const seenSnap = await firestore().collection("users").doc(phone).collection("seenNotifications").get();
-        const seenIds = seenSnap.docs.map(d => d.id);
+    const fetchNotifications = async () => {
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      if (!phone || !isMounted) return;
 
-        let count = 0;
-        const now = new Date();
-        const normalize = (s:any) => (s || "").trim().toLowerCase();
-        
-        snap.forEach(doc => {
-          const data = doc.data();
-          if (hiddenIds.includes(doc.id)) return;
+      const unsub = firestore()
+        .collection("notifications")
+        .onSnapshot(async snap => {
+          if (!isMounted) return;
           
-          let deleteTime = null;
-          if (data.deleteAt && typeof data.deleteAt.toDate === "function") {
-            deleteTime = data.deleteAt.toDate();
+          try {
+            const userDoc = await firestore().collection("users").doc(phone).get();
+            const userState = userDoc.data()?.state;
+            
+            const hiddenSnap = await firestore().collection("users").doc(phone).collection("hiddenNotifications").get();
+            const hiddenIds = hiddenSnap.docs.map(d => d.id);
+
+            const seenSnap = await firestore().collection("users").doc(phone).collection("seenNotifications").get();
+            const seenIds = seenSnap.docs.map(d => d.id);
+
+            let count = 0;
+            const now = new Date();
+            const normalize = (s:any) => (s || "").trim().toLowerCase();
+            
+            snap.forEach(doc => {
+              const data = doc.data();
+              if (hiddenIds.includes(doc.id)) return;
+              
+              let deleteTime = null;
+              if (data.deleteAt && typeof data.deleteAt.toDate === "function") {
+                deleteTime = data.deleteAt.toDate();
+              }
+              if (deleteTime && now > deleteTime) return;
+
+              if (data.userId === "all") {}
+              else if (data.state) { if (normalize(data.state) !== normalize(userState)) return; }
+              else if (data.userId) { if (data.userId !== phone) return; }
+              else { return; }
+
+              if (!seenIds.includes(doc.id)) { count++; }
+            });
+            
+            if (isMounted) setNotifCount(count);
+          } catch (e) {
+            console.log("Notification fetch error", e);
           }
-          if (deleteTime && now > deleteTime) return;
-
-          if (data.userId === "all") {}
-          else if (data.state) { if (normalize(data.state) !== normalize(userState)) return; }
-          else if (data.userId) { if (data.userId !== phone) return; }
-          else { return; }
-
-          // 🔥 ఇక్కడ మెయిన్ డాక్యుమెంట్ seen కి బదులు, మన seenIds లో ఉందో లేదో చెక్ చేస్తున్నాం
-          if (!seenIds.includes(doc.id)) { count++; }
         });
-        setNotifCount(count);
-      });
 
-    return () => unsub();
+      return unsub;
+    };
+
+    let unsubscribeFunc: any;
+    fetchNotifications().then(unsub => unsubscribeFunc = unsub);
+
+    return () => {
+      isMounted = false;
+      if (unsubscribeFunc) unsubscribeFunc();
+    };
   }, []);
 
   useEffect(() => {
@@ -302,28 +302,19 @@ export default function Dashboard() {
   }, []);
 
   /* ---------------- QUICK SERVICES ---------------- */
-const getServices = () => [
-    // 1. పొలం & కూలీల నిర్వహణ (Farm & Labour)
+  const getServices = () => [
     { service: "fields", title: t.fields, icon: icons.fields, screen: "/farmer/fields" },
     { service: "attendance", title: t.attendance, icon: icons.attendance, screen: "/farmer/mestri" },
     { service: "payments", title: t.payments, icon: icons.payments, screen: "/farmer/mestripayments" },
-
-    // 2. ఫైనాన్స్ & రిపోర్ట్స్ (Finance & Reports)
     { service: "expenses", title: t.expenses, icon: icons.expenses, screen: "/farmer/expenses" },
     { service: "sales", title: t.sales, icon: icons.sales, screen: "/farmer/sales" },
     { service: "crops", title: t.crops, icon: icons.crops, screen: "/farmer/summary" },
-
-    // 3. యంత్రాలు & కనెక్ట్ (Machinery Ecosystem)
     { service: "machine", title: t.machine, icon: icons.machine, screen: "/farmer/owners" },
     { service: "owners", title: t.owners, icon: icons.owners, screen: "/farmer/vechiles" },
     { service: "booking", title: t.booking, icon: icons.booking, screen: "/farmer/bookings" },
-
-    // 4. రోజువారీ సమాచారం & టూల్స్ (Daily Info & Tools)
     { service: "market", title: t.market, icon: icons.market, screen: "/farmer/market" },
     { service: "weather", title: t.weather, icon: icons.weather, screen: "/farmer/weather" },
     { service: "calculator", title: t.calculator, icon: icons.calculator, screen: "/farmer/calculators" },
-
-    // 5. ప్రభుత్వ సమాచారం (Govt Info)
     { service: "schemes", title: t.schemes, icon: icons.schemes, screen: "/farmer/schemes" },
   ];
   const services = useMemo(() => getServices(), [language]);
@@ -345,7 +336,7 @@ const getServices = () => [
     if (hour >= 5 && hour < 10) priority = ["weather", "attendance", "market"];
     else if (hour >= 10 && hour < 16) priority = ["fields", "sales", "payments"];
     else if (hour >= 16 && hour < 21) priority = ["expenses", "machine", "booking"];
-    else priority = ["crops", "schemes", "news"];
+    else priority = ["crops", "schemes", "calculator"];
 
     sorted.sort((a,b)=>{
       if(priority.includes(a.service)) return -1;
@@ -367,12 +358,16 @@ const getServices = () => [
     },[])
   );
 
+  // 🔥 PRO FIX 1: Performance fix for Clock (Runs every 10 seconds instead of 1 sec)
   useEffect(() => {
-    const interval = setInterval(() => {
+    const updateTime = () => {
       const now = new Date();
       setTime(now.toLocaleTimeString(language === "te" ? "te-IN" : "en-IN", { hour: "2-digit", minute: "2-digit" }));
       setDate(now.toLocaleDateString(language === "te" ? "te-IN" : "en-IN", { weekday: "long", day: "numeric", month: "short" }));
-    }, 1000);
+    };
+    
+    updateTime(); // Initial call
+    const interval = setInterval(updateTime, 10000); 
     return () => clearInterval(interval);
   }, [language]);
 
@@ -411,9 +406,9 @@ const getServices = () => [
     setRefreshing(false);
   };
 
- /* ---------------- USER (🔥 PRODUCTION SMOOTH LOAD) ---------------- */
+  /* ---------------- USER (🔥 PRODUCTION SMOOTH LOAD) ---------------- */
   const loadUser = async () => {
-    const startTime = Date.now(); // 🔥 లోడింగ్ ఎప్పుడు మొదలైందో నోట్ చేసుకుంటాం
+    const startTime = Date.now(); 
 
     try {
       const phone = await AsyncStorage.getItem("USER_PHONE");
@@ -451,8 +446,6 @@ const getServices = () => [
     } catch (e) {
       console.log(e);
     } finally {
-      // 🔥 THE MASTER TRICK: డేటా ఫాస్ట్ గా వచ్చేసినా, కనీసం 600ms పాటు షిమ్మర్ ని చూపిస్తాం.
-      // దీనివల్ల స్కెలిటన్ ఫ్లాష్ (glitch) అవ్వదు. కళ్ళకి చాలా స్మూత్ గా కనబడుతుంది.
       const elapsedTime = Date.now() - startTime;
       const remainingTime = Math.max(0, 600 - elapsedTime);
 
@@ -465,11 +458,9 @@ const getServices = () => [
   /* ---------------- EFFECTS (🔥 INTERACTION MANAGER) ---------------- */
   useFocusEffect(
     React.useCallback(() => {
-      // 🔥 స్క్రీన్ యానిమేషన్/ట్రాన్సిషన్ మొత్తం పూర్తయ్యాక మాత్రమే డేటా లాగడం స్టార్ట్ చేస్తాం!
       const task = InteractionManager.runAfterInteractions(() => {
         loadUser();
       });
-      
       return () => task.cancel();
     }, [])
   );
@@ -541,7 +532,7 @@ const getServices = () => [
     return { text: raw, type: "default" };
   };
 
-/* ---------------- WEATHER & LOCATION PERMISSION ---------------- */
+  /* ---------------- WEATHER & LOCATION ---------------- */
   const getLocationWeather = async () => {
     if (!isOnline) {
       const cached = await AsyncStorage.getItem(CACHE_KEY);
@@ -553,7 +544,6 @@ const getServices = () => [
     }
 
     try {
-      // 1. Cache Check (ఫాస్ట్ గా లోడ్ చేయడానికి)
       const cached = await AsyncStorage.getItem(CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -565,7 +555,6 @@ const getServices = () => [
 
       let latitude; let longitude;
       
-      // 2. Location Cache Check
       const locCache = await AsyncStorage.getItem(LOCATION_CACHE_KEY);
       if (locCache) {
         const parsed = JSON.parse(locCache);
@@ -574,18 +563,16 @@ const getServices = () => [
         }
       }
 
-      // 3. 🔥 అసలైన లాజిక్: పర్మిషన్ అడిగి కొత్త లొకేషన్ తీసుకోవడం (క్యాష్ లేకపోతే)
       if (!latitude || !longitude) {
         let { status } = await Location.requestForegroundPermissionsAsync();
         
         if (status !== 'granted') {
-          // ఒకవేళ పర్మిషన్ ఇవ్వకపోతే, డీఫాల్ట్ గా ఒక మెసేజ్ చూపించడం బెటర్ (లేదా loading తీసేయడం)
           setCity(language === "te" ? "లొకేషన్ అనుమతి లేదు" : "Location Denied");
           return;
         }
 
         const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced, // మరీ హై క్యూరసీ పెడితే లేట్ అవుతుంది, Balanced బెస్ట్
+          accuracy: Location.Accuracy.Balanced, 
         });
         
         latitude = location.coords.latitude; 
@@ -594,7 +581,6 @@ const getServices = () => [
         await AsyncStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify({ latitude, longitude, timestamp: Date.now() }));
       }
 
-      // 4. API Call
       const res = await fetch(`https://getweather-pdetykgfaq-uc.a.run.app?lat=${latitude}&lon=${longitude}`);
       if (!res.ok) throw new Error("Weather API failed");
       const data = await res.json();
@@ -603,15 +589,19 @@ const getServices = () => [
       if (language === "te") finalCity = await translateToTelugu(data.name);
 
       setCity(finalCity);
-      setTemp(Math.round(data.main.temp));
-      const rawWeather = data.weather[0].description.toLowerCase();
+      
+      // 🔥 PRO FIX 2: Safe Optional Chaining for API Data
+      const tempVal = data?.main?.temp;
+      if (tempVal !== undefined) setTemp(Math.round(tempVal));
+      
+      const rawWeather = data.weather?.[0]?.description?.toLowerCase() || "clear";
       const result = formatWeather(rawWeather, language);
 
-      setWeather(result.text); setWeatherType(result.type); setHumidity(data.main.humidity); setWind(data.wind.speed);
+      setWeather(result.text); setWeatherType(result.type); setHumidity(data.main?.humidity); setWind(data.wind?.speed);
 
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ 
-        city: finalCity, temp: Math.round(data.main.temp), weather: result.text, 
-        humidity: data.main.humidity, wind: data.wind.speed, timestamp: Date.now(), language: language 
+        city: finalCity, temp: Math.round(tempVal), weather: result.text, 
+        humidity: data.main?.humidity, wind: data.wind?.speed, timestamp: Date.now(), language: language 
       }));
 
     } catch (e) {
@@ -625,12 +615,16 @@ const getServices = () => [
       }
     }
   };
+
   const fetchPrices = async () => {
     if (!isOnline) {
       const cached = await AsyncStorage.getItem(PRICE_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        setPrices(parsed.data.slice(0,3)); setPriceLoading(false);
+        if (Array.isArray(parsed.data)) {
+          setPrices(parsed.data.slice(0,3)); 
+        }
+        setPriceLoading(false);
       }
       return;
     }
@@ -638,7 +632,7 @@ const getServices = () => [
       const cached = await AsyncStorage.getItem(PRICE_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Date.now() - parsed.timestamp < PRICE_CACHE_TIME) {
+        if (Date.now() - parsed.timestamp < PRICE_CACHE_TIME && Array.isArray(parsed.data)) {
           setPrices(parsed.data.slice(0,3)); setPriceLoading(false); return;
         }
       }
@@ -647,28 +641,31 @@ const getServices = () => [
       if (!res.ok) throw new Error("Price API failed");
       const data = await res.json();
 
-      const sorted = data.sort((a: any, b: any) => new Date(b.arrival_date).getTime() - new Date(a.arrival_date).getTime());
-      const grouped: any = {};
-      sorted.forEach((item: any) => {
-        if (!grouped[item.commodity]) grouped[item.commodity] = [];
-        grouped[item.commodity].push(item);
-      });
+      if (Array.isArray(data)) {
+        const sorted = data.sort((a: any, b: any) => new Date(b.arrival_date).getTime() - new Date(a.arrival_date).getTime());
+        const grouped: any = {};
+        sorted.forEach((item: any) => {
+          if (!grouped[item.commodity]) grouped[item.commodity] = [];
+          grouped[item.commodity].push(item);
+        });
 
-      const finalPrices = Object.keys(grouped).map((key) => {
-        const items = grouped[key];
-        return { ...items[0], prevPrice: items[1]?.modal_price || items[0].modal_price };
-      });
+        const finalPrices = Object.keys(grouped).map((key) => {
+          const items = grouped[key];
+          return { ...items[0], prevPrice: items[1]?.modal_price || items[0].modal_price };
+        });
 
-      setPrices(finalPrices.slice(0,3));
-      await AsyncStorage.setItem(PRICE_CACHE_KEY, JSON.stringify({ data: finalPrices, timestamp: Date.now() }));
+        setPrices(finalPrices.slice(0,3));
+        await AsyncStorage.setItem(PRICE_CACHE_KEY, JSON.stringify({ data: finalPrices, timestamp: Date.now() }));
+      }
     } catch (e) {
       const cached = await AsyncStorage.getItem(PRICE_CACHE_KEY);
       if (cached) {
         const parsed = JSON.parse(cached);
-        setPrices(parsed.data.slice(0,3));
+        if (Array.isArray(parsed.data)) setPrices(parsed.data.slice(0,3));
       }
+    } finally {
+      setPriceLoading(false);
     }
-    setPriceLoading(false);
   };
 
   const getTrend = (current: number, prev: number) => {
@@ -754,7 +751,6 @@ const getServices = () => [
     if (weatherType === "wind") return require("../../../assets/images/windy.png"); 
     return require("../../../assets/images/we.png");
   };
-
 
   /* ---------------- CONDITIONAL LOADING UI ---------------- */
   if (loading) {
@@ -939,7 +935,7 @@ const getServices = () => [
         </LinearGradient>
       </TouchableOpacity>
       {isAdmin && (
-        <TouchableOpacity style={[styles.notifyBtn, { marginRight: 10, backgroundColor: "rgba(234, 179, 8, 0.2)" }]} activeOpacity={0.8} onPress={() => router.push("/farmer/admin-scheme" as any)}>
+        <TouchableOpacity style={[styles.notifyBtn, { marginRight: 10, backgroundColor: "rgba(234, 179, 8, 0.2)" }]} activeOpacity={0.8} onPress={() => router.push("/farmer/schemes/admin-scheme" as any)}>
           <Ionicons name="shield-checkmark" size={22} color="#FBBF24" />
         </TouchableOpacity>
       )}
@@ -991,8 +987,8 @@ const getServices = () => [
             <Image source={item.icon} style={styles.cardIcon} />
           </View>
           
-          {/* 🔥 టెక్స్ట్ కి పర్ఫెక్ట్ సెంటరింగ్ ఇవ్వడానికి కొత్త కంటైనర్ */}
           <View style={styles.cardTextContainer}>
+            {/* 🔥 PRO FIX 4: Perfect Typographic Alignment (Size 13, LineHeight 20) */}
             <AppText style={styles.cardText} language={language} numberOfLines={2}>
               {item.title}
             </AppText>
@@ -1059,7 +1055,6 @@ const getServices = () => [
 }
 
 /* ---------------- STYLES ---------------- */
-
 const styles = StyleSheet.create({
   safe:{ flex:1, backgroundColor:"#F6F7F6" },
   header:{ paddingTop:40, paddingBottom:5, paddingHorizontal:20, justifyContent:"center" },
@@ -1119,7 +1114,7 @@ const styles = StyleSheet.create({
   powerGradient: { flex: 1, justifyContent: "center", alignItems: "center" },
   sectionHeader:{ flexDirection:"row", alignItems:"center", justifyContent:"space-between", marginHorizontal:20, marginTop:25, marginBottom: 8 },
   sessionBox: { marginHorizontal: 20, marginTop: 10, marginBottom: 10, backgroundColor: "#ffffff", padding: 14, borderRadius: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB" },
-  sectionTitle:{ fontSize:20, color:"#1F2937" },
+  sectionTitle:{ fontSize:20, color:"#1F2937", fontFamily: "Mandali" },
   sectionDivider:{ flex:1, height:1, backgroundColor:"#E5E7EB", marginLeft:10 },
   swipeContainer:{ flexDirection:"row", alignItems:"center", backgroundColor:"#F3F4F6", paddingHorizontal:10, paddingVertical:4, borderRadius:14 },
   swipeText:{ fontSize:12, color:"#6B7280", fontWeight:"500", marginHorizontal:4 },
@@ -1132,7 +1127,7 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB", 
     borderRadius: 18, 
     paddingTop: 16, 
-    paddingHorizontal: 8, // 🔥 4 నుంచి 8 కి పెంచాను (లెఫ్ట్, రైట్ బ్రీతింగ్ స్పేస్)
+    paddingHorizontal: 8, 
     paddingBottom: 10, 
     alignItems: "center", 
     borderWidth: 1 
@@ -1141,7 +1136,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E8F5E9", 
     padding: 12, 
     borderRadius: 16, 
-    marginBottom: 2, // 🔥 టెక్స్ట్ కి మరింత ప్లేస్ ఇవ్వడానికి కొద్దిగా తగ్గించాను
+    marginBottom: 2, 
     justifyContent: "center", 
     alignItems: "center" 
   },
@@ -1150,16 +1145,16 @@ const styles = StyleSheet.create({
     justifyContent: "center", 
     alignItems: "center",
     width: "100%",
-    paddingHorizontal: 2, // 🔥 టెక్స్ట్ మరీ ఎడ్జ్ కి వెళ్లకుండా అదనపు లాక్ 
+    paddingHorizontal: 2, 
   },
   cardText: { 
-    fontFamily: "Mandali", // 🔥 మండలి ఫాంట్ పక్కాగా అప్లై అవ్వడానికి
-    fontSize: 14, // 🔥 14 పెడితే తెలుగు పదాలు ఇరుకు అవుతాయి, 13 పర్ఫెక్ట్!
+    fontFamily: "Mandali", 
+    fontSize: 13, // 🔥 PERFECT ALIGNMENT FIX
     fontWeight: "600", 
     color: "#1F2937", 
     textAlign: "center", 
     includeFontPadding: false, 
-    lineHeight: 24 // 🔥 24 అయితే మరీ ఎక్కువ గ్యాప్ వస్తుంది, 20 అయితే నీట్ గా రెండు లైన్లు సెట్ అవుతాయి
+    lineHeight: 20 // 🔥 2-LINES PERFECTLY FITTED
   },
   grid:{ flexDirection:"row", flexWrap:"wrap", justifyContent:"flex-start", paddingHorizontal:20, paddingBottom: 60, marginBottom: 60, gap:14 },
   cardIcon:{ width:22, height:22, tintColor:"#2E7D32", resizeMode:"contain" },

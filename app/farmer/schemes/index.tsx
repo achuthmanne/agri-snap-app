@@ -1,12 +1,12 @@
+// app/farmer/schemes/index.tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Animated,
-  Dimensions,
   FlatList,
   Image,
   RefreshControl,
@@ -16,12 +16,11 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన కొత్త కాంపోనెంట్
-
-const { width } = Dimensions.get("window");
+import AppEmptyState from "@/components/AppEmptyState";
 
 /* ---------------- TRANSLATIONS ---------------- */
 const translations = {
@@ -59,45 +58,35 @@ export default function SchemesScreen() {
   const [schemes, setSchemes] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"AP" | "TS">("AP");
 
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
-
   /* ---------------- LOAD LANG & DATA ---------------- */
   useEffect(() => {
+    let isMounted = true; // 🔥 Memory leak fix
+
     const init = async () => {
       const lang = await AsyncStorage.getItem("APP_LANG");
-      if (lang) setLanguage(lang as "te" | "en");
-      fetchSchemes(false);
+      if (lang && isMounted) setLanguage(lang as "te" | "en");
+      fetchSchemes(false, isMounted);
     };
+
     init();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  /* ---------------- SHIMMER ANIMATION ---------------- */
-  useEffect(() => {
-    if (loading) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(shimmerAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-          Animated.timing(shimmerAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
-        ])
-      ).start();
-    }
-  }, [loading]);
-
-  const shimmerTranslate = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-width, width],
-  });
-
   /* ---------------- FETCH SCHEMES ---------------- */
-  const fetchSchemes = async (forceRefresh = false) => {
+  const fetchSchemes = async (forceRefresh = false, isMounted = true) => {
     try {
-      setLoading(true);
+      if (!forceRefresh) setLoading(true);
       setError(false);
 
       const snapshot = await firestore()
         .collection("schemes")
         .where("isActive", "==", true)
         .get();
+
+      if (!isMounted) return;
 
       if (snapshot.empty) {
         setSchemes([]);
@@ -110,18 +99,20 @@ export default function SchemesScreen() {
         id: doc.id,
         ...doc.data()
       })).sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis() || 0;
-        const timeB = b.createdAt?.toMillis() || 0;
+        const timeA = a.createdAt?.toMillis?.() || 0;
+        const timeB = b.createdAt?.toMillis?.() || 0;
         return timeB - timeA;
       });
 
       setSchemes(fetchedSchemes);
     } catch (err) {
       console.log("Schemes API Error:", err);
-      setError(true);
+      if (isMounted) setError(true);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -132,7 +123,7 @@ export default function SchemesScreen() {
 
   /* ---------------- FILTERING ---------------- */
   const filteredSchemes = schemes.filter(
-    (scheme) => scheme.state === activeTab || scheme.state === "BOTH"
+    (scheme) => scheme.state === activeTab || scheme.state === "BOTH" || scheme.state === "ALL"
   );
 
   /* ---------------- COMPONENTS ---------------- */
@@ -140,18 +131,20 @@ export default function SchemesScreen() {
     <View style={styles.listContent}>
       {[1, 2].map((i) => (
         <View key={i} style={styles.shimmerCard}>
-          <View style={[styles.shimmerBox, { height: 180, width: "100%" }]} />
+          <ShimmerPlaceholder 
+            LinearGradient={LinearGradient} 
+            style={{ height: 180, width: "100%" }} 
+          />
           <View style={{ padding: 16 }}>
-            <View style={[styles.shimmerBox, { height: 20, width: "70%", borderRadius: 4, marginBottom: 10 }]} />
-            <View style={[styles.shimmerBox, { height: 14, width: "90%", borderRadius: 4, marginBottom: 6 }]} />
-          </View>
-          <Animated.View style={[styles.shimmerOverlay, { transform: [{ translateX: shimmerTranslate }] }]}>
-            <LinearGradient
-              colors={["transparent", "rgba(255,255,255,0.6)", "transparent"]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={{ flex: 1 }}
+            <ShimmerPlaceholder 
+              LinearGradient={LinearGradient} 
+              style={{ height: 20, width: "70%", borderRadius: 4, marginBottom: 10 }} 
             />
-          </Animated.View>
+            <ShimmerPlaceholder 
+              LinearGradient={LinearGradient} 
+              style={{ height: 14, width: "90%", borderRadius: 4, marginBottom: 6 }} 
+            />
+          </View>
         </View>
       ))}
     </View>
@@ -159,11 +152,18 @@ export default function SchemesScreen() {
 
   const renderSchemeCard = ({ item }: { item: any }) => {
     let formattedDate = "";
-    if (item.createdAt) {
-      const date = item.createdAt.toDate ? item.createdAt.toDate() : new Date(item.createdAt);
-      const day = String(date.getDate()).padStart(2, '0');
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      formattedDate = `${day} ${months[date.getMonth()]}, ${date.getFullYear()}`;
+    // 🔥 PRO FIX: Safe Date Parsing
+    try {
+      if (item.createdAt) {
+        const date = item.createdAt.toDate ? item.createdAt.toDate() : new Date(item.createdAt);
+        if (!isNaN(date.getTime())) {
+          const day = String(date.getDate()).padStart(2, '0');
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          formattedDate = `${day} ${months[date.getMonth()]}, ${date.getFullYear()}`;
+        }
+      }
+    } catch (e) {
+      console.log("Date error", e);
     }
 
     return (
@@ -173,7 +173,10 @@ export default function SchemesScreen() {
         onPress={() => router.push(`/farmer/schemes/${item.id}` as any)}
       >
         <View style={styles.imageContainer}>
-          <Image source={{ uri: item.bannerImage }} style={styles.bannerImage} />
+          <Image 
+            source={{ uri: item.bannerImage || "https://via.placeholder.com/400x200?text=AgriConnect" }} 
+            style={styles.bannerImage} 
+          />
           {formattedDate ? (
             <View style={styles.tagBadge}>
               <AppText style={styles.tagText} language={language}>{formattedDate}</AppText>
@@ -195,8 +198,6 @@ export default function SchemesScreen() {
       </TouchableOpacity>
     );
   };
-
- // ... (ముందున్న ఇంపోర్ట్స్ & లాజిక్ అంతా అలాగే ఉంటాయి)
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -259,7 +260,6 @@ export default function SchemesScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   stickyHeader: {
@@ -316,6 +316,4 @@ const styles = StyleSheet.create({
   readMoreText: { fontSize: 14, fontWeight: "600", color: "#16A34A" },
 
   shimmerCard: { backgroundColor: "#ffffff", borderRadius: 20, marginBottom: 20, overflow: "hidden", borderWidth: 1, borderColor: "#E5E7EB" },
-  shimmerBox: { backgroundColor: "#E5E7EB", overflow: "hidden" },
-  shimmerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "transparent" },
 });

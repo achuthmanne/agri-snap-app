@@ -1,4 +1,4 @@
-// app/farmer/scheme/[id].tsx
+// app/farmer/schemes/[id].tsx
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -27,18 +27,16 @@ const translations = {
     documents: "కావాల్సిన పత్రాలు",
     howToApply: "ఎలా దరఖాస్తు చేయాలి?",
     applyNow: "ఆన్‌లైన్ లో దరఖాస్తు చేయండి",
-    loading: "వివరాలు లోడ్ అవుతున్నాయి...",
     error: "డేటా తీసుకురావడంలో లోపం జరిగింది",
-    linkError: "లింక్ ఓపెన్ అవ్వట్లేదు. దయచేసి మళ్ళీ ప్రయత్నించండి." // 🔥 New Translation
+    linkError: "లింక్ ఓపెన్ అవ్వట్లేదు. దయచేసి మళ్ళీ ప్రయత్నించండి." 
   },
   en: {
     eligibility: "Eligibility Criteria",
     documents: "Documents Required",
     howToApply: "How to Apply?",
     applyNow: "Apply Online Here",
-    loading: "Loading details...",
     error: "Error fetching details",
-    linkError: "Cannot open link right now. Please try again." // 🔥 New Translation
+    linkError: "Cannot open link right now. Please try again." 
   }
 };
 
@@ -53,41 +51,51 @@ export default function SchemeDetailsScreen() {
   const [error, setError] = useState(false);
   const [scheme, setScheme] = useState<any>(null);
   
-  // 🔥 INLINE ERROR STATE
   const [linkError, setLinkError] = useState(false);
 
   useEffect(() => {
+    let isMounted = true; 
+
     const init = async () => {
       const lang = await AsyncStorage.getItem("APP_LANG");
-      if (lang) setLanguage(lang as "te" | "en");
-      fetchSchemeDetails();
+      if (lang && isMounted) setLanguage(lang as "te" | "en");
+      fetchSchemeDetails(isMounted);
     };
+
     init();
+
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
-  const fetchSchemeDetails = async () => {
+  const fetchSchemeDetails = async (isMounted: boolean) => {
     try {
       setLoading(true);
       setError(false);
 
-      if (!id) return;
+      if (!id) {
+        if (isMounted) setError(true);
+        return;
+      }
 
       const docSnap = await firestore().collection("schemes").doc(id as string).get();
 
-      if (docSnap.exists()) {
-        setScheme({ id: docSnap.id, ...docSnap.data() });
-      } else {
-        setError(true);
+      if (isMounted) {
+        if (docSnap.exists()) {
+          setScheme({ id: docSnap.id, ...docSnap.data() });
+        } else {
+          setError(true);
+        }
       }
     } catch (err) {
       console.error("Error fetching scheme:", err);
-      setError(true);
+      if (isMounted) setError(true);
     } finally {
-      setLoading(false);
+      if (isMounted) setLoading(false);
     }
   };
 
-  // 🔥 INLINE ERROR HANDLER (Auto hide after 3 secs)
   const showInlineError = () => {
     setLinkError(true);
     setTimeout(() => {
@@ -96,17 +104,17 @@ export default function SchemeDetailsScreen() {
   };
 
   const openApplyLink = async () => {
-    setLinkError(false); // Reset before trying
+    setLinkError(false); 
     if (scheme?.applyLink) {
       try {
         const supported = await Linking.canOpenURL(scheme.applyLink);
         if (supported) {
           await Linking.openURL(scheme.applyLink);
         } else {
-          showInlineError(); // 🔥 Call inline error
+          showInlineError(); 
         }
       } catch (err) {
-        showInlineError(); // 🔥 Catch any crashing errors and show inline
+        showInlineError(); 
       }
     }
   };
@@ -114,13 +122,11 @@ export default function SchemeDetailsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
         <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} language={language} />
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <AgriLoader visible={true} type="loading" /> 
-          <AppText style={{ marginTop: 10, color: "#6B7280" }} language={language}>
-            {t.loading}
-          </AppText>
+          {/* 🔥 PRO FIX: Added language prop to AgriLoader and removed redundant AppText */}
+          <AgriLoader visible={true} type="loading" language={language} /> 
         </View>
       </SafeAreaView>
     );
@@ -129,7 +135,7 @@ export default function SchemeDetailsScreen() {
   if (error || !scheme) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
         <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} language={language} />
         <View style={{ flex: 1, justifyContent: "center" }}>
           <AppEmptyState
@@ -147,16 +153,19 @@ export default function SchemeDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" />
-      <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} subtitle={scheme.title.substring(0, 20) + "..."} language={language} />
+      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <AppHeader title={language === "te" ? "పథకం వివరాలు" : "Scheme Details"} subtitle={scheme.title?.substring(0, 20) + "..."} language={language} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
         {/* HERO BANNER */}
         <View style={styles.heroContainer}>
-          <Image source={{ uri: scheme.bannerImage }} style={styles.heroImage} />
+          <Image 
+            source={{ uri: scheme.bannerImage || "https://via.placeholder.com/400x200?text=AgriConnect" }} 
+            style={styles.heroImage} 
+          />
           <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.8)"]}
+            colors={["transparent", "rgba(0,0,0,0.85)"]} 
             style={styles.heroGradient}
           />
           <View style={styles.heroTextWrapper}>
@@ -170,7 +179,7 @@ export default function SchemeDetailsScreen() {
         </View>
 
         {/* ELIGIBILITY */}
-        {scheme.eligibility && scheme.eligibility.length > 0 && (
+        {Array.isArray(scheme.eligibility) && scheme.eligibility.length > 0 && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={styles.iconBg}><Ionicons name="checkmark-circle-outline" size={22} color="#16A34A" /></View>
@@ -186,7 +195,7 @@ export default function SchemeDetailsScreen() {
         )}
 
         {/* DOCUMENTS REQUIRED */}
-        {scheme.documentsRequired && scheme.documentsRequired.length > 0 && (
+        {Array.isArray(scheme.documentsRequired) && scheme.documentsRequired.length > 0 && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={[styles.iconBg, { backgroundColor: "#DBEAFE" }]}>
@@ -232,7 +241,7 @@ export default function SchemeDetailsScreen() {
             </View>
           )}
 
-          <TouchableOpacity activeOpacity={0.8} onPress={openApplyLink}>
+          <TouchableOpacity activeOpacity={0.85} onPress={openApplyLink}>
             <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.applyBtn}>
               <Ionicons name="globe-outline" size={22} color="white" />
               <AppText style={styles.applyBtnText} language={language}>{t.applyNow}</AppText>
@@ -246,13 +255,13 @@ export default function SchemeDetailsScreen() {
 
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  scrollContent: { paddingBottom: 110 }, // Increased a bit to accommodate error space
+  safe: { flex: 1, backgroundColor: "#F9FAFB" }, 
+  scrollContent: { paddingBottom: 110 }, 
 
   // HERO BANNER
   heroContainer: { width: "100%", height: 250, position: "relative" },
   heroImage: { width: "100%", height: "100%", resizeMode: "cover" },
-  heroGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: 120 },
+  heroGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: 140 },
   heroTextWrapper: { position: "absolute", bottom: 16, left: 16, right: 16 },
   heroTitle: { color: "white", fontSize: 22, fontWeight: "600", lineHeight: 30 },
 
@@ -261,7 +270,7 @@ const styles = StyleSheet.create({
   descText: { fontSize: 15, color: "#4B5563", lineHeight: 24 },
 
   // CARDS
-  card: { backgroundColor: "#ffffff", marginHorizontal: 20, marginTop: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#E5E7EB", elevation: 1 },
+  card: { backgroundColor: "#ffffff", marginHorizontal: 20, marginTop: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#E5E7EB",  shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4 },
   cardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
   iconBg: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginRight: 10 },
   cardTitle: { fontSize: 18, fontWeight: "600", color: "#1F2937" },
@@ -273,11 +282,11 @@ const styles = StyleSheet.create({
   infoText: { fontSize: 14, color: "#4B5563", lineHeight: 22 },
 
   // STICKY BOTTOM BAR
-  bottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#ffffff", paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: "#E5E7EB", elevation: 10 },
+  bottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#ffffff", paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: "#E5E7EB", elevation: 10, shadowColor: "#000", shadowOffset: {width: 0, height: -3}, shadowOpacity: 0.05, shadowRadius: 10 },
   applyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14, borderRadius: 12, gap: 8 },
   applyBtnText: { color: "white", fontSize: 16, fontWeight: "600" },
   
-  // INLINE ERROR STYLES 🔥
+  // INLINE ERROR STYLES
   errorContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -292,6 +301,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#DC2626",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
   }
 });
