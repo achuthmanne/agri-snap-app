@@ -2,13 +2,13 @@
 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -19,7 +19,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  RefreshControl
 } from "react-native";
 import Animated, {
   useAnimatedProps,
@@ -95,21 +96,21 @@ const ProgressCircle = ({ percent }: { percent: number }) => {
 const ShimmerRow = () => (
   <View style={styles.row}>
     <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
+      LinearGradient={LinearGradient as any}
       style={{ width: 42, height: 42, borderRadius: 21 }}
     />
     <View style={{ flex: 1, marginLeft: 12 }}>
       <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
+        LinearGradient={LinearGradient as any}
         style={{ width: "60%", height: 14, borderRadius: 6 }}
       />
       <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
+        LinearGradient={LinearGradient as any}
         style={{ width: "40%", height: 12, borderRadius: 6, marginTop: 6 }}
       />
     </View>
     <ShimmerPlaceholder
-      LinearGradient={LinearGradient}
+      LinearGradient={LinearGradient as any}
       style={{ width: 45, height: 45, borderRadius: 25 }}
     />
   </View>
@@ -118,14 +119,24 @@ const ShimmerRow = () => (
 /* ---------------- SCREEN ---------------- */
 export default function AttendanceHistory() {
   const router = useRouter();
+  
+  const isMounted = useRef(true);
+
   const [mestris, setMestris] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [isFocused, setIsFocused] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false); 
+  const [refreshing, setRefreshing] = useState(false); 
   const [isListening, setIsListening] = useState(false);
-  const isScreenFocused = useIsFocused();
   const [activeSession, setActiveSession] = useState("");
+  const isScreenFocused = useIsFocused();
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useSpeechRecognitionEvent("result", (event) => {
     if (!isScreenFocused || !isListening) return;
@@ -153,7 +164,6 @@ export default function AttendanceHistory() {
       ExpoSpeechRecognitionModule.stop();
       setIsListening(false);
     }
-
     return () => {
       ExpoSpeechRecognitionModule.stop(); 
     };
@@ -163,9 +173,10 @@ export default function AttendanceHistory() {
     useCallback(() => {
       const loadLang = async () => {
         const lang = await AsyncStorage.getItem("APP_LANG");
-        if (lang) setLanguage(lang as "te" | "en");
+        if (lang && isMounted.current) setLanguage(lang as "te" | "en");
       };
       loadLang();
+      loadData();
     }, [])
   );
 
@@ -186,30 +197,25 @@ export default function AttendanceHistory() {
     return "#EF4444"; 
   };
 
-  const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-
-    if (!userPhone) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const userDoc = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .get();
-
-    const session = userDoc.data()?.activeSession;
-
-    if (!session) {
-      setLoading(false);
-      return;
-    }
-
-    setActiveSession(session);
-
+  /* ---------- LOAD DATA (TRUE WORK VOLUME LOGIC) ---------- */
+  const loadData = async (isRefreshed = false) => {
     try {
+      if (!isRefreshed) setLoading(true);
+      setError(false);
+
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) throw new Error("NO_USER");
+
+      const userDoc = await firestore().collection("users").doc(userPhone).get();
+      const session = userDoc.data()?.activeSession;
+
+      if (!session) {
+        if (isMounted.current) { setLoading(false); setRefreshing(false); }
+        return;
+      }
+
+      if (isMounted.current) setActiveSession(session);
+
       const mestriSnap = await firestore()
         .collection("users")
         .doc(userPhone)
@@ -228,35 +234,47 @@ export default function AttendanceHistory() {
           .where("session", "==", session) 
           .get();
 
-        const list = attendanceSnap.docs.map(d => d.data());
-        let total = 0;
-        list.forEach(a => {
-          total += 1; 
+        // 🔥 PRO FIX: Calculate actual volume of work (Morning + Evening + Full)
+        let totalWorksVolume = 0;
+        attendanceSnap.docs.forEach(attDoc => {
+          const attData = attDoc.data();
+          const m = Number(attData.morning) || 0;
+          const e = Number(attData.evening) || 0;
+          const f = Number(attData.full) || 0;
+          totalWorksVolume += (m + e + f);
         });
-        if (total > 0) {
-          counts.push({ id: doc.id, ...mestri, total });
+
+        if (totalWorksVolume > 0) {
+          counts.push({ id: doc.id, ...mestri, totalWorksVolume });
         }
       }
 
-      const grandTotal = counts.reduce((sum, item) => sum + item.total, 0);
+      // 🔥 Percentage is now based on actual Work Volume
+      const grandTotalVolume = counts.reduce((sum, item) => sum + item.totalWorksVolume, 0);
       const result = counts.map(item => ({
         ...item,
-        percent: grandTotal > 0 ? Math.round((item.total / grandTotal) * 100) : 0
+        percent: grandTotalVolume > 0 ? Math.round((item.totalWorksVolume / grandTotalVolume) * 100) : 0
       }));
+      
       result.sort((a, b) => b.percent - a.percent);
-      setMestris(result);
+      
+      if (isMounted.current) setMestris(result);
+
     } catch (e) {
-      console.log(e);
+      console.log("Attendance History Fetch Error:", e);
+      if (isMounted.current) setError(true);
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [])
-  );
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData(true);
+  };
 
   const filtered = mestris.filter(item =>
     (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
@@ -272,15 +290,13 @@ export default function AttendanceHistory() {
         language={language}
       />
 
-      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
-      {(!loading && mestris.length === 0) ? null : (
+      {(!loading && !error && mestris.length > 0) && (
         <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
           <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
-
           <TextInput
             value={search}
             onChangeText={setSearch}
-           placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestri name..."}
             placeholderTextColor="#9CA3AF"
             cursorColor="#16A34A"
             selectionColor="#16A34A40"
@@ -288,19 +304,12 @@ export default function AttendanceHistory() {
             onBlur={() => setIsFocused(false)}
             style={styles.searchInput}
           />
-
           {search.trim().length > 0 ? (
-            <TouchableOpacity 
-              onPress={() => setSearch("")} 
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
+            <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close-circle" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity 
-              onPress={handleVoiceSearch} 
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
+            <TouchableOpacity onPress={handleVoiceSearch} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <MaterialCommunityIcons 
                 name={isListening ? "microphone" : "microphone-outline"} 
                 size={22} 
@@ -311,25 +320,39 @@ export default function AttendanceHistory() {
         </View>
       )}
 
-      {loading ? (
+      {loading && !refreshing ? (
         <View style={{ paddingTop: 10 }}>
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
         </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <View style={styles.errorIconBg}>
+            <Ionicons name="cloud-offline" size={50} color="#9CA3AF" />
+          </View>
+          <AppText style={styles.errorText} language={language}>
+            {language === "te" ? "సర్వర్ కి కనెక్ట్ అవ్వలేకపోయాం" : "Failed to connect to server"}
+          </AppText>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => loadData(false)}>
+            <AppText style={styles.retryText} language={language}>
+              {language === "te" ? "మళ్ళీ ప్రయత్నించండి" : "Try Again"}
+            </AppText>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#16A34A"]} />
+          }
           contentContainerStyle={[
             { paddingBottom: 100, paddingTop: 10 },
-            // 🔥 సెంటర్ లోకి రావడానికి ఫ్లెక్స్ లాజిక్
             filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
-
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName={search.trim().length > 0 ? "search-outline" : "people-outline"}
@@ -346,7 +369,6 @@ export default function AttendanceHistory() {
               language={language}
             />
           }
-
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.row}
@@ -413,7 +435,12 @@ export default function AttendanceHistory() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   
-  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 },
+  errorIconBg: { width: 90, height: 90, borderRadius: 45, backgroundColor: "#F3F4F6", justifyContent: "center", alignItems: "center", marginBottom: 16 },
+  errorText: { fontSize: 16, fontWeight: "600", color: "#4B5563", textAlign: "center", marginBottom: 20 },
+  retryBtn: { backgroundColor: "#16A34A", paddingHorizontal: 30, paddingVertical: 12, borderRadius: 14 },
+  retryText: { color: "white", fontSize: 15, fontWeight: "600" },
+
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",

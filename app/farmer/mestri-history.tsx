@@ -1,80 +1,94 @@
 // app/farmer/mestri-history.tsx
 
+import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  FlatList, Modal, SafeAreaView,
+  FlatList,
+  LayoutAnimation,
+  Modal,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
   StatusBar,
   StyleSheet,
   TouchableOpacity,
+  UIManager,
   View
 } from "react-native";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
-import { opacity } from "react-native-reanimated/lib/typescript/Colors";
 
 export default function MestriHistory() {
-
   const { id, name, village } = useLocalSearchParams();
+
+  // 🔥 PRO FIX: Memory leak కాకుండా ఆపడానికి
+  const isMounted = useRef(true);
 
   const [data, setData] = useState<any[]>([]);
   const [grouped, setGrouped] = useState<any>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false); // 🔥 NEW: Network Error State
+  const [refreshing, setRefreshing] = useState(false); // 🔥 NEW: Pull to refresh
   const [language, setLanguage] = useState<"te" | "en">("te");
-  const [openCrops, setOpenCrops] = useState<any>({});
-  const [openWorks, setOpenWorks] = useState<any>({});
-  const [deleteId, setDeleteId] = useState("");
-  const [modalVisible, setModalVisible] = useState(false);
   const [activeSession, setActiveSession] = useState("");
 
-  // 🔥 NEW STATE: పేమెంట్ అయిపోయిన హాజరు ఐడీలు సేవ్ చేసుకోవడానికి
+  // 🔥 PRO FIX: సింగిల్ ఓపెన్ స్టేట్స్ (True Accordion Auto-Close కోసం)
+  const [openCrop, setOpenCrop] = useState<string | null>(null);
+  const [openWork, setOpenWork] = useState<string | null>(null);
+
+  const [deleteId, setDeleteId] = useState("");
+  const [modalVisible, setModalVisible] = useState(false);
   const [paidIds, setPaidIds] = useState<string[]>([]);
-  // 🔥 NEW STATE: "Already Paid" వార్నింగ్ మోడల్ కోసం
   const [showPaidWarning, setShowPaidWarning] = useState(false);
+
+  // 🔥 CLEANUP & ANIMATION SETUP
+  useEffect(() => {
+    isMounted.current = true;
+    if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+    return () => { isMounted.current = false; };
+  }, []);
 
   /* ---------------- LOAD LANG ---------------- */
   useFocusEffect(
     useCallback(() => {
       const loadLang = async () => {
         const lang = await AsyncStorage.getItem("APP_LANG");
-        if (lang) setLanguage(lang as any);
+        if (lang && isMounted.current) setLanguage(lang as any);
       };
       loadLang();
     }, [])
   );
 
-  /* ---------------- LOAD DATA ---------------- */
-  const loadData = async () => {
-    // 🔥 FIX: id లేదా ఫోన్ నంబర్ లేకపోతే ముందే రిటర్న్ చేయాలి. లేదంటే Firestore ఎర్రర్ వస్తుంది.
+  /* ---------------- LOAD DATA (ROBUST) ---------------- */
+  const loadData = async (isRefreshed = false) => {
     if (!id) return;
 
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone) return;
-
-    setLoading(true);
-
-    const userDoc = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .get();
-
-    const session = userDoc.data()?.activeSession;
-
-    if (!session) {
-      setLoading(false);
-      return;
-    }
-
-    setActiveSession(session);
-
     try {
-      // 1️⃣ ముందుగా పేమెంట్ అయిన రికార్డ్స్ తెచ్చుకుందాం (LOGIC ADDED)
+      if (!isRefreshed) setLoading(true);
+      setError(false);
+
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) throw new Error("NO_USER");
+
+      const userDoc = await firestore().collection("users").doc(userPhone).get();
+      const session = userDoc.data()?.activeSession;
+
+      if (!session) {
+        if (isMounted.current) { setLoading(false); setRefreshing(false); }
+        return;
+      }
+
+      if (isMounted.current) setActiveSession(session);
+
+      // 1️⃣ పేమెంట్ అయిన రికార్డ్స్ (Locked)
       const paymentsSnap = await firestore()
         .collection("users")
         .doc(userPhone)
@@ -88,9 +102,9 @@ export default function MestriHistory() {
          const selectedIds = doc.data().selectedAttendanceIds || [];
          selectedIds.forEach((attId: string) => paidSet.add(attId));
       });
-      setPaidIds(Array.from(paidSet)); // స్టేట్ లో సేవ్ చేశాం
+      if (isMounted.current) setPaidIds(Array.from(paidSet));
 
-      // 2️⃣ ఇప్పుడు మామూలుగా హాజరు లిస్ట్ తెచ్చుకుందాం
+      // 2️⃣ మామూలు హాజరు లిస్ట్
       const snap = await firestore()
         .collection("users")
         .doc(userPhone)
@@ -107,22 +121,27 @@ export default function MestriHistory() {
         ...(d.data() as any)
       }));
 
-      setData(list);
-
       // 🔥 GROUP BY CROP
       const group: any = {};
-
       list.forEach(item => {
         const crop = item.crop || "Others";
         if (!group[crop]) group[crop] = [];
         group[crop].push(item);
       });
 
-      setGrouped(group);
+      if (isMounted.current) {
+        setData(list);
+        setGrouped(group);
+      }
+
     } catch (error) {
-      console.log("Error loading attendance:", error);
+      console.log("Error loading attendance history:", error);
+      if (isMounted.current) setError(true);
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -132,44 +151,51 @@ export default function MestriHistory() {
     }, [id])
   );
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData(true);
+  };
+
   /* ---------------- DELETE ---------------- */
   const handleDelete = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("mestris")
-      .doc(id as string)
-      .collection("attendance")
-      .doc(deleteId)
-      .delete();
+    try {
+      await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("mestris")
+        .doc(id as string)
+        .collection("attendance")
+        .doc(deleteId)
+        .delete();
 
-    setModalVisible(false);
-    loadData(); // మళ్ళీ డేటా లోడ్ చేస్తాం
+      if (isMounted.current) setModalVisible(false);
+      loadData(); // మళ్ళీ సింక్ కోసం
+    } catch (e) {
+      console.log(e);
+    }
   };
 
   /* ---------------- SHIMMER ---------------- */
   const ShimmerCard = () => (
     <View style={styles.shimmerCard}>
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ height: 14, width: "40%", borderRadius: 6 }}
-      />
-      <ShimmerPlaceholder
-        LinearGradient={LinearGradient}
-        style={{ height: 12, width: "60%", marginTop: 10, borderRadius: 6 }}
-      />
+      <ShimmerPlaceholder LinearGradient={LinearGradient as any} style={{ height: 14, width: "40%", borderRadius: 6 }} />
+      <ShimmerPlaceholder LinearGradient={LinearGradient as any} style={{ height: 12, width: "60%", marginTop: 10, borderRadius: 6 }} />
     </View>
   );
 
+  // 🔥 PRO FIX: Smooth Accordion Animation (Auto-Close)
   const toggleCrop = (crop: string) => {
-    setOpenCrops((prev: any )=> ({ ...prev, [crop]: !prev[crop] }));
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpenCrop((prev) => (prev === crop ? null : crop));
+    setOpenWork(null); // వేరే క్రాప్ ఓపెన్ చేస్తే లోపలి వర్క్ క్లోజ్ అవ్వాలి
   };
 
   const toggleWork = (key: string) => {
-    setOpenWorks((prev: any) => ({ ...prev, [key]: !prev[key] }));
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpenWork((prev) => (prev === key ? null : key));
   };
 
   const cropColors = ["#22C55E","#3B82F6","#F59E0B","#EF4444","#8B5CF6"];
@@ -178,13 +204,15 @@ export default function MestriHistory() {
   const getCropColor = (crop: string) => cropColors[crop.charCodeAt(0) % cropColors.length];
   const getWorkColor = (work: string) => workColors[work.charCodeAt(0) % workColors.length];
 
-  const getUsageLabel = () => {
-    if (data.length > 10) return language === "te" ? "ఎక్కువ" : "High";
-    if (data.length > 5) return language === "te" ? "మధ్యస్థ" : "Medium";
-    if (data.length > 0) return language === "te" ? "తక్కువ" : "Low";
-    return language === "te" ? "- -" : "- -";
+  // 🔥 PRO FIX: పాత Usage తీసేసి, "మొత్తం కూలీలు" లెక్కించే లాజిక్ పెట్టాం
+  const getTotalWorkers = () => {
+    return data.reduce((sum, entry) => {
+      const m = Number(entry.morning) || 0;
+      const e = Number(entry.evening) || 0;
+      const f = Number(entry.full) || 0;
+      return sum + (m + e + f);
+    }, 0);
   };
-
   /* ---------------- UI ---------------- */
   return (
     <SafeAreaView style={styles.safe}>
@@ -196,176 +224,208 @@ export default function MestriHistory() {
         language={language}
       />
 
-      {/* SUMMARY */}
-      <View style={styles.summaryBox}>
-        {/* TOTAL DAYS */}
-        <View style={styles.summaryItem}>
-          <AppText style={styles.summaryLabel} language={language}>
-            {language === "te" ? "మొత్తం రోజులు" : "Total Days"}
+      {loading && !refreshing ? (
+        <>
+          <View style={styles.summaryBox}>
+            <View style={styles.summaryItem}>
+              <ShimmerPlaceholder LinearGradient={LinearGradient as any} style={{ width: 60, height: 12, marginBottom: 6 }} />
+              <ShimmerPlaceholder LinearGradient={LinearGradient as any} style={{ width: 40, height: 16 }} />
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.summaryItem}>
+              <ShimmerPlaceholder LinearGradient={LinearGradient as any} style={{ width: 60, height: 12, marginBottom: 6 }} />
+              <ShimmerPlaceholder LinearGradient={LinearGradient as any} style={{ width: 40, height: 16 }} />
+            </View>
+          </View>
+          <View style={{ paddingTop: 10 }}>
+            <ShimmerCard />
+            <ShimmerCard />
+            <ShimmerCard />
+          </View>
+        </>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <View style={styles.errorIconBg}>
+            <Ionicons name="cloud-offline" size={50} color="#9CA3AF" />
+          </View>
+          <AppText style={styles.errorText} language={language}>
+            {language === "te" ? "సర్వర్ కి కనెక్ట్ అవ్వలేకపోయాం" : "Failed to connect to server"}
           </AppText>
-          <AppText style={styles.summaryValue}>{data.length}</AppText>
-        </View>
-
-        {/* DIVIDER */}
-        <View style={styles.divider} />
-
-        {/* USAGE */}
-        <View style={styles.summaryItem}>
-          <AppText style={styles.summaryLabel} language={language}>
-            {language === "te" ? "వినియోగం" : "Usage"}
-          </AppText>
-          <AppText
-            style={[
-              styles.summaryValue,
-              { color: data.length > 10 ? "#16A34A" : data.length > 5 ? "#F59E0B" : data.length > 0 ? "#EF4444" : "red" }
-            ]} language={language}
-          >
-            {getUsageLabel()}
-          </AppText>
-        </View>
-      </View>
-
-      {/* LIST */}
-      {loading ? (
-        <View style={{ paddingTop: 10 }}>
-          <ShimmerCard />
-          <ShimmerCard />
-          <ShimmerCard />
+          <TouchableOpacity style={styles.retryBtn} onPress={() => loadData(false)}>
+            <AppText style={styles.retryText} language={language}>
+              {language === "te" ? "మళ్ళీ ప్రయత్నించండి" : "Try Again"}
+            </AppText>
+          </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={Object.keys(grouped)}
-          keyExtractor={(item) => item}
-          contentContainerStyle={[
-            { paddingBottom: 100 },
-            Object.keys(grouped).length === 0 && { flexGrow: 1, justifyContent: 'center' }
-          ]}
-          ListEmptyComponent={
-            <AppEmptyState
-              iconName="file-tray-outline"
-              title={language === "te" ? "హాజరు లేదు" : "No Attendance Yet"}
-              subtitle={language === "te" ? "కొత్త హాజరు నమోదు చేయండి" : "Start adding records"}
-              language={language}
-            />
-          }
-        // app/farmer/mestri-history.tsx లో మార్చాల్సిన RenderItem భాగం
+        <>
+         {/* SUMMARY */}
+          <View style={styles.summaryBox}>
+            <View style={styles.summaryItem}>
+              <AppText style={styles.summaryLabel} language={language}>
+                {language === "te" ? "మొత్తం రోజులు" : "Total Days"}
+              </AppText>
+              <AppText style={styles.summaryValue}>{data.length}</AppText>
+            </View>
 
-renderItem={({ item }) => {
-  const cropData = grouped[item];
-  const cropColor = getCropColor(item);
-  const isCropOpen = openCrops[item];
+            <View style={styles.divider} />
 
-  const workGroups: any = {};
-  cropData.forEach((entry: any) => {
-    const work = entry.work || "Other";
-    if (!workGroups[work]) workGroups[work] = [];
-    workGroups[work].push(entry);
-  });
+            <View style={styles.summaryItem}>
+              <AppText style={styles.summaryLabel} language={language}>
+                {language === "te" ? "మొత్తం కూలీలు" : "Total Workers"}
+              </AppText>
+              <AppText
+                style={[
+                  styles.summaryValue,
+                  { color: "#16A34A" } // పక్కా గ్రీన్ కలర్ లో చూపిద్దాం
+                ]} language={language}
+              >
+                {getTotalWorkers()}
+              </AppText>
+            </View>
+          </View>
 
-  return (
-    <View>
-      {/* 🌾 CROP HEADER */}
-      <TouchableOpacity
-        style={[styles.cropHeader, { borderLeftWidth: 4, borderLeftColor: cropColor }]}
-        activeOpacity={0.5}
-        onPress={() => toggleCrop(item)}
-      >
-        <View style={styles.cropLeft}>
-          <AppText style={styles.cropName} language={language}>{item}</AppText>
-          <AppText style={styles.cropDays} language={language}>
-            {cropData.length} {language === "te" ? "రోజులు" : "days"}
-          </AppText>
-        </View>
-        <Ionicons name={isCropOpen ? "chevron-up" : "chevron-down"} size={18} color="#6B7280" />
-      </TouchableOpacity>
-
-      {/* 🌾 INSIDE CROP */}
-      {isCropOpen && Object.keys(workGroups).map((work) => {
-        const workData = workGroups[work];
-        const workKey = item + "_" + work;
-        const workColor = getWorkColor(work);
-        const isWorkOpen = openWorks[workKey];
-
-        return (
-          <View key={work}>
-            {/* 🔹 WORK HEADER (మార్పు ఇక్కడ జరిగింది బ్రో) */}
-            <TouchableOpacity
-              style={[styles.workHeader, { borderLeftWidth: 3, borderLeftColor: workColor }]}
-              activeOpacity={0.5}
-              onPress={() => toggleWork(workKey)}
-            >
-              {/* ఇక్కడ Left సైడ్ కి టెక్స్ట్ ని Column లో పెట్టాను */}
-              <View style={{ flex: 1, flexDirection: "column" }}>
-                <AppText style={styles.workName} language={language}>{work}</AppText>
-                <AppText style={styles.workDaysText} language={language}>
-                  {workData.length} {language === "te" ? "రోజులు" : "days"}
-                </AppText>
-              </View>
+          {/* LIST */}
+          <FlatList
+            data={Object.keys(grouped)}
+            keyExtractor={(item) => item}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#16A34A"]} />}
+            contentContainerStyle={[
+              { paddingBottom: 100 },
+              Object.keys(grouped).length === 0 && { flexGrow: 1, justifyContent: 'center' }
+            ]}
+            ListEmptyComponent={
+              <AppEmptyState
+                iconName="file-tray-outline"
+                title={language === "te" ? "హాజరు లేదు" : "No Attendance Yet"}
+                subtitle={language === "te" ? "కొత్త హాజరు నమోదు చేయండి" : "Start adding records"}
+                language={language}
+              />
+            }
+            renderItem={({ item }) => {
+              const cropData = grouped[item];
+              const cropColor = getCropColor(item);
               
-              <Ionicons name={isWorkOpen ? "chevron-up" : "chevron-down"} size={16} color="#6B7280" />
-            </TouchableOpacity>
+              // 🔥 Single State Check
+              const isCropOpen = openCrop === item;
 
-            {/* 🧾 CARDS */}
-            {isWorkOpen && workData.map((entry: any) => {
-              const total = (entry.morning || 0) + (entry.evening || 0) + (entry.full || 0);
-              const isPaid = paidIds.includes(entry.id);
+              const workGroups: any = {};
+              cropData.forEach((entry: any) => {
+                const work = entry.work || "Other";
+                if (!workGroups[work]) workGroups[work] = [];
+                workGroups[work].push(entry);
+              });
 
               return (
-                <View key={entry.id} style={[styles.card, { borderColor: workColor + "30" }]}>
-                  {/* ... మిగతా కార్డ్ కోడ్ సేమ్ ... */}
-                  <View style={styles.rowTop}>
-                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                    <AppText style={styles.date} language={language}>{entry.date}</AppText>
-                  </View>
+                <View>
+                  {/* 🌾 CROP HEADER */}
+                  <TouchableOpacity
+                    style={[styles.cropHeader, { borderLeftWidth: 5, borderLeftColor: cropColor }]}
+                    activeOpacity={0.7}
+                    onPress={() => toggleCrop(item)}
+                  >
+                    <View style={styles.cropLeft}>
+                      <AppText style={styles.cropName} language={language}>{item}</AppText>
+                      <AppText style={styles.cropDays} language={language}>
+                        {cropData.length} {language === "te" ? "రోజులు" : "days"}
+                      </AppText>
+                    </View>
+                    {/* 🔥 CHEVRON BG */}
+                    <View style={styles.chevronBg}>
+                      <Ionicons name={isCropOpen ? "chevron-up" : "chevron-down"} size={20} color="#4B5563" />
+                    </View>
+                  </TouchableOpacity>
 
-                  <View style={styles.valuesRow}>
-                    <View style={styles.valueItem}>
-                      <Ionicons name="sunny-outline" size={14} color="#F59E0B" />
-                      <AppText style={styles.label} language={language}>{language === "te" ? "ఉదయం" : "Morning"}</AppText>
-                      <AppText style={styles.value}>{entry.morning || 0}</AppText>
-                    </View>
-                    <View style={styles.valueItem}>
-                      <Ionicons name="partly-sunny-outline" size={14} color="#3B82F6" />
-                      <AppText style={styles.label} language={language}>{language === "te" ? "మధ్యాహ్నం" : "Afternoon"}</AppText>
-                      <AppText style={styles.value}>{entry.evening || 0}</AppText>
-                    </View>
-                    <View style={styles.valueItem}>
-                      <Ionicons name="moon-outline" size={14} color="#8B5CF6" />
-                      <AppText style={styles.label} language={language}>{language === "te" ? "రోజంతా" : "Full"}</AppText>
-                      <AppText style={styles.value}>{entry.full || 0}</AppText>
-                    </View>
-                  </View>
-
-                  <View style={styles.bottomRow}>
-                    <AppText style={[styles.total, { color: workColor }]} language={language}>
-                      {language === "te" ? "మొత్తం" : "Total"}: {total}
-                    </AppText>
+                  {/* 🌾 INSIDE CROP */}
+                  {isCropOpen && Object.keys(workGroups).map((work) => {
+                    const workData = workGroups[work];
+                    const workKey = item + "_" + work;
+                    const workColor = getWorkColor(work);
                     
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (isPaid) {
-                          setShowPaidWarning(true);
-                        } else {
-                          setDeleteId(entry.id);
-                          setModalVisible(true);
-                        }
-                      }}
-                      style={[styles.deleteIconWrap, isPaid && { backgroundColor: '#FEF3C7' }]}
-                      activeOpacity={0.6}
-                    >
-                      {isPaid ? <Ionicons name="lock-closed" size={16} color="#F59E0B" /> : <Ionicons name="trash-outline" size={16} color="#DC2626" />}
-                    </TouchableOpacity>
-                  </View>
+                    // 🔥 Single State Check
+                    const isWorkOpen = openWork === workKey;
+
+                    return (
+                      <View key={work}>
+                        {/* 🔹 WORK HEADER */}
+                        <TouchableOpacity
+                          style={[styles.workHeader, { borderLeftWidth: 4, borderLeftColor: workColor }]}
+                          activeOpacity={0.7}
+                          onPress={() => toggleWork(workKey)}
+                        >
+                          <View style={{ flex: 1, flexDirection: "column" }}>
+                            <AppText style={styles.workName} language={language}>{work}</AppText>
+                            <AppText style={styles.workDaysText} language={language}>
+                              {workData.length} {language === "te" ? "రోజులు" : "days"}
+                            </AppText>
+                          </View>
+                          {/* 🔥 CHEVRON BG SMALL */}
+                          <View style={styles.chevronBgSmall}>
+                            <Ionicons name={isWorkOpen ? "chevron-up" : "chevron-down"} size={16} color="#6B7280" />
+                          </View>
+                        </TouchableOpacity>
+
+                        {/* 🧾 CARDS */}
+                        {isWorkOpen && workData.map((entry: any) => {
+                          const total = (entry.morning || 0) + (entry.evening || 0) + (entry.full || 0);
+                          const isPaid = paidIds.includes(entry.id);
+
+                          return (
+                            <View key={entry.id} style={[styles.card, { borderLeftWidth: 4, borderLeftColor: workColor, borderColor: workColor + "30" }]}>
+                              <View style={styles.rowTop}>
+                                <Ionicons name="calendar-outline" size={16} color={workColor} />
+                                <AppText style={styles.date} language={language}>{entry.date}</AppText>
+                              </View>
+
+                              <View style={styles.valuesRow}>
+                                <View style={styles.valueItem}>
+                                  <Ionicons name="sunny-outline" size={14} color="#F59E0B" />
+                                  <AppText style={styles.label} language={language}>{language === "te" ? "ఉదయం" : "Morning"}</AppText>
+                                  <AppText style={styles.value}>{entry.morning || 0}</AppText>
+                                </View>
+                                <View style={styles.valueItem}>
+                                  <Ionicons name="partly-sunny-outline" size={14} color="#3B82F6" />
+                                  <AppText style={styles.label} language={language}>{language === "te" ? "మధ్యాహ్నం" : "Afternoon"}</AppText>
+                                  <AppText style={styles.value}>{entry.evening || 0}</AppText>
+                                </View>
+                                <View style={styles.valueItem}>
+                                  <Ionicons name="moon-outline" size={14} color="#8B5CF6" />
+                                  <AppText style={styles.label} language={language}>{language === "te" ? "రోజంతా" : "Full"}</AppText>
+                                  <AppText style={styles.value}>{entry.full || 0}</AppText>
+                                </View>
+                              </View>
+
+                              <View style={styles.bottomRow}>
+                                <AppText style={[styles.total, { color: workColor }]} language={language}>
+                                  {language === "te" ? "మొత్తం కూలీల సంఖ్య" : "Total Workers"}: {total}
+                                </AppText>
+                                
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    if (isPaid) {
+                                      setShowPaidWarning(true);
+                                    } else {
+                                      setDeleteId(entry.id);
+                                      setModalVisible(true);
+                                    }
+                                  }}
+                                  style={[styles.deleteIconWrap, isPaid && { backgroundColor: '#FEF3C7' }]}
+                                  activeOpacity={0.6}
+                                >
+                                  {isPaid ? <Ionicons name="lock-closed" size={16} color="#F59E0B" /> : <Ionicons name="trash-outline" size={16} color="#DC2626" />}
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    );
+                  })}
                 </View>
               );
-            })}
-          </View>
-        );
-      })}
-    </View>
-  );
-}}
-        />
+            }}
+          />
+        </>
       )}
 
       {/* 🔴 STANDARD DELETE MODAL (For Unpaid records) */}
@@ -396,7 +456,7 @@ renderItem={({ item }) => {
         </View>
       </Modal>
 
-      {/* 🔒 ALREADY PAID WARNING MODAL (NEW) */}
+      {/* 🔒 ALREADY PAID WARNING MODAL */}
       <Modal visible={showPaidWarning} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
@@ -429,61 +489,69 @@ renderItem={({ item }) => {
 /* ---------------- STYLES ---------------- */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
-  summary: { paddingHorizontal: 20, marginVertical: 10 },
-  cropText: { fontSize: 14, fontWeight: "600" },
-  cropHeader: { marginHorizontal: 20, marginTop: 12, paddingVertical: 12, paddingHorizontal: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" },
-  card: { marginHorizontal: 20, marginVertical: 6, padding: 14, borderWidth: 1, borderRadius: 14, backgroundColor: "#fff", position: "relative" },
-  shimmerCard: { marginHorizontal: 20, marginVertical: 6, padding: 14, borderRadius: 14, backgroundColor: "#fff" },
-  rowTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  workHeader: { 
-    marginHorizontal: 28, 
-    marginTop: 8, 
-    paddingVertical: 10, // ప్యాడింగ్ కొంచెం పెంచాను నీట్ గా ఉండటానికి
-    paddingHorizontal: 12, 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    backgroundColor: "#fff", 
-    borderRadius: 10, 
-    borderWidth: 1, 
-    borderColor: "#E5E7EB" 
-  },
 
-  workName: { 
-    fontSize: 14, 
-    fontWeight: "600",
-    color: "#111827" 
-  },
+  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 },
+  errorIconBg: { width: 90, height: 90, borderRadius: 45, backgroundColor: "#F3F4F6", justifyContent: "center", alignItems: "center", marginBottom: 16 },
+  errorText: { fontSize: 16, fontWeight: "600", color: "#4B5563", textAlign: "center", marginBottom: 20 },
+  retryBtn: { backgroundColor: "#16A34A", paddingHorizontal: 30, paddingVertical: 12, borderRadius: 14 },
+  retryText: { color: "white", fontSize: 15, fontWeight: "600" },
 
-  workDaysText: { 
-    fontSize: 11, 
-    color: "#6B7280",
-    marginTop: 2 // పేరుకి కింద గ్యాప్ కోసం
-  },
-  date: { fontSize: 13, color: "#374151" },
-  deleteBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: "#DC2626" },
-  deleteText: { fontSize: 13, color: "#fff", fontWeight: "600", textAlign: 'center' },
-  cancelText: { fontSize: 13, color: "#374151", fontWeight: "500", textAlign: 'center' },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
-  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 18, padding: 20, alignItems: "center" },
-  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  deleteIconWrap: { padding: 8, borderRadius: 10, backgroundColor: "#FEF2F2", zIndex: 50 },
-  modalTitle: { fontSize: 16, fontWeight: "600", marginTop: 6, color: '#111827' },
-  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8 },
-  modalBtns: { flexDirection: "row", marginTop: 22, gap: 12 },
-  cancelBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: "#F3F4F6", justifyContent: 'center', alignItems: 'center' },
-  valuesRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
-  valueItem: { alignItems: "center" },
-  label: { fontSize: 11, color: "#6B7280", marginTop: 2 },
-  value: { fontSize: 14, fontWeight: "600", marginTop: 2 },
-  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
-  total: { fontSize: 15, fontWeight: "600" },
-  cropLeft: { flexDirection: "column", justifyContent: "center" },
-  cropName: { fontSize: 20, fontWeight: "600", color: "#111827", includeFontPadding: false },
-  cropDays: { fontSize: 12, color: "#6B7280", marginTop: 3 },
   summaryBox: { marginHorizontal: 20, marginTop: 10, paddingVertical: 14, flexDirection: "row", justifyContent: "space-around", alignItems: "center", backgroundColor: "#ffffff", borderRadius: 14, borderWidth: 1, borderColor: "#E5E7EB" },
   summaryItem: { alignItems: "center" },
   summaryLabel: { fontSize: 12, color: "#6B7280" },
   summaryValue: { fontSize: 16, fontWeight: "600", marginTop: 2, lineHeight: 28, includeFontPadding: false },
   divider: { width: 1, height: 30, backgroundColor: "#E5E7EB" },
+
+  cropHeader: { marginHorizontal: 20, marginTop: 12, paddingVertical: 12, paddingHorizontal: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" },
+  cropLeft: { flexDirection: "column", justifyContent: "center" },
+  cropName: { fontSize: 20, fontWeight: "600", color: "#111827", includeFontPadding: false },
+  cropDays: { fontSize: 12, color: "#6B7280", marginTop: 3 },
+  
+  workHeader: { marginHorizontal: 28, marginTop: 8, paddingVertical: 10, paddingHorizontal: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: "#E5E7EB" },
+  workName: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  workDaysText: { fontSize: 11, color: "#6B7280", marginTop: 2 },
+
+  // 🔥 NEW STYLES: Chevron Backgrounds
+  chevronBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6", 
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  chevronBgSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6", 
+    justifyContent: "center",
+    alignItems: "center"
+  },
+
+  card: { marginHorizontal: 30, marginVertical: 6, padding: 14, borderWidth: 1, borderRadius: 12, backgroundColor: "#fff", position: "relative" },
+  shimmerCard: { marginHorizontal: 20, marginVertical: 6, padding: 14, borderRadius: 14, backgroundColor: "#fff" },
+  rowTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  date: { fontSize: 13, color: "#374151", fontWeight: "500" },
+  
+  valuesRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  valueItem: { alignItems: "center" },
+  label: { fontSize: 11, color: "#6B7280", marginTop: 2 },
+  value: { fontSize: 14, fontWeight: "600", marginTop: 2 },
+  
+  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
+  total: { fontSize: 15, fontWeight: "600" },
+  
+  deleteIconWrap: { padding: 8, borderRadius: 10, backgroundColor: "#FEF2F2", zIndex: 50 },
+  
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  modalBox: { width: "80%", backgroundColor: "#fff", borderRadius: 18, padding: 20, alignItems: "center" },
+  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  modalTitle: { fontSize: 16, fontWeight: "600", marginTop: 6, color: '#111827' },
+  modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 8 },
+  modalBtns: { flexDirection: "row", marginTop: 22, gap: 12 },
+  cancelBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: "#F3F4F6", justifyContent: 'center', alignItems: 'center' },
+  deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: "#DC2626" },
+  cancelText: { fontSize: 13, color: "#374151", fontWeight: "500", textAlign: 'center' },
+  deleteText: { fontSize: 13, color: "#fff", fontWeight: "600", textAlign: 'center' }
 });

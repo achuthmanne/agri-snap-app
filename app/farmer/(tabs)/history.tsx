@@ -1,6 +1,6 @@
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -8,7 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { useIsFocused } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   FlatList,
   SafeAreaView,
@@ -16,7 +16,8 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  RefreshControl
 } from "react-native";
 
 import Animated, {
@@ -88,7 +89,6 @@ const ProgressCircle = ({ percent }: { percent: number }) => {
         />
       </Svg>
 
-      {/* 🔥 PERFECT CENTER */}
       <AppText
         style={{
           position: "absolute",
@@ -112,19 +112,27 @@ const getStatus = (paid: number, total: number) => {
 /* ---------------- SCREEN ---------------- */
 export default function PaymentHistory() {
   const router = useRouter();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak కాకుండా ఆపడానికి
+
   const [isFocused, setIsFocused] = useState(false);
   const [mestris, setMestris] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false); // 🔥 PRO FIX: నెట్వర్క్ ఎర్రర్ హ్యాండ్లింగ్
+  const [refreshing, setRefreshing] = useState(false); // 🔥 PRO FIX: Pull-to-refresh
   const [search, setSearch] = useState("");
   const [language, setLanguage] = useState<"te" | "en">("te");
   const [isListening, setIsListening] = useState(false);
+  const [activeSession, setActiveSession] = useState("");
   const isScreenFocused = useIsFocused();
-const [activeSession, setActiveSession] = useState("");
+
+  // 🔥 CLEANUP ON UNMOUNT
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useSpeechRecognitionEvent("result", (event) => {
-    // 🔥 FIX: only current screen lo unna appude work avvali
     if (!isScreenFocused || !isListening) return;
-
     if (event.results && event.results.length > 0) {
       setSearch(event.results[0].transcript);
     }
@@ -148,7 +156,6 @@ const [activeSession, setActiveSession] = useState("");
       ExpoSpeechRecognitionModule.stop();
       setIsListening(false);
     }
-
     return () => {
       ExpoSpeechRecognitionModule.stop(); 
     };
@@ -158,7 +165,7 @@ const [activeSession, setActiveSession] = useState("");
   useFocusEffect(
     useCallback(() => {
       AsyncStorage.getItem("APP_LANG").then(l => {
-        if (l) setLanguage(l as any);
+        if (l && isMounted.current) setLanguage(l as any);
       });
     }, [])
   );
@@ -171,54 +178,43 @@ const [activeSession, setActiveSession] = useState("");
     return avatarColors[index];
   };
 
-  /* ---------- LOAD DATA ---------- */
-  const loadData = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-
-    if (!userPhone) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const userDoc = await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .get();
- const session = userDoc.data()?.activeSession;
-
-    if (!session) {
-      setLoading(false);
-      return;
-    }
-
-    setActiveSession(session);
+  /* ---------- LOAD DATA (ROBUST & CRASH-PROOF) ---------- */
+  const loadData = async (isRefreshed = false) => {
     try {
+      if (!isRefreshed) setLoading(true);
+      setError(false);
+
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone) throw new Error("NO_USER");
+
       const db = firestore();
       const userDoc = await db.collection("users").doc(userPhone).get();
-      const activeSession = userDoc.data()?.activeSession;
+      const session = userDoc.data()?.activeSession;
 
-      if (!activeSession) return;
-      
+      if (!session) {
+        if (isMounted.current) { setMestris([]); setLoading(false); }
+        return;
+      }
+
+      if (isMounted.current) setActiveSession(session);
+
       /* 🔥 1. GET PAYMENTS ONLY */
       const paymentSnap = await db
         .collection("users")
         .doc(userPhone)
         .collection("payments")
-        .where("session", "==", activeSession) 
+        .where("session", "==", session) 
         .get();
 
       const payments = paymentSnap.docs.map(d => d.data());
 
       /* 🔥 2. GROUP BY MESTRI */
       const map: any = {};
-
       payments.forEach(p => {
         const id = p.mestriId;
         if (!id) return;
 
-        const ids = Array.isArray(p.selectedAttendanceIds)
-          ? p.selectedAttendanceIds
-          : [];
+        const ids = Array.isArray(p.selectedAttendanceIds) ? p.selectedAttendanceIds : [];
 
         if (!map[id]) {
           map[id] = {
@@ -228,7 +224,6 @@ const [activeSession, setActiveSession] = useState("");
             paid: 0
           };
         }
-
         map[id].paid += ids.length; 
       });
 
@@ -240,7 +235,7 @@ const [activeSession, setActiveSession] = useState("");
           .collection("mestris")
           .doc(key)
           .collection("attendance")
-          .where("session", "==", activeSession)
+          .where("session", "==", session)
           .get();
 
         const total = attendanceSnap.size;
@@ -261,22 +256,30 @@ const [activeSession, setActiveSession] = useState("");
       });
 
       const result = (await Promise.all(promises)).filter(Boolean);
-      setMestris(result);
+      
+      if (isMounted.current) setMestris(result);
 
     } catch (e) {
-      console.log(e);
+      console.log("Payment History Fetch Error:", e);
+      if (isMounted.current) setError(true); // 🔥 సైలెంట్ వైట్ స్క్రీన్ రాకుండా ఆపుతుంది
     } finally {
-      setLoading(false); 
+      if (isMounted.current) {
+        setLoading(false); 
+        setRefreshing(false);
+      }
     }
   };
 
   useFocusEffect(useCallback(() => { loadData(); }, []));
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData(true);
+  };
+
   const filtered = useMemo(() => {
     return mestris.filter(item =>
-      (item.name || "")
-        .toLowerCase()
-        .includes(search.trim().toLowerCase())
+      (item.name || "").toLowerCase().includes(search.trim().toLowerCase())
     );
   }, [mestris, search]);
 
@@ -302,15 +305,14 @@ const [activeSession, setActiveSession] = useState("");
         language={language}
       />
 
-      {/* 🔥 HIDE SEARCH BAR IF NO DATA EXISTS */}
-      {(!loading && mestris.length === 0) ? null : (
+      {/* 🔥 SEARCH BAR (Only shows if data exists) */}
+      {(!loading && !error && mestris.length > 0) && (
         <View style={[styles.searchContainer, isFocused && styles.searchFocused]}>
           <Ionicons name="search-outline" size={20} color={isFocused ? "#16A34A" : "#9CA3AF"} />
-
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestriname..."}
+            placeholder={language === "te" ? "మేస్త్రీ పేరుతో వెతకండి..." : "Search by mestri name..."}
             placeholderTextColor="#9CA3AF"
             cursorColor="#16A34A"
             selectionColor="#16A34A40"
@@ -318,19 +320,12 @@ const [activeSession, setActiveSession] = useState("");
             onBlur={() => setIsFocused(false)}
             style={styles.searchInput}
           />
-
           {search.trim().length > 0 ? (
-            <TouchableOpacity 
-              onPress={() => setSearch("")} 
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
+            <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close-circle" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity 
-              onPress={handleVoiceSearch} 
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
+            <TouchableOpacity onPress={handleVoiceSearch} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <MaterialCommunityIcons 
                 name={isListening ? "microphone" : "microphone-outline"} 
                 size={22} 
@@ -341,31 +336,46 @@ const [activeSession, setActiveSession] = useState("");
         </View>
       )}
 
-      {loading ? (
+      {/* 🔥 PRO FIX: LOADING, ERROR, & DATA STATES */}
+      {loading && !refreshing ? (
         <>
           <ShimmerRow />
           <ShimmerRow />
           <ShimmerRow />
         </>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <View style={styles.errorIconBg}>
+            <Ionicons name="cloud-offline" size={50} color="#9CA3AF" />
+          </View>
+          <AppText style={styles.errorText} language={language}>
+            {language === "te" ? "సర్వర్ కి కనెక్ట్ అవ్వలేకపోయాం" : "Failed to connect to server"}
+          </AppText>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => loadData(false)}>
+            <AppText style={styles.retryText} language={language}>
+              {language === "te" ? "మళ్ళీ ప్రయత్నించండి" : "Try Again"}
+            </AppText>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(i, index) => i.id || index.toString()}
-          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#16A34A"]} /> // 🔥 NEW: Pull-to-refresh
+          }
           contentContainerStyle={[
             { paddingBottom: 100 },
-            // 🔥 సెంటర్ లోకి రావడానికి లాజిక్
             filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
-
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName={search.trim().length > 0 ? "search-outline" : "wallet-outline"}
               title={
                 search.trim().length > 0
                   ? (language === "te" ? "ఏమి దొరకలేదు" : "Not Found")
-                  : (language === "te" ? "చెల్లింపు చరిత్ర లేవు" : "No Payments History Yet")
+                  : (language === "te" ? "చెల్లింపు చరిత్ర లేదు" : "No Payment History Yet")
               }
               subtitle={
                 search.trim().length > 0
@@ -375,7 +385,6 @@ const [activeSession, setActiveSession] = useState("");
               language={language}
             />
           }
-
           renderItem={({ item }) => {
             const status = getStatus(item.paid, item.total);
 
@@ -395,7 +404,6 @@ const [activeSession, setActiveSession] = useState("");
                 }}
               >
                 <View style={styles.mainRow}>
-
                   {/* LEFT */}
                   <View style={styles.leftSection}>
                     <View style={[styles.avatar, { backgroundColor: getColor(item.id) }]}>
@@ -443,7 +451,6 @@ const [activeSession, setActiveSession] = useState("");
                       </AppText>
                     </View>
                   </View>
-
                 </View>
               </TouchableOpacity>
             );
@@ -458,7 +465,13 @@ const [activeSession, setActiveSession] = useState("");
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
 
-  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
+  // 🔥 ERROR STATE STYLES
+  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 },
+  errorIconBg: { width: 90, height: 90, borderRadius: 45, backgroundColor: "#F3F4F6", justifyContent: "center", alignItems: "center", marginBottom: 16 },
+  errorText: { fontSize: 16, fontWeight: "600", color: "#4B5563", textAlign: "center", marginBottom: 20 },
+  retryBtn: { backgroundColor: "#16A34A", paddingHorizontal: 30, paddingVertical: 12, borderRadius: 14 },
+  retryText: { color: "white", fontSize: 15, fontWeight: "600" },
+
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -502,11 +515,6 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB"
   },
 
-  searchWrapper: {
-    paddingHorizontal: 20,
-    marginTop: 10,
-    alignItems: "flex-end"
-  },
   card: {
     marginHorizontal: 20,
     marginVertical: 8,
@@ -516,11 +524,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB"
   },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center"
-  },
-
   avatar: {
     width: 48,
     height: 48,
@@ -528,13 +531,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center"
   },
-
   avatarText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600"
   },
-
   details: {
     marginLeft: 12,
     flex: 1
@@ -544,22 +545,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center"
   },
-  input: {
-    fontSize: 14,
-    color: "#111827"
-  },
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1
   },
-
   rightSection: {
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 10
   },
-
   name: {
     fontSize: 16,
     fontWeight: "600",
@@ -570,19 +565,11 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginTop: 2
   },
-
   paidText: {
     fontSize: 12,
     color: "#374151",
     marginTop: 4
   },
-
-  centerCircle: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 14
-  },
-
   statusBadge: {
     marginTop: 12,
     alignSelf: "center",
@@ -590,28 +577,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12
   },
-
   statusText: {
     fontSize: 12,
     fontWeight: "600"
-  },
-  placeholder: {
-    position: "absolute",
-    left: 4,
-    right: 0,
-    textAlignVertical: "center",
-    height: "100%",   // 🔥 important
-    fontSize: 14,
-    color: "#9CA3AF"
-  },
-  searchBox: {
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    height: 44,
-    flexDirection: "row",
-    alignItems: "center"
-  },
-
-  inputWrap: { flex: 1, marginLeft: 8 },
+  }
 });
