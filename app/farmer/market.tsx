@@ -35,7 +35,8 @@ const translations = {
     retry: "మళ్ళీ ప్రయత్నించండి",
     noResults: "మీరు వెతికిన పంట దొరకలేదు",
     min: "కనిష్ట",
-    max: "గరిష్ట"
+    max: "గరిష్ట",
+    lastUpdated: "చివరి అప్‌డేట్: " // 🔥 NEW
   },
   en: {
     title: "Market Prices",
@@ -47,10 +48,10 @@ const translations = {
     retry: "Try Again",
     noResults: "No crops found for your search",
     min: "Min",
-    max: "Max"
+    max: "Max",
+    lastUpdated: "Last Updated: " // 🔥 NEW
   },
 };
-
 
 /* ---------------- DYNAMIC MARKET TRANSLATOR (GOOGLE API) ---------------- */
 const applyMarketTranslations = async (data: any[], lang: string) => {
@@ -67,7 +68,6 @@ const applyMarketTranslations = async (data: any[], lang: string) => {
   const missingMarkets = uniqueMarkets.filter(m => !dict[m]);
 
   if (missingMarkets.length > 0) {
-    // API స్లో అవ్వకుండా పారలల్ గా అన్ని ఊర్ల పేర్లు ట్రాన్స్‌లేట్ చేస్తున్నాం
     await Promise.all(missingMarkets.map(async (market) => {
       try {
         const hasAPMC = /APMC/i.test(market);
@@ -80,7 +80,6 @@ const applyMarketTranslations = async (data: any[], lang: string) => {
           translated = parsed[0][0][0];
         }
         
-        // ఊరి పేరు తెలుగులో + APMC ఇంగ్లీష్ లో
         dict[market] = hasAPMC ? `${translated} APMC` : translated;
         updated = true;
       } catch (e) {
@@ -100,7 +99,6 @@ const applyMarketTranslations = async (data: any[], lang: string) => {
 };
 
 /* ---------------- PRO CROP DICTIONARY (AUTO-TRANSLATE) ---------------- */
-// API ఇచ్చే ఇంగ్లీష్ పేర్లను పక్కా తెలుగులోకి మార్చడానికి
 const cropTranslations: Record<string, string> = {
   // Cereals & Millets
   "paddy(dhan)(common)": "వరి (సాధారణం)",
@@ -117,7 +115,6 @@ const cropTranslations: Record<string, string> = {
   "samalu": "సామలు",
   "udalu": "ఊదలు",
   "andukorra": "అండుకొర్రలు",
-
   // Pulses
   "red gram": "కందులు",
   "green gram": "పెసలు",
@@ -129,7 +126,6 @@ const cropTranslations: Record<string, string> = {
   "soyabean": "సోయాబీన్",
   "lentil": "మసూర్ పప్పు",
   "rajma": "రాజ్మా",
-
   // Oil Seeds
   "cotton": "పత్తి",
   "groundnut": "వేరుశనగ (పల్లీలు)",
@@ -141,13 +137,11 @@ const cropTranslations: Record<string, string> = {
   "palm oil": "పామాయిల్ గెలలు",
   "linseed": "అవిసె గింజలు",
   "niger seed": "గిజిలి గింజలు",
-
   // Commercial Crops
   "sugarcane": "చెరకు",
   "tobacco": "పొగాకు",
   "jute": "జనపనార",
   "mesta": "గోగునార",
-
   // Spices
   "turmeric": "పసుపు",
   "dry chillies": "ఎండుమిర్చి",
@@ -162,7 +156,6 @@ const cropTranslations: Record<string, string> = {
   "clove": "లవంగాలు",
   "cardamom": "యాలకులు",
   "cinnamon": "దాల్చిన చెక్క",
-
   // Vegetables
   "tomato": "టమాటా",
   "onion": "ఉల్లిపాయ",
@@ -186,7 +179,6 @@ const cropTranslations: Record<string, string> = {
   "ivy gourd": "దొండకాయ",
   "cluster beans": "గోరుచిక్కుడు",
   "beetroot": "బీట్‌రూట్",
-
   // Leafy Vegetables
   "spinach": "పాలకూర",
   "amaranthus": "తోటకూర",
@@ -195,7 +187,6 @@ const cropTranslations: Record<string, string> = {
   "mint leaves": "పుదీనా",
   "curry leaves": "కరివేపాకు",
   "methi leaves": "మెంతికూర",
-
   // Fruits
   "mango": "మామిడి",
   "banana": "అరటి",
@@ -213,7 +204,6 @@ const cropTranslations: Record<string, string> = {
   "jackfruit": "పనస",
   "muskmelon": "కర్బూజ",
   "apple": "ఆపిల్",
-
   // Plantation & Floriculture
   "cashew nut": "జీడిమామిడి",
   "areca nut": "వక్కలు",
@@ -246,7 +236,7 @@ export default function MarketScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"AP" | "TS">("AP");
 
-// 🔥 Search Focus & Mic States
+  // 🔥 Search Focus & Mic States
   const [isFocused, setIsFocused] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const isScreenFocused = useIsFocused();
@@ -280,41 +270,72 @@ export default function MarketScreen() {
     outputRange: [-width, width],
   });
 
-/* ---------------- FETCH PRICES (CLOUD FUNC) ---------------- */
+  /* ---------------- FETCH PRICES (ROBUST FALLBACK LOGIC) ---------------- */
   const fetchRealtimePrices = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(false);
 
-      if (!forceRefresh) {
-        const cached = await AsyncStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Date.now() - parsed.timestamp < CACHE_TIME) {
-            const finalData = await applyMarketTranslations(parsed.data, language);
-            setPrices(finalData);
-            applyFilters(finalData, searchQuery, activeTab);
-            setLoading(false);
-            return;
-          }
+      let cachedData: any[] | null = null;
+      let parsedCache = null;
+
+      // 🔥 1. Read existing cache first safely
+      try {
+        const cachedStr = await AsyncStorage.getItem(CACHE_KEY);
+        if (cachedStr) {
+          parsedCache = JSON.parse(cachedStr);
+          cachedData = parsedCache.data;
+        }
+      } catch (cacheErr) {
+        console.log("Cache Read Error:", cacheErr);
+      }
+
+      // 🔥 2. If not forcing refresh, and cache is fresh, use it immediately
+      if (!forceRefresh && parsedCache && cachedData && (Date.now() - parsedCache.timestamp < CACHE_TIME)) {
+        const finalData = await applyMarketTranslations(cachedData, language);
+        setPrices(finalData);
+        applyFilters(finalData, searchQuery, activeTab);
+        setLoading(false);
+        return;
+      }
+
+      // 🔥 3. Try to fetch from API
+      try {
+        const response = await fetch("https://us-central1-agrisnap-9b487.cloudfunctions.net/getAdvancedPrices");
+        
+        if (!response.ok) throw new Error("Cloud Function API Failed");
+
+        const data = await response.json();
+        
+        // 🔥 CRITICAL FIX: If API returns empty data (e.g. holiday), DO NOT overwrite cache!
+        if (Array.isArray(data) && data.length > 0) {
+          const finalData = await applyMarketTranslations(data, language);
+          setPrices(finalData);
+          applyFilters(finalData, searchQuery, activeTab);
+          
+          // Save valid data to cache
+          await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+        } else {
+          // If API returns empty array, force fallback to cache
+          throw new Error("API returned empty data"); 
+        }
+
+      } catch (apiErr) {
+        console.log("API Fetch Error, Falling back to cache:", apiErr);
+        
+        // 🔥 4. API FAILED OR EMPTY: FALLBACK TO CACHE PERMANENTLY! (Crash Protection)
+        if (cachedData && Array.isArray(cachedData) && cachedData.length > 0) {
+          const finalData = await applyMarketTranslations(cachedData, language);
+          setPrices(finalData);
+          applyFilters(finalData, searchQuery, activeTab);
+        } else {
+          // Only show error if no cache exists at all
+          setError(true);
         }
       }
 
-      const response = await fetch("https://us-central1-agrisnap-9b487.cloudfunctions.net/getAdvancedPrices");
-
-      if (!response.ok) throw new Error("Cloud Function Failed");
-
-      const data = await response.json();
-      
-      const finalData = await applyMarketTranslations(data, language);
-      
-      setPrices(finalData);
-      applyFilters(finalData, searchQuery, activeTab);
-
-      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
-
     } catch (err) {
-      console.log("Price API Error:", err);
+      console.log("Overall Flow Error:", err);
       setError(true);
     } finally {
       setLoading(false);
@@ -327,8 +348,7 @@ export default function MarketScreen() {
     fetchRealtimePrices(true);
   };
 
-
-// 🔥 Speech Recognition Logic
+  // 🔥 Speech Recognition Logic
   useSpeechRecognitionEvent("result", (event) => {
     if (!isScreenFocused || !isListening) return;
     if (event.results && event.results.length > 0) {
@@ -372,7 +392,7 @@ export default function MarketScreen() {
     if (query.trim() !== "") {
       const q = query.toLowerCase();
       filtered = filtered.filter((item) => {
-        const engName = item.commodity.toLowerCase();
+        const engName = item.commodity?.toLowerCase() || "";
         const telName = getTranslatedCropName(engName);
         return engName.includes(q) || telName.includes(q);
       });
@@ -384,14 +404,11 @@ export default function MarketScreen() {
   const getTranslatedCropName = (rawName: string) => {
     const cleanName = rawName.toLowerCase().trim();
     if (language === "te") {
-      // 1. Dictionary Check
       if (cropTranslations[cleanName]) return cropTranslations[cleanName];
-      // 2. Partial Match Check
       for (const [key, value] of Object.entries(cropTranslations)) {
         if (cleanName.includes(key)) return value;
       }
     }
-    // Fallback to Capitalized English
     return rawName.replace(/\(.*?\)/g, "").trim().replace(/\b\w/g, c => c.toUpperCase());
   };
 
@@ -400,7 +417,7 @@ export default function MarketScreen() {
   const ShimmerSkeleton = () => (
     <View style={styles.listContent}>
       {[1, 2, 3, 4, 5, 6].map((i) => (
-        <View key={i} style={[styles.shimmerBox, { height: 90, borderRadius: 16, marginBottom: 12, width: "100%" }]} />
+        <View key={i} style={[styles.shimmerBox, { height: 110, borderRadius: 16, marginBottom: 12, width: "100%" }]} />
       ))}
       <Animated.View style={[styles.shimmerOverlay, { transform: [{ translateX: shimmerTranslate }] }]}>
         <LinearGradient
@@ -423,9 +440,8 @@ export default function MarketScreen() {
             <AppText style={styles.cropName} language={language}>{cropName}</AppText>
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={14} color="#6B7280" />
-              {/* 🔥 ఇక్కడ ఆటోమేటిక్ ట్రాన్స్‌లేట్ అయిన ఊరి పేరు పడుతుంది */}
               <AppText style={styles.marketName} language={language}>
-                {item.translated_market || item.market} ({item.arrival_date.slice(0, 5)})
+                {item.translated_market || item.market}
               </AppText>
             </View>
           </View>
@@ -440,6 +456,14 @@ export default function MarketScreen() {
               {language === "te" ? "/ క్వింటాల్" : "/ Quintal"}
             </AppText>
           </View>
+        </View>
+
+        {/* 🔥 NEW: LAST UPDATED TIMESTAMP BADGE */}
+        <View style={styles.lastUpdateBadge}>
+           <Ionicons name="time-outline" size={12} color="#059669" />
+           <AppText style={styles.lastUpdateText} language={language}>
+             {t.lastUpdated} {item.arrival_date || "N/A"}
+           </AppText>
         </View>
 
         {/* Min & Max Row */}
@@ -522,7 +546,7 @@ export default function MarketScreen() {
       </View>
 
       {/* 🔥 CONTENT AREA */}
-      {loading && !refreshing ? (
+      {loading && !refreshing && prices.length === 0 ? (
         <ShimmerSkeleton />
       ) : error ? (
         <View style={styles.centerContainer}>
@@ -543,7 +567,7 @@ export default function MarketScreen() {
           />
           <AppText style={[styles.errorText, { marginTop: 16 }]} language={language}>
             {searchQuery.trim().length > 0 
-              ? t.noResults // మీరు వెతికిన పంట దొరకలేదు
+              ? t.noResults
               : (language === "te" 
                   ? `ఈరోజు ${activeTab === "AP" ? "ఆంధ్రప్రదేశ్" : "తెలంగాణ"} మార్కెట్ డేటా ఇంకా అప్‌డేట్ కాలేదు` 
                   : `Today's market data for ${activeTab === "AP" ? "Andhra Pradesh" : "Telangana"} is not updated yet`)}
@@ -556,7 +580,7 @@ export default function MarketScreen() {
           renderItem={renderPriceCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled" // 🔥 ADDED THIS TO PREVENT KEYBOARD CLOSING ISSUE
+          keyboardShouldPersistTaps="handled" 
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2E7D32"]} />}
         />
       )}
@@ -602,7 +626,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // 🔥 MINIMAL, CLEAN SEARCH BAR STYLES
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -644,7 +667,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 14,
+    marginBottom: 10,
   },
   cropName: {
     fontSize: 20,
@@ -681,6 +704,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#9CA3AF",
     marginTop: 2,
+  },
+
+  // 🔥 NEW: LAST UPDATED BADGE
+  lastUpdateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5", // Light green background
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
+  lastUpdateText: {
+    fontSize: 11,
+    color: "#059669",
+    marginLeft: 4,
+    fontFamily: "Mandali",
   },
   
   // MIN/MAX BOTTOM ROW
