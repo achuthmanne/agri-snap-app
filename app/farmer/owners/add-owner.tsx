@@ -12,8 +12,10 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // 🔥 PRO FIX: For small screens
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
@@ -50,6 +52,8 @@ export default function AddOwner() {
   const nameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
   const villageRef = useRef<TextInput>(null);
+
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
 
   const placeholders = {
     en: {
@@ -102,22 +106,23 @@ export default function AddOwner() {
 
   /* ---------------- LOAD ---------------- */
   useEffect(() => {
+    isMounted.current = true;
     AsyncStorage.getItem("APP_LANG").then((l) => {
-      if (l) setLanguage(l as any);
+      if (l && isMounted.current) setLanguage(l as any);
     });
 
-    // 🔥 సేవ్ చేయడానికి Session కావాలి కాబట్టి ఇది మాత్రం లోడ్ చేస్తున్నాం
     const fetchSession = async () => {
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
       if (!userPhone) return;
       const doc = await firestore().collection("users").doc(userPhone).get();
-      setActiveSession(doc.data()?.activeSession || "");
+      if (isMounted.current) {
+        setActiveSession(doc.data()?.activeSession || "");
+      }
     };
     fetchSession();
-  }, []);
 
-  useEffect(() => {
     return () => {
+      isMounted.current = false; // 🔥 Cleanup
       ExpoSpeechRecognitionModule.stop();
     };
   }, []);
@@ -125,6 +130,7 @@ export default function AddOwner() {
   /* ---------------- SAVE ---------------- */
   const handleSave = async () => {
     if (loading) return;
+    Keyboard.dismiss(); // 🔥 Dismiss keyboard on save
 
     const cleanName = name.trim();
     const cleanPhone = phone.trim();
@@ -154,7 +160,7 @@ export default function AddOwner() {
 
       const userPhone = await AsyncStorage.getItem("USER_PHONE");
       if (!userPhone || !activeSession) {
-        setLoading(false);
+        if (isMounted.current) setLoading(false);
         return;
       }
 
@@ -181,13 +187,15 @@ export default function AddOwner() {
       }
 
       setTimeout(() => {
-        setLoading(false);
-        router.back();
+        if (isMounted.current) {
+          setLoading(false);
+          router.back();
+        }
       }, 400);
 
     } catch (e) {
       console.log(e);
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
 
@@ -210,7 +218,13 @@ export default function AddOwner() {
         language={language}
       />
 
-      <View style={styles.container}>
+      {/* 🔥 PRO FIX: Wrapped in KeyboardAwareScrollView */}
+      <KeyboardAwareScrollView 
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        showsVerticalScrollIndicator={false}
+      >
 
         {/* 👤 NAME (LOCKED IF hasRecords === true) */}
         <TouchableOpacity
@@ -372,7 +386,7 @@ export default function AddOwner() {
           </LinearGradient>
         </TouchableOpacity>
 
-      </View>
+      </KeyboardAwareScrollView>
 
       <AgriLoader visible={loading} type={editId ? "updating" : "saving"} language={language} />
 
@@ -414,7 +428,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F6F7F6"
   },
   container: {
-    padding: 20
+    padding: 20,
+    paddingBottom: 40 // 🔥 Extra padding for scroll
   },
   inputBox: {
     flexDirection: "row",

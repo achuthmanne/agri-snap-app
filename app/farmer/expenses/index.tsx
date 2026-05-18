@@ -23,7 +23,7 @@ import { TextInput } from "react-native";
 Animated.addWhitelistedNativeProps({ text: true, value: true });
 const AnimatedText = Animated.createAnimatedComponent(TextInput);
 
-// 🔥 PRO FIX 1: Reanimated UI Thread లో toLocaleString పనిచేయదు, కాబట్టి Custom Worklet రాయాలి
+// 🔥 PRO FIX 1: Reanimated UI Thread లో toLocaleString పనిచేయదు, కాబట్టి Custom Worklet
 const formatIndianCurrency = (val: number) => {
   'worklet';
   let numStr = Math.floor(val).toString();
@@ -41,7 +41,7 @@ const formatIndianCurrency = (val: number) => {
 export default function ExpensesScreen() {
     const router = useRouter();
     const [data, setData] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true); // 🔥 Initial loading must be true
+    const [loading, setLoading] = useState(true); 
     const [language, setLanguage] = useState<"te" | "en">("te");
     
     const [totalExpense, setTotalExpense] = useState(0);
@@ -51,25 +51,74 @@ export default function ExpensesScreen() {
     const [activeSession, setActiveSession] = useState("");
     const [selectedItem, setSelectedItem] = useState<any>(null);
 
-    // 🔥 Shared value for Animation
+    // Shared value for Animation
     const animatedAmount = useSharedValue(0);
 
     // Trigger animation whenever totalExpense changes
     useEffect(() => {
         animatedAmount.value = withTiming(totalExpense, {
-            duration: 2000, // 2 Seconds for snappier premium feel
+            duration: 2000, 
             easing: Easing.out(Easing.exp), 
         });
     }, [totalExpense]);
 
-    // 🔥 PRO FIX 1 applied here
     const animatedProps = useAnimatedProps(() => {
         const formatted = formatIndianCurrency(animatedAmount.value);
         return {
             text: `₹ ${formatted}`,
-            value: `₹ ${formatted}` // 🔥 Android crashes safety
+            value: `₹ ${formatted}` 
         } as any; 
     });
+
+    // 🔥 REAL-WORLD PRODUCTION FIXED CATEGORY COLOR MAPPING (SUPPORT BOTH LANGUAGES)
+    const getColor = (str: string) => {
+        if (!str) return "#94A3B8";
+        const cleanStr = str.trim();
+
+        const colorMap: { [key: string]: string } = {
+            // విత్తనాలు
+            "Seeds": "#10B981", "విత్తనాలు": "#10B981",
+            // ఎరువులు
+            "Fertilizers": "#3B82F6", "ఎరువులు": "#3B82F6",
+            // పురుగుల మందులు
+            "Pesticides / Sprays": "#EF4444", "పురుగుల మందులు / స్ప్రేలు": "#EF4444",
+            // ట్రాక్టర్
+            "Tractor / Machinery": "#2563EB", "ట్రాక్టర్ / యంత్రాలు": "#2563EB",
+            // కూలీలు
+            "Daily Labour": "#F59E0B", "కూలీలు / రోజువారీ పనివారు": "#F59E0B",
+            // రవాణా
+            "Transport / Auto": "#8B5CF6", "రవాణా / ఆటో కిరాయి": "#8B5CF6",
+            // నీరు / మోటార్
+            "Water / Motor Repair": "#06B6D4", "నీటి పారుదల / మోటార్ రిపేర్లు": "#06B6D4",
+            // కరెంట్ బిల్లు
+            "Electricity Bill": "#EAB308", "కరెంట్ బిల్లు": "#EAB308",
+            // సంచులు / ప్యాకింగ్
+            "Bags / Packaging": "#EC4899", "సంచులు / ప్యాకింగ్ ఖర్చులు": "#EC4899",
+            // స్టోరేజ్
+            "Storage / Godown": "#64748B", "కోల్డ్ స్టోరేజ్ / గోడౌన్": "#64748B",
+            // హమాలీ
+            "Hamali / Loading": "#D946EF", "హమాలీ / లోడింగ్ ఖర్చులు": "#D946EF",
+            // కౌలు
+            "Land Lease / Rent": "#14B8A6", "భూమి కౌలు (Lease)": "#14B8A6",
+            // అప్పుల వడ్డీ
+            "Loan Interest": "#F43F5E", "అప్పుల వడ్డీ": "#F43F5E",
+            // భీమా
+            "Crop Insurance": "#059669",  "పంట భీమా": "#059669",
+            // మార్కెట్ కమిషన్
+            "Market Commission": "#B45309", "మార్కెట్ కమిషన్ (Cess)": "#B45309",
+            // ఇతర ఖర్చులు
+            "Other Expenses": "#94A3B8", "ఇతర ఖర్చులు (Others)": "#94A3B8"
+        };
+
+        // ఒకవేళ మ్యాచ్ దొరికితే ఆ ఫిక్స్‌డ్ కలర్ ఇవ్వు
+        if (colorMap[cleanStr]) return colorMap[cleanStr];
+
+        // ఒకవేళ పంట పేరు (Crop Name) అయితే కలర్ కొలైడ్ అవ్వకుండా బ్యూటిఫుల్ డైనమిక్ హ్యాష్ కలర్
+        const fallbackColors = ["#10B981", "#3B82F6", "#F59E0B", "#950f52", "#8B5CF6", "#EC4899", "#14B8A6", "#06B6D4"];
+        let hash = 0;
+        for (let i = 0; i < cleanStr.length; i++) hash = cleanStr.charCodeAt(i) + ((hash << 5) - hash);
+        return fallbackColors[Math.abs(hash) % fallbackColors.length];
+    };
 
     const EmptyShimmer = () => (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 100 }}>
@@ -82,30 +131,17 @@ export default function ExpensesScreen() {
 
     const ExpenseShimmerCard = () => (
       <View style={[styles.card, { borderColor: '#F1F5F9' }]}>
-        <ShimmerPlaceholder
-          LinearGradient={LinearGradient}
-          style={{ width: 4, height: 40, borderRadius: 2 }}
-        />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 4, height: 40, borderRadius: 2 }} />
         <View style={{ flex: 1, marginLeft: 15 }}>
-          <ShimmerPlaceholder
-            LinearGradient={LinearGradient}
-            style={{ height: 18, width: "50%", borderRadius: 6 }}
-          />
-          <ShimmerPlaceholder
-            LinearGradient={LinearGradient}
-            style={{ height: 12, width: "70%", marginTop: 8, borderRadius: 4 }}
-          />
+          <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 18, width: "50%", borderRadius: 6 }} />
+          <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 12, width: "70%", marginTop: 8, borderRadius: 4 }} />
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <ShimmerPlaceholder
-            LinearGradient={LinearGradient}
-            style={{ width: 70, height: 18, borderRadius: 6 }}
-          />
+          <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 70, height: 18, borderRadius: 6 }} />
         </View>
       </View>
     );
 
-    // 🔥 PRO FIX 2: useFocusEffect prevents memory leaks when navigating away
     useFocusEffect(
       useCallback(() => {
         let unsubscribe: (() => void) | undefined;
@@ -122,11 +158,7 @@ export default function ExpensesScreen() {
               return;
             }
             
-            const userDoc = await firestore()
-              .collection("users")
-              .doc(phone)
-              .get();
-
+            const userDoc = await firestore().collection("users").doc(phone).get();
             const session = userDoc.data()?.activeSession;
 
             if (!session) {
@@ -139,9 +171,6 @@ export default function ExpensesScreen() {
             unsubscribe = firestore()
                 .collection("users").doc(phone).collection("expenses")
                 .where("session", "==", session)
-                .where("createdAt", "!=", null) 
-                .orderBy("createdAt", "desc")
-                .limit(100)
               .onSnapshot((snap) => {
                 if (!snap || !snap.docs) {
                   if (isMounted) setLoading(false);
@@ -163,6 +192,13 @@ export default function ExpensesScreen() {
                     cropMap[crop] = (cropMap[crop] || 0) + amt;
                     catMap[category] = (catMap[category] || 0) + amt;
                     list.push({ id: doc.id, ...d });
+                });
+
+                // Client-side handling for secure sorting
+                list.sort((a, b) => {
+                  const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                  const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                  return tB - tA;
                 });
 
                 if (isMounted) {
@@ -187,7 +223,6 @@ export default function ExpensesScreen() {
       }, [])
     );
 
-    // 🔥 PRO FIX 3: Safe Delete Function
     const handleDelete = async () => {
       if (!selectedItem?.id) return;
       try {
@@ -210,26 +245,11 @@ export default function ExpensesScreen() {
       }
     };
 
-    const getColor = (str: string) => {
-        const colors = ["#10B981", "#3B82F6", "#F59E0B", "#950f52", "#8B5CF6", "#EC4899"];
-        let hash = 0;
-        for (let i = 0; i < (str?.length || 0); i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        return colors[Math.abs(hash) % colors.length];
-    };
-
     const optionsStyles = {
       optionsContainer: {
-        borderRadius: 14,
-        paddingVertical: 5,
-        paddingHorizontal: 0,
-        width: 150,
-        backgroundColor: "#fff",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-        elevation: 8,
-        marginTop: 25, 
+        borderRadius: 14, paddingVertical: 5, paddingHorizontal: 0, width: 150,
+        backgroundColor: "#fff", shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15, shadowRadius: 12, elevation: 8, marginTop: 25, 
       }
     };
 
@@ -268,7 +288,6 @@ export default function ExpensesScreen() {
                           <LinearGradient colors={["#911d10", "#561111"]} style={styles.mainStatsCard}>
                               <AppText style={styles.statLabel}>{language === "te" ? "మొత్తం పెట్టుబడి" : "Total Investment"}</AppText>
                               
-                              {/* 🔥 PRO-LEVEL ANIMATED TOTAL VALUE */}
                               <AnimatedText 
                                 editable={false}
                                 animatedProps={animatedProps}
@@ -276,38 +295,45 @@ export default function ExpensesScreen() {
                               />
                               
                               <View style={styles.divider} />
-                              <ScrollView horizontal showsHorizontalScrollIndicator={false} >
-                                  {Object.keys(cropTotals || {}).map((crop) => (
-                                      <View key={crop} style={styles.cropChip}>
-                                          <View style={[styles.dot, { backgroundColor: getColor(crop) }]} />
-                                          <AppText style={styles.chipText}>{crop}: ₹{cropTotals[crop].toLocaleString('en-IN')}</AppText>
-                                      </View>
-                                  ))}
-                              </ScrollView>
-                          </LinearGradient>
+                            {/* ... పైనున్న కోడ్ అలానే ఉంటుంది ... */}
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} >
+                                {Object.keys(cropTotals || {}).map((crop) => (
+                                    <View key={crop} style={styles.cropChip}>
+                                        <View style={[styles.dot, { backgroundColor: getColor(crop) }]} />
+                                        {/* 🔥 PRO FIX: Crop name long ఉంటే కట్ అవ్వడానికి */}
+                                        <AppText style={styles.chipText} numberOfLines={1} ellipsizeMode="tail">
+                                          {crop}: ₹{cropTotals[crop].toLocaleString('en-IN')}
+                                        </AppText>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </LinearGradient>
 
-                          <View style={styles.categorySummary}>
-                              <AppText style={styles.sectionTitle} language={language}>
-                                {language === "te" ? "రకాల వారీగా ఖర్చులు" : "Expenses by Category"}
-                              </AppText>
+                        <View style={styles.categorySummary}>
+                            <AppText style={styles.sectionTitle} language={language}>
+                              {language === "te" ? "రకాల వారీగా ఖర్చులు" : "Expenses by Category"}
+                            </AppText>
 
-                              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
-                                  {Object.keys(categoryTotals || {}).map((cat) => {
-                                      const color = getColor(cat.trim());
-                                      return (
-                                          <View key={cat} style={[styles.catBox, { borderColor: color + "40" }]}>
-                                              <View style={[styles.catIconCircle, { backgroundColor: color + "15" }]}>
-                                                  <Ionicons name="pie-chart" size={16} color={color} />
-                                              </View>
-                                              <AppText style={styles.catBoxLabel}>{cat}</AppText>
-                                              <AppText style={[styles.catBoxValue, { color }]}>
-                                                  ₹{categoryTotals[cat].toLocaleString("en-IN")}
-                                              </AppText>
-                                          </View>
-                                      );
-                                  })}
-                              </ScrollView>
-                          </View>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
+                                {Object.keys(categoryTotals || {}).map((cat) => {
+                                    const color = getColor(cat.trim());
+                                    return (
+                                        <View key={cat} style={[styles.catBox, { borderColor: color + "30" }]}>
+                                            <View style={[styles.catIconCircle, { backgroundColor: color + "12" }]}>
+                                                <Ionicons name="pie-chart" size={16} color={color} />
+                                            </View>
+                                            {/* 🔥 PRO FIX: Category name long ఉంటే 1 లైన్ కే కట్ అవ్వడానికి */}
+                                            <AppText style={styles.catBoxLabel} numberOfLines={1} ellipsizeMode="tail">
+                                              {cat}
+                                            </AppText>
+                                            <AppText style={[styles.catBoxValue, { color }]} numberOfLines={1}>
+                                                ₹{categoryTotals[cat].toLocaleString("en-IN")}
+                                            </AppText>
+                                        </View>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
                       </>
                   ) : null
               }
@@ -315,15 +341,20 @@ export default function ExpensesScreen() {
               renderItem={({ item }) => {
                 if (loading) return <ExpenseShimmerCard />;
 
-                const color = getColor(item.crop || "default");
+                const color = getColor(item.category || "default");
                 const date = item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : "---";
 
                 return (
-                    <View style={styles.card}>
+                   <View style={styles.card}>
                         <View style={[styles.cardBar, { backgroundColor: color }]} />
                         <View style={styles.cardInfo}>
-                            <AppText style={styles.cardCrop}>{item.crop}</AppText>
-                            <AppText style={styles.cardCat}>{item.category} | {item.date || date}</AppText>
+                            {/* 🔥 PRO FIX: numberOfLines & ellipsizeMode యాడ్ చేశాను */}
+                            <AppText style={styles.cardCrop} numberOfLines={1} ellipsizeMode="tail">
+                                {item.crop}
+                            </AppText>
+                            <AppText style={styles.cardCat} numberOfLines={1} ellipsizeMode="tail">
+                                {item.category} | {item.date || date}
+                            </AppText>
                         </View>
                         <View style={styles.cardRight}>
                             <AppText style={styles.cardAmount}>- ₹{item.amount.toLocaleString('en-IN')}</AppText>
@@ -376,7 +407,7 @@ export default function ExpensesScreen() {
               }}
             />
 
-            {/* 🔥 PREMIUM DELETE MODAL */}
+            {/* PREMIUM DELETE MODAL */}
             <Modal visible={deleteVisible} transparent animationType="fade">
               <View style={styles.overlay}>
                 <View style={styles.deleteBox}>
@@ -398,7 +429,7 @@ export default function ExpensesScreen() {
                       onPress={() => setDeleteVisible(false)}
                     >
                       <AppText style={styles.cancelText} language={language}>
-                        {language === "te" ? "వద్దు" : "Cancel"}
+                        {language === "te" ? "වద్దు" : "Cancel"}
                       </AppText>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -428,22 +459,38 @@ const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F8FAFC" },
     mainStatsCard: { margin: 20, padding: 22, borderRadius: 24, elevation: 5 },
     statLabel: { color: "#f7bbbb", fontSize: 12 },
-    
-    // Animated Text Styles
     statValue: { color: "#fff", fontSize: 32, fontWeight: "600", marginVertical: 2, marginTop: -5, fontFamily: 'System', padding: 0 },
     divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 12},
-    cropChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginRight: 8 },
     dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
     chipText: { color: '#fff', fontSize: 12 },
+    // 🔥 cropChip లో maxWidth పెట్టాలి, అప్పుడే అది స్క్రీన్ బయటకి పోకుండా ఆగుతుంది
+    cropChip: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: 'rgba(255,255,255,0.1)', 
+      paddingHorizontal: 12, 
+      paddingVertical: 6, 
+      borderRadius: 12, 
+      marginRight: 8,
+      maxWidth: 180 // 🔥 ఎక్కువ పొడవు ఉంటే కట్ చేస్తుంది
+    },
     
+    // 🔥 catBoxLabel లో ప్యాడింగ్ పెంచాలి
+    catBoxLabel: { 
+      fontSize: 11, 
+      color: '#64748b', 
+      fontWeight: '500', 
+      textAlign: 'center', 
+      paddingHorizontal: 8, // 🔥 4 నుంచి 8 కి పెంచాను
+      width: '100%'         // 🔥 టెక్స్ట్ సెంటర్ లో ఉండటానికి
+    },
     catBox: {
-      width: 110,          
+      width: 115,          
       height: 110,         
       backgroundColor: "#fff",
       borderRadius: 16,
       marginRight: 10,
       borderWidth: 1,
-      borderColor: "#E5E7EB",
       alignItems: "center",
       justifyContent: "center"
     },
@@ -456,12 +503,10 @@ const styles = StyleSheet.create({
       alignItems: "center",
       marginBottom: 6
     },
-    catBoxValue: { fontSize: 14, fontWeight: "600", marginTop: 2 },
+    catBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
     categorySummary: { paddingLeft: 20, marginBottom: 20 },
     sectionTitle: { fontSize: 17, fontWeight: '600', color: '#1e293b', marginBottom: 15 },
     catScroll: { flexDirection: 'row' },
-    catBoxLabel: { fontSize: 12, color: '#64748b', fontWeight: '500' },
-
     menuBtn: { padding: 6, borderRadius: 10, backgroundColor: "#F3F4F6" },
     card: { 
       marginHorizontal: 20, marginVertical: 6, backgroundColor: "#fff",
@@ -469,10 +514,10 @@ const styles = StyleSheet.create({
       padding: 14, borderWidth: 1, borderColor: "#E5E7EB"   
     },
     cardBar: { width: 4, height: '80%', borderRadius: 2 },
-    cardInfo: { flex: 1, marginLeft: 15 },
+    cardInfo: { flex: 1, marginLeft: 15, paddingRight: 10 }, // 🔥 paddingRight: 10 యాడ్ చేశాను
     cardCrop: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
     cardCat: { fontSize: 12, color: '#64748b', marginTop: 2 },
-    cardRight: { alignItems: 'flex-end', flexDirection: 'row', gap: 10 },
+    cardRight: { alignItems: 'center', flexDirection: 'row', gap: 10 },
     cardAmount: { fontSize: 16, fontWeight: '600', color: '#ef4444' },
 
     modernMenuItem: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, gap: 10 },

@@ -1,4 +1,3 @@
-//add owner work
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
@@ -15,13 +14,14 @@ import {
   FlatList,
   Modal,
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // 🔥 PRO FIX: Smooth Scrolling
 
 export default function AddOwnerWork() {
   const acresInputRef = useRef<TextInput>(null);
@@ -45,7 +45,6 @@ export default function AddOwnerWork() {
   const [searchText, setSearchText] = useState("");
 
   const [acres, setAcres] = useState("");
-  const [duration, setDuration] = useState("");
   const [unit, setUnit] = useState(language === "te" ? "గంటలు" : "Hrs");
   const [ratePerHour, setRatePerHour] = useState(""); 
 
@@ -66,7 +65,8 @@ export default function AddOwnerWork() {
   const advanceInputRef = useRef<TextInput>(null);
 
   const [notes, setNotes] = useState("");
-
+// 🔥 Duplicate Entry States
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [errorModal, setErrorModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
@@ -76,11 +76,13 @@ export default function AddOwnerWork() {
   const { ownerId } = useLocalSearchParams(); 
 
   const notesInputRef = useRef<TextInput>(null);
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
 
   // 🔥 FETCH CROPS FROM FIELDS
   const [userCrops, setUserCrops] = useState<string[]>([]);
 
   useEffect(() => {
+    isMounted.current = true;
     const loadUserCrops = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone) return;
@@ -101,9 +103,13 @@ export default function AddOwnerWork() {
         const data = doc.data();
         if (data.crop) set.add(data.crop);
       });
-      setUserCrops(Array.from(set));
+      if (isMounted.current) setUserCrops(Array.from(set));
     };
     loadUserCrops();
+
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -246,7 +252,11 @@ export default function AddOwnerWork() {
   }, []);
 
   /* ---------------- SAVE ---------------- */
+/* ---------------- SAVE (DUPLICATE CHECK) ---------------- */
   const handleSave = async () => {
+    if (saving) return;
+    Keyboard.dismiss(); 
+
     const newErrors: any = {};
     if (!date) newErrors.date = language === "te" ? "తేదీని ఎంచుకోండి*" : "Select Date*";
     if (!crop) newErrors.crop = language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop*";
@@ -273,32 +283,68 @@ export default function AddOwnerWork() {
 
     try {
       setSaving(true);
-      await new Promise(resolve => setTimeout(resolve, 0));
-
       const phone = await AsyncStorage.getItem("USER_PHONE");
-      
-      if (!phone || !ownerId) {
-        setSaving(false);
-        return;
-      }
-
-      const userDoc = await firestore().collection("users").doc(phone).get();
+      const userDoc = await firestore().collection("users").doc(phone!).get();
       const activeSession = userDoc.data()?.activeSession;
+      const oId = Array.isArray(ownerId) ? ownerId[0] : ownerId;
 
       if (!activeSession) {
+         setSaving(false);
+         return;
+      }
+
+      // 🔥 DUPLICATE CHECK LOGIC (ఆ రోజు చేసిన పనులను చెక్ చేయడం)
+      const existingSnap = await firestore()
+        .collection("users").doc(phone!)
+        .collection("owners").doc(oId)
+        .collection("entries")
+        .where("session", "==", activeSession)
+        .where("date", "==", date) // ఆ తేదీలో ఉన్నవి తీసుకురా
+        .get();
+
+      let isDuplicate = false;
+      
+      existingSnap.forEach(doc => {
+        const d = doc.data();
+        // పంట పేరు మరియు పని పేరు మ్యాచ్ అయితే...
+        if (d.crop === crop.trim() && d.work === work.trim()) {
+          if (workType === "acres" && d.acres === acres.trim()) {
+             isDuplicate = true; // ఎకరాలు కూడా సేమ్ ఉంటే డూప్లికేట్
+          } else if (workType === "time") {
+             isDuplicate = true; // టైమ్ బేస్డ్ అయితే పక్కా డూప్లికేట్
+          }
+        }
+      });
+
+      if (isDuplicate) {
         setSaving(false);
-        setErrorMsg(language === "te" ? "సెషన్ కనుగొనబడలేదు!" : "Active session not found!");
-        setErrorModal(true);
+        setShowDuplicateModal(true); // 🔥 వార్నింగ్ చూపించు, సేవ్ ఆపు!
         return;
       }
 
+      // డూప్లికేట్ లేకపోతే నార్మల్ గా సేవ్ చెయ్
+      await executeSave();
+
+    } catch (e) {
+      console.log("Check Error: ", e);
+      setSaving(false);
+    }
+  };
+
+  /* ---------------- FINAL EXECUTE SAVE ---------------- */
+  const executeSave = async () => {
+    try {
+      setShowDuplicateModal(false);
+      setSaving(true);
+
+      const phone = await AsyncStorage.getItem("USER_PHONE");
+      const userDoc = await firestore().collection("users").doc(phone!).get();
+      const activeSession = userDoc.data()?.activeSession;
       const oId = Array.isArray(ownerId) ? ownerId[0] : ownerId;
 
       await firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("owners")
-        .doc(oId)
+        .collection("users").doc(phone!)
+        .collection("owners").doc(oId)
         .collection("entries")
         .add({
           date,
@@ -315,30 +361,30 @@ export default function AddOwnerWork() {
           advanceAmount: advanceAmount.trim(),
           finalAmount: getFinalAmount(),
           notes: notes.trim(),
+          paymentStatus: "pending", // 🔥 By default pending
           session: activeSession,
           createdAt: firestore.FieldValue.serverTimestamp()
         });
 
       setTimeout(() => {
-        setSaving(false);
-        router.back();
+        if (isMounted.current) {
+          setSaving(false);
+          router.back();
+        }
       }, 500); 
 
     } catch (e) {
       console.log("Save Error: ", e);
       setSaving(false);
-      setErrorMsg(language === "te" ? "నెట్వర్క్ లేదా సర్వర్ సమస్య, మళ్లీ ప్రయత్నించండి." : "Something went wrong, please try again.");
-      setErrorModal(true);
     }
   };
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
-      if (l) setLanguage(l as any);
+      if (l && isMounted.current) setLanguage(l as any);
     });
   }, []);
 
-  // 🔥 TS ERROR FIX: NORMALIZE DATA FOR FLATLIST
   const filteredCrops = userCrops.filter(c =>
     c.toLowerCase().includes(searchText.toLowerCase().trim())
   );
@@ -362,9 +408,12 @@ export default function AddOwnerWork() {
         language={language}
       />
 
-      <ScrollView 
-        contentContainerStyle={{ padding: 16, paddingBottom: 300 }} 
+      {/* 🔥 PRO FIX: Replaced ScrollView with KeyboardAwareScrollView */}
+      <KeyboardAwareScrollView 
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        showsVerticalScrollIndicator={false}
       >
   
         {/* 📋 SECTION 1: WORK DETAILS */}
@@ -412,7 +461,7 @@ export default function AddOwnerWork() {
           onPress={() => {
             setModalType("crop");
             setActiveInput("crop");
-            setSearchText(""); // 🔥 Search Cleared
+            setSearchText(""); 
             if (errors.crop) setErrors({ ...errors, crop: "" });
           }}
         >
@@ -441,7 +490,7 @@ export default function AddOwnerWork() {
           onPress={() => {
             setModalType("work");
             setActiveInput("work");
-            setSearchText(""); // 🔥 Search Cleared
+            setSearchText(""); 
             if (errors.work) setErrors({ ...errors, work: "" });
           }}
         >
@@ -977,7 +1026,6 @@ export default function AddOwnerWork() {
                 minHeight: 120,
                 alignItems: "flex-start",
                 paddingVertical: 14,
-                marginBottom: 40
               },
               activeInput === "notes" && styles.inputFocused,
             ]}
@@ -1046,7 +1094,7 @@ export default function AddOwnerWork() {
 
         <TouchableOpacity 
           activeOpacity={0.85} 
-          style={styles.saveBtn} 
+          style={[styles.saveBtn, {marginTop: 50}]} 
           onPress={handleSave}
           disabled={saving}
         >
@@ -1060,7 +1108,7 @@ export default function AddOwnerWork() {
             </AppText>
           </LinearGradient>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* 📅 DATE PICKER */}
       {showDatePicker && (
@@ -1125,6 +1173,47 @@ export default function AddOwnerWork() {
         </View>
       </Modal>
 
+{/* 🔥 DUPLICATE ENTRY WARNING MODAL */}
+      <Modal visible={showDuplicateModal} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={[styles.modalBox, { backgroundColor: "#fff" }]}>
+            <View style={[styles.iconBg, { backgroundColor: "#FEF3C7" }]}>
+              <Ionicons name="copy-outline" size={36} color="#D97706" />
+            </View>
+            <AppText style={styles.modalTitleText}>
+              {language === "te" ? "ఇదివరకే నమోదు చేశారు!" : "Already Exists!"}
+            </AppText>
+            <AppText style={{ fontSize: 14, color: "#6B7280", marginTop: 8, textAlign: "center", lineHeight: 22 }}>
+              {language === "te"
+                ? `మీరు ఇదే తేదీన, ఇదే పంటపై, ఇదే పనిని ఇదివరకే నమోదు చేశారు.\n\nఇది రెండవసారి (మరో సెషన్ లో) చేసిన పనా?`
+                : `An entry with the same Date, Crop, and Work already exists.\n\nIs this a second session for the same day?`}
+            </AppText>
+            <View style={{ flexDirection: "row", marginTop: 24, gap: 16, width: "100%" }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.cancelBtn, { flex: 1, backgroundColor: "#F3F4F6" }]}
+                onPress={() => setShowDuplicateModal(false)}
+              >
+                <AppText style={{ color: "#374151", fontWeight: "600" }}>
+                  {language === "te" ? "వద్దు" : "Cancel"}
+                </AppText>
+              </TouchableOpacity>
+              
+              {/* 🔥 Add Anyway Button */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.deleteConfirmBtn, { flex: 1, backgroundColor: "#D97706" }]}
+                onPress={executeSave}
+              >
+                <AppText style={{ color: "#fff", fontWeight: "600" }}>
+                  {language === "te" ? "పర్వాలేదు, చేర్చు" : "Add Anyway"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 🔥 MAIN SELECTION MODAL (CROP/WORK) */}
       <Modal visible={modalType !== null} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -1137,7 +1226,7 @@ export default function AddOwnerWork() {
               </AppText>
               <TouchableOpacity onPress={() => {
                 setModalType(null);
-                setSearchText(""); // 🔥 SEARCH CLEAR ON CLOSE
+                setSearchText(""); 
                 setActiveInput(null);
               }}>
                 <Ionicons name="close-circle" size={28} color="#9CA3AF" />
@@ -1158,7 +1247,7 @@ export default function AddOwnerWork() {
                 style={{ flex: 1, fontSize: 16, fontFamily: "Mandali", color: "#1F2937", paddingVertical: 8 }}
               />
               
-              {/* 🔥 ADD CUSTOM TEXT BUTTON (Only for Works!) */}
+              {/* 🔥 ADD CUSTOM TEXT BUTTON */}
               {searchText.trim().length > 0 && modalType === "work" && (
                 <TouchableOpacity
                   onPress={() => {
@@ -1174,23 +1263,29 @@ export default function AddOwnerWork() {
               )}
               
               {/* 🎤 MODAL MIC */}
-              <TouchableOpacity
-                onPress={() => handleVoiceInput(modalType === "crop" ? "crop" : "work")}
-                style={{ marginLeft: 10, padding: 6, borderRadius: 10, backgroundColor: "#E5E7EB" }}
-              >
-                <MaterialCommunityIcons
-                  name={isListening && voiceTarget === (modalType === "crop" ? "crop" : "work") ? "microphone" : "microphone-outline"}
-                  size={20}
-                  color={isListening && voiceTarget === (modalType === "crop" ? "crop" : "work") ? "#EF4444" : "#2E7D32"}
-                />
-              </TouchableOpacity>
+              {searchText.length > 0 ? (
+                 <TouchableOpacity onPress={() => setSearchText("")} style={{ marginLeft: 10, padding: 6, borderRadius: 10 }}>
+                   <Ionicons name="close-circle" size={22} color="#9CA3AF" />
+                 </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => handleVoiceInput(modalType === "crop" ? "crop" : "work")}
+                  style={{ marginLeft: 10, padding: 6, borderRadius: 10, backgroundColor: "#E5E7EB" }}
+                >
+                  <MaterialCommunityIcons
+                    name={isListening && voiceTarget === (modalType === "crop" ? "crop" : "work") ? "microphone" : "microphone-outline"}
+                    size={20}
+                    color={isListening && voiceTarget === (modalType === "crop" ? "crop" : "work") ? "#EF4444" : "#2E7D32"}
+                  />
+                </TouchableOpacity>
+              )}
             </View>
 
             <FlatList
               data={listData}
               keyExtractor={(item, index) => `${item.id}-${index}`}
+              keyboardShouldPersistTaps="handled"
               ListEmptyComponent={() => {
-                // 🔥 SHOW "ADD IN FIELDS" UI IF IT IS CROP MODAL
                 if (modalType === "crop") {
                   return (
                     <View style={{ padding: 20, alignItems: "center" }}>
@@ -1206,7 +1301,7 @@ export default function AddOwnerWork() {
                           activeOpacity={0.85}
                           onPress={() => { 
                             setModalType(null); 
-                            setSearchText(""); // 🔥 Clear
+                            setSearchText(""); 
                             router.push("/farmer/fields"); 
                           }}
                           style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#16A34A", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12 }}
@@ -1221,7 +1316,6 @@ export default function AddOwnerWork() {
                   );
                 } 
 
-                // 🔥 IF WORK MODAL AND SEARCH IS TYPED, SHOW "ADD CUSTOM"
                 if (modalType === "work" && searchText.trim().length > 0) {
                   return (
                     <TouchableOpacity
@@ -1251,7 +1345,7 @@ export default function AddOwnerWork() {
                       else setWork(item.label);
 
                       setModalType(null);
-                      setSearchText(""); // 🔥 Clear search on press
+                      setSearchText(""); 
                       setActiveInput(null);
                     }}
                   >
@@ -1297,7 +1391,6 @@ export default function AddOwnerWork() {
   );
 }
 
-// 🔥 EXACT STYLES FROM FIRST SCREEN 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   inputBox: {
@@ -1411,6 +1504,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F3F4F6",
     margin: 20,
+    marginTop: 0,
     borderRadius: 18,
     paddingHorizontal: 12,
     borderWidth: 1,
@@ -1582,4 +1676,32 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10
   },
+  modalBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center",
+    elevation: 10
+  },
+  iconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center"
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center"
+  }
 });

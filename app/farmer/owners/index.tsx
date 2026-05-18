@@ -8,7 +8,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -43,6 +43,8 @@ export default function OwnersList() {
   // 🔥 LOCK LOGIC & MODERN UI STATES
   const [actionLoading, setActionLoading] = useState(false);
   const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
+  
+  const isMounted = useRef(true);
 
   useSpeechRecognitionEvent("result", (event) => {
     if (!isScreenFocused || !isListening) return;
@@ -64,37 +66,41 @@ export default function OwnersList() {
   };
 
   useEffect(() => {
-    return () => { ExpoSpeechRecognitionModule.stop(); };
-  }, []);
-
-  useEffect(() => {
-    AsyncStorage.getItem("APP_LANG").then(l => { if (l) setLanguage(l as any); });
+    isMounted.current = true;
+    AsyncStorage.getItem("APP_LANG").then(l => { if (l && isMounted.current) setLanguage(l as any); });
+    return () => { 
+      isMounted.current = false;
+      ExpoSpeechRecognitionModule.stop(); 
+    };
   }, []);
 
   /* ---------------- LOAD DATA ---------------- */
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
+      isMounted.current = true;
 
       const loadData = async () => {
         try {
           const phone = await AsyncStorage.getItem("USER_PHONE");
           if (!phone) return;
 
-          setLoading(true);
+          if (isMounted.current) setLoading(true);
 
           const userDoc = await firestore().collection("users").doc(phone).get();
           const session = userDoc.data()?.activeSession;
 
           if (!session) {
-            setData([]); 
-            setLoading(false);
+            if (isMounted.current) {
+              setData([]); 
+              setLoading(false);
+            }
             return;
           }
           
-          setActiveSession(session);
+          if (isMounted.current) setActiveSession(session);
 
-          // 🔥 Fetching "owners" instead of drivers
+          // Fetching "owners" instead of drivers
           unsub = firestore()
             .collection("users")
             .doc(phone)
@@ -102,6 +108,8 @@ export default function OwnersList() {
             .where("session", "==", session)
             .onSnapshot(
               (snap) => {
+                if (!isMounted.current) return;
+                
                 if (!snap || !snap.docs) {
                   setData([]);
                   setLoading(false);
@@ -126,18 +134,21 @@ export default function OwnersList() {
               },
               (error) => {
                 console.log("Firestore Error: ", error);
-                setLoading(false);
+                if (isMounted.current) setLoading(false);
               }
             );
         } catch (error) {
           console.log("Loading Error: ", error);
-          setLoading(false);
+          if (isMounted.current) setLoading(false);
         }
       };
 
       loadData();
 
-      return () => { if (unsub) unsub(); };
+      return () => { 
+        isMounted.current = false;
+        if (unsub) unsub(); 
+      };
     }, [])
   );
 
@@ -160,7 +171,6 @@ export default function OwnersList() {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone || !activeSession) return false;
 
-      // చెక్ వర్క్స్ ఎంట్రీస్
       const entriesSnap = await firestore()
         .collection("users").doc(phone)
         .collection("owners").doc(ownerId)
@@ -179,7 +189,7 @@ export default function OwnersList() {
   const handleEditClick = async (item: any) => {
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
-    setActionLoading(false);
+    if (isMounted.current) setActionLoading(false);
 
     router.push({
       pathname: "/farmer/owners/add-owner",
@@ -196,13 +206,15 @@ export default function OwnersList() {
   const handleDeleteClick = async (item: any) => {
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
-    setActionLoading(false);
+    if (isMounted.current) setActionLoading(false);
 
     if (hasRecords) {
-      setShowCannotDeleteModal(true); 
+      if (isMounted.current) setShowCannotDeleteModal(true); 
     } else {
-      setDeleteItem(item);
-      setShowDeleteModal(true); 
+      if (isMounted.current) {
+        setDeleteItem(item);
+        setShowDeleteModal(true); 
+      }
     }
   };
 
@@ -224,7 +236,7 @@ export default function OwnersList() {
     } catch (e) {
       console.log("Delete Error:", e);
     }
-    setDeleteItem(null);
+    if (isMounted.current) setDeleteItem(null);
   };
 
   // MODERN MENU STYLES
@@ -256,9 +268,10 @@ export default function OwnersList() {
         </View>
       )}
 
+      {/* 🔥 PRO FIX: CLARITY IN HEADER FOR FARMERS */}
       <AppHeader
-        title={language === "te" ? "వాహన యజమానులు" : "Vehicle Owners"}
-        subtitle={language === "te" ? "మీ పొలంలో పని చేసిన వారు" : "Owners who worked in your field"}
+        title={language === "te" ? "కిరాయి పనులు" : "Rental Owners"}
+        subtitle={language === "te" ? "దుక్కి, కోత లాంటి పనులు చేసిన యజమానులు" : "Owners who did works in field"}
         language={language}
       />
 
@@ -268,7 +281,7 @@ export default function OwnersList() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder={language === "te" ? "యజమాని పేరు వెతకండి..." : "Search owner..."}
+            placeholder={language === "te" ? "ట్రాక్టర్ యజమాని పేరు వెతకండి..." : "Search tractor owner..."}
             placeholderTextColor="#9CA3AF"
             cursorColor="#16A34A"
             selectionColor="#16A34A40"
@@ -301,22 +314,24 @@ export default function OwnersList() {
           data={filtered}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled" 
+          keyboardDismissMode="on-drag"
           contentContainerStyle={[
             { padding: 20, paddingBottom: 100 },
             filtered.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
           ListEmptyComponent={
+            /* 🔥 PRO FIX: CLARITY IN EMPTY STATE */
             <AppEmptyState
               iconName={search.trim().length > 0 ? "search-outline" : "tractor"}
               title={
                 search.trim().length > 0
                   ? language === "te" ? "ఏమి దొరకలేదు" : "Not Found"
-                  : language === "te" ? "యజమానులు లేరు" : "No Owners Added"
+                  : language === "te" ? "యజమాని ఎవరూ లేరు" : "No Owners Added"
               }
               subtitle={
                 search.trim().length > 0
                   ? language === "te" ? "మీ శోధనకు సరిపడే ఫలితాలు లేవు" : "No results match your search"
-                  : language === "te" ? "+ బటన్ నొక్కి వాహన యజమానిని చేర్చండి" : "Tap + button to add owners"
+                  : language === "te" ? "మీ పొలంలో ట్రాక్టర్/వాహనంతో పని చేసిన వాళ్ళని '+' నొక్కి యాడ్ చేయండి" : "Tap '+' to add tractor/vehicle owners who worked in your field"
               }
               language={language}
             />
@@ -400,7 +415,7 @@ export default function OwnersList() {
               <Ionicons name="trash-outline" size={36} color="#DC2626" />
             </View>
             <AppText style={styles.modalTitle} language={language}>{language === "te" ? "తొలగించాలా?" : "Delete Entry?"}</AppText>
-            <AppText style={styles.modalSub} language={language}>{language === "te" ? "ఈ యజమానిని పూర్తిగా తొలగించాలా?" : "Are you sure you want to delete this record?"}</AppText>
+            <AppText style={styles.modalSub} language={language}>{language === "te" ? "ఈ యజమాని అకౌంట్ ని పూర్తిగా తొలగించాలా?" : "Are you sure you want to delete this owner account?"}</AppText>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDeleteModal(false)}>
                 <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
@@ -422,8 +437,8 @@ export default function OwnersList() {
             <AppText style={styles.modalTitle} language={language}>{language === "te" ? "తొలగించడం కుదరదు" : "Cannot Delete"}</AppText>
             <AppText style={[styles.modalSub, { lineHeight: 22 }]} language={language}>
               {language === "te"
-                ? "ఈ యజమానికి సంబంధించి పనుల వివరాలు ఇప్పటికే రికార్డ్ అయ్యాయి. కావున వీరిని తొలగించడం కుదరదు."
-                : "This owner has existing work records. Therefore, they cannot be deleted."}
+                ? "ఈ ఓనర్ కు సంబంధించి పనుల వివరాలు ఇప్పటికే మీ అకౌంట్లో రికార్డ్ అయ్యాయి. కావున వీరిని తొలగించడం కుదరదు."
+                : "This owner has existing work records logged. Therefore, they cannot be deleted."}
             </AppText>
             <View style={styles.modalBtns}>
               <TouchableOpacity activeOpacity={0.8} style={[styles.cancelBtn, { flex: 1, backgroundColor: '#F59E0B' }]} onPress={() => setShowCannotDeleteModal(false)}>

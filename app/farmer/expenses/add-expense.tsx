@@ -1,22 +1,24 @@
 // app/farmer/add-expenses.tsx
 
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  FlatList, Modal, SafeAreaView, ScrollView, StatusBar,
-  StyleSheet, TextInput, TouchableOpacity, View,
-  KeyboardAvoidingView, Platform, Keyboard
+  FlatList,
+  Keyboard,
+  Modal, SafeAreaView, StatusBar,
+  StyleSheet, TextInput, TouchableOpacity, View
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // 🔥 PRO FIX: Smooth keyboard scrolling
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { useIsFocused } from "@react-navigation/native";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 
 // URL params helper
 const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
@@ -25,6 +27,7 @@ export default function AddExpense() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const isScreenFocused = useIsFocused();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Complete leak prevention
 
   const editId = getStr(params.editId);
 
@@ -35,10 +38,13 @@ export default function AddExpense() {
   
   const [userCrops, setUserCrops] = useState<string[]>([]);
   
-  // 🔥 New States for Modal & Standard Pattern
+  // 🔥 States for Modal & Info Boxes
   const [modalType, setModalType] = useState<"crop" | "cat" | null>(null);
   const [searchText, setSearchText] = useState("");
   const [showLabourInfo, setShowLabourInfo] = useState(false);
+  const [showRentInfo, setShowRentInfo] = useState(false);
+  const [showTractorInfo, setShowTractorInfo] = useState(false); 
+
   const [loading, setLoading] = useState(false);
   const [language, setLanguage] = useState<"te" | "en">("te");
   
@@ -48,19 +54,45 @@ export default function AddExpense() {
   const [isListening, setIsListening] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<"modal" | null>(null);
   const [activeSession, setActiveSession] = useState("");
-  const [showRentInfo, setShowRentInfo] = useState(false);
   
   const amtRef = useRef<TextInput>(null);
 
+  // 🔥 FIXED REAL-WORLD FARMING CATEGORIES (NO CUSTOM ADDITIONS FOR CHART STABILITY)
+const categoryOptions = [
+      { en: "Seeds", te: "విత్తనాలు" },
+      { en: "Fertilizers", te: "ఎరువులు" },
+      { en: "Pesticides / Sprays", te: "పురుగుల మందులు / స్ప్రేలు" },
+      { en: "Tractor / Machinery", te: "ట్రాక్టర్ / యంత్రాలు" },
+      { en: "Daily Labour", te: "కూలీలు / రోజువారీ పనివారు" },
+      { en: "Transport / Auto", te: "రవాణా / ఆటో కిరాయి" },
+      { en: "Water / Motor Repair", te: "నీటి పారుదల / మోటార్ రిపేర్లు" },
+      { en: "Electricity Bill", te: "కరెంట్ బిల్లు" },
+      { en: "Bags / Packaging", te: "సంచులు / ప్యాకింగ్ ఖర్చులు" },
+      { en: "Storage / Godown", te: "కోల్డ్ స్టోరేజ్ / గోడౌన్" },
+      { en: "Hamali / Loading", te: "హమాలీ / లోడింగ్ ఖర్చులు" },
+      { en: "Land Lease / Rent", te: "భూమి కౌలు (Lease)" },
+      { en: "Loan Interest", te: "అప్పుల వడ్డీ" },
+      { en: "Crop Insurance", te: "పంట భీమా" },
+      { en: "Market Commission", te: "మార్కెట్ కమిషన్ (Cess)" },
+      { en: "Other Expenses", te: "ఇతర ఖర్చులు (Others)" }
+  ];
+
+  const isLabourCategory = (text: string) => text.includes("కూలీలు") || text.includes("Labour");
+  const isRentCategory = (text: string) => text.includes("కౌలు") || text.includes("Lease");
+  const isTractorCategory = (text: string) => text.includes("ట్రాక్టర్") || text.includes("Tractor");
+
   useEffect(() => {
+    isMounted.current = true;
     const loadSession = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone) return;
 
       const doc = await firestore().collection("users").doc(phone).get();
-      setActiveSession(doc.data()?.activeSession || "");
+      if (isMounted.current) setActiveSession(doc.data()?.activeSession || "");
     };
     loadSession();
+
+    return () => { isMounted.current = false; };
   }, []);
 
   useEffect(() => {
@@ -81,7 +113,7 @@ export default function AddExpense() {
         if (d.crop) set.add(d.crop);
       });
 
-      setUserCrops(Array.from(set));
+      if (isMounted.current) setUserCrops(Array.from(set));
     };
 
     if (activeSession) {
@@ -89,68 +121,31 @@ export default function AddExpense() {
     }
   }, [activeSession]);
 
-  // 🔥 Check initially if editing
   useEffect(() => {
     if (editId) {
       setShowLabourInfo(isLabourCategory(category));
       setShowRentInfo(isRentCategory(category));
+      setShowTractorInfo(isTractorCategory(category)); 
     }
   }, [editId, category]);
 
-  const categoryOptions = [
-      { en: "Seeds", te: "విత్తనాలు" },
-      { en: "Fertilizer", te: "ఎరువులు" },
-      { en: "Pesticides", te: "పురుగుల మందులు" },
-      { en: "Transport", te: "రవాణా" },
-      { en: "Tractor", te: "ట్రాక్టర్ / యంత్రాలు" },
-      { en: "Electricity", te: "కరెంట్ బిల్లు" },
-      { en: "Water(Irrigation)", te: "నీటి ఖర్చులు" },
-      { en: "Storage", te: "కోల్డ్ స్టోరేజ్ / నిల్వ" },
-      { en: "Packaging", te: "ప్యాకింగ్ ఖర్చులు" },
-      { en: "Labour", te: "రోజువారీ కూలీలు" },
-      { en: "Loan Interest", te: "అప్పుల వడ్డీ" },
-      { en: "Market Commission", te: "మార్కెట్ కమిషన్" },
-      { en: "Equipment Repair", te: "యంత్రాల రిపేర్లు" },
-      { en: "Other", te: "ఇతర ఖర్చులు" }
-  ];
-
-  const isLabourCategory = (text: string) => {
-    const t = text.toLowerCase().trim();
-    const keywords = [
-      "labour", "laber", "leber", "worker",
-      "mestri", "mestry", "maistree", "mestree",
-      "kuli", "cooli", "coolie", "koolie",
-      "panivallu", "panollu", "mutha",
-      "లేబర్", "మేస్త్రి", "మేస్త్రీ", "కూలి", "కూలీ", "పనివారు", "పనోళ్ళు", "ముఠా"
-    ];
-    return keywords.some(keyword => t.includes(keyword));
-  };
-
-  const isRentCategory = (text: string) => {
-    const t = text.toLowerCase().trim();
-    const keywords = [
-      "rent", "lease", "kavulu", "bhumi kavulu", "land rent",
-      "కౌలు", "అద్దె", "భూమి కౌలు", "లీజు"
-    ];
-    return keywords.some(keyword => t.includes(keyword));
-  };
-
   useEffect(() => {
-      AsyncStorage.getItem("APP_LANG").then(l => { if (l) setLanguage(l as any); });
+      AsyncStorage.getItem("APP_LANG").then(l => { if (l && isMounted.current) setLanguage(l as any); });
   }, []);
 
   const handlePick = (val: string) => {
-    Keyboard.dismiss(); // 🔥 Keyboard dismiss on select
+    Keyboard.dismiss(); 
     if (modalType === "crop") {
       if (!userCrops.includes(val)) return;
       setCrop(val);
       setModalType(null);
       if (errors.crop) setErrors({ ...errors, crop: "" });
       
-      // Auto open next modal logic
       setTimeout(() => {
-        setSearchText("");
-        setModalType("cat");
+        if (isMounted.current) {
+          setSearchText("");
+          setModalType("cat");
+        }
       }, 300);
       return;
     }
@@ -162,10 +157,13 @@ export default function AddExpense() {
 
     setShowLabourInfo(isLabourCategory(val));
     setShowRentInfo(isRentCategory(val));
+    setShowTractorInfo(isTractorCategory(val));
 
     setTimeout(() => {
-      setActiveInput("amt");
-      amtRef.current?.focus();
+      if (isMounted.current) {
+        setActiveInput("amt");
+        amtRef.current?.focus();
+      }
     }, 300);
   };
 
@@ -173,7 +171,6 @@ export default function AddExpense() {
     if (modalType !== null) {
       setSearchText("");
     } else {
-      // 🔥 Safety Mic Cleanup when modal closes
       ExpoSpeechRecognitionModule.stop();
       setIsListening(false);
       setVoiceTarget(null);
@@ -188,8 +185,9 @@ export default function AddExpense() {
   });
 
   const handleSave = async () => {
-      Keyboard.dismiss(); // 🔥 Always close keyboard on save
-      // 🔥 INLINE VALIDATION
+      if (loading) return; 
+      Keyboard.dismiss(); 
+      
       const newErrors: any = {};
       if (!crop.trim()) newErrors.crop = language === "te" ? "పంటను ఎంచుకోండి*" : "Select Crop Name*";
       if (!category.trim()) newErrors.category = language === "te" ? "ఖర్చు రకాన్ని ఎంచుకోండి*" : "Select Category*";
@@ -203,7 +201,7 @@ export default function AddExpense() {
 
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone || !activeSession) {
-        setLoading(false);
+        if (isMounted.current) setLoading(false);
         return;
       }
 
@@ -220,17 +218,17 @@ export default function AddExpense() {
           const ref = firestore().collection("users").doc(phone).collection("expenses");
           editId ? await ref.doc(editId as string).update(data) : await ref.add(data);
 
-          router.back();
+          if (isMounted.current) router.back();
       } catch (e) {
         console.log("Expense save error:", e);
       } finally {
-        setLoading(false);
+        if (isMounted.current) setLoading(false);
       }
   };
 
   const startVoice = async () => {
     try {
-      ExpoSpeechRecognitionModule.stop(); // Safe restart
+      ExpoSpeechRecognitionModule.stop(); 
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!res.granted) return;
 
@@ -250,7 +248,6 @@ export default function AddExpense() {
     if (!isListening) return;
     if (!event.results?.length) return;
 
-    // 🔥 Punctuation Bug fix
     const text = event.results[0].transcript.replace(/[.,?!]/g, "").trim();
     if (voiceTarget === "modal" && modalType !== null) {
       setSearchText(text);
@@ -262,7 +259,6 @@ export default function AddExpense() {
     setVoiceTarget(null);
   });
 
-  // 🔥 Complete Leak Prevention
   useEffect(() => {
     if (!isScreenFocused) {
       ExpoSpeechRecognitionModule.stop();
@@ -280,104 +276,118 @@ export default function AddExpense() {
               language={language}
           />
 
-          {/* 🔥 Keyboard Avoiding View for smaller screens */}
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-                
-                {/* 🌾 CROP NAME SELECTOR */}
-                <TouchableOpacity 
-                    activeOpacity={1}
-                    style={[styles.inputBox, activeInput === "crop" && styles.inputFocused, errors.crop && styles.inputError]}
-                    onPress={() => { setModalType("crop"); setActiveInput("crop"); }}
-                >
-                    <Ionicons name="leaf-outline" size={20} color={crop ? "#DC2626" : "#9CA3AF"} />
-                    <View style={styles.inputWrapper}>
-                        <AppText style={{ color: crop ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
-                            {crop || (language === "te" ? "పంట పేరును ఎంచుకోండి*" : "Select Crop Name*")}
-                        </AppText>
-                    </View>
-                    <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-                </TouchableOpacity>
-                {errors.crop && <AppText style={styles.errorText} language={language}>{errors.crop}</AppText>}
-
-                {/* 📂 CATEGORY SELECTOR */}
-                <TouchableOpacity 
-                    activeOpacity={1}
-                    style={[styles.inputBox, activeInput === "cat" && styles.inputFocused, errors.category && styles.inputError]}
-                    onPress={() => { setModalType("cat"); setActiveInput("cat"); }}
-                >
-                    <Ionicons name="grid-outline" size={20} color={category ? "#DC2626" : "#9CA3AF"} />
-                    <View style={styles.inputWrapper}>
-                        <AppText style={{ color: category ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
-                            {category || (language === "te" ? "ఖర్చు రకాన్ని ఎంచుకోండి*" : "Select Category*")}
-                        </AppText>
-                    </View>
-                    <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-                </TouchableOpacity>
-                {errors.category && <AppText style={styles.errorText} language={language}>{errors.category}</AppText>}
-
-                {/* 💰 AMOUNT INPUT */}
-                <TouchableOpacity 
+          <KeyboardAwareScrollView 
+            contentContainerStyle={styles.container} 
+            keyboardShouldPersistTaps="handled"
+            enableOnAndroid={true}
+            showsVerticalScrollIndicator={false}
+          >
+              
+              {/* 🌾 CROP NAME SELECTOR */}
+              <TouchableOpacity 
                   activeOpacity={1}
-                  onPress={() => { setActiveInput("amt"); amtRef.current?.focus(); }}
-                  style={[styles.inputBox, activeInput === "amt" && styles.inputFocused, errors.amount && styles.inputError]}
-                >
-                    <Ionicons name="cash-outline" size={20} color={amount ? "#DC2626" : "#9CA3AF"} />
-                    <View style={styles.inputWrapper}>
-                        {!amount && activeInput !== "amt" && (
-                            <AppText style={styles.customPlaceholder}>
-                                {language === "te" ? "ఖర్చు చేసిన మొత్తం*" : "Amount Spent*"}
-                            </AppText>
-                        )}
-                        <TextInput
-                            ref={amtRef}
-                            value={amount}
-                            cursorColor="#DC2626"
-                            selectionColor="#DC262640"
-                            onChangeText={(txt) => { setAmount(txt); if(errors.amount) setErrors({...errors, amount: ""}); }}
-                            style={[styles.input, { display: (amount || activeInput === "amt") ? "flex" : "none" }]}
-                            keyboardType="numeric"
-                            onFocus={() => setActiveInput("amt")}
-                            onBlur={() => setActiveInput(null)}
-                        />
-                    </View>
-                </TouchableOpacity>
-                {errors.amount && <AppText style={styles.errorText} language={language}>{errors.amount}</AppText>}
-
-                {/* LABOUR INFO NOTE */}
-                {showLabourInfo && (
-                  <View style={styles.infoBox}>
-                    <Ionicons name="information-circle-outline" size={18} color="#F59E0B" />
-                    <AppText style={styles.infoText} language={language}>
-                      {language === "te"
-                        ? "మేస్త్రీకి ఇచ్చిన కూలీ డబ్బులు ఇక్కడ నమోదు చేయవద్దు. అవి చివరలో నేరుగా లెక్కలోకి వస్తాయి."
-                        : "Do not enter mestri labour payments here. They are already calculated separately."}
-                    </AppText>
+                  style={[styles.inputBox, activeInput === "crop" && styles.inputFocused, errors.crop && styles.inputError]}
+                  onPress={() => { setModalType("crop"); setActiveInput("crop"); }}
+              >
+                  <Ionicons name="leaf-outline" size={20} color={crop ? "#DC2626" : "#9CA3AF"} />
+                  <View style={styles.inputWrapper}>
+                      <AppText style={{ color: crop ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
+                          {crop || (language === "te" ? "పంట పేరును ఎంచుకోండి*" : "Select Crop Name*")}
+                      </AppText>
                   </View>
-                )}
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+              {errors.crop && <AppText style={styles.errorText} language={language}>{errors.crop}</AppText>}
 
-                {/* RENT/KAVULU INFO NOTE 🔥 */}
-                {showRentInfo && (
-                  <View style={[styles.infoBox, { borderColor: "#F87171", backgroundColor: "#FEF2F2" }]}>
-                    <Ionicons name="alert-circle-outline" size={18} color="#DC2626" />
-                    <AppText style={[styles.infoText, { color: "#991B1B" }]} language={language}>
-                      {language === "te"
-                        ? "భూమి కౌలు ఖర్చులు ఇక్కడ నమోదు చేయకండి. దీని కోసం ప్రత్యేక విభాగం ఉంది."
-                        : "Do not add Land Rent/Lease expenses here. Please use the dedicated section for Rent."}
-                    </AppText>
+              {/* 📂 CATEGORY SELECTOR */}
+              <TouchableOpacity 
+                  activeOpacity={1}
+                  style={[styles.inputBox, activeInput === "cat" && styles.inputFocused, errors.category && styles.inputError]}
+                  onPress={() => { setModalType("cat"); setActiveInput("cat"); }}
+              >
+                  <Ionicons name="grid-outline" size={20} color={category ? "#DC2626" : "#9CA3AF"} />
+                  <View style={styles.inputWrapper}>
+                      <AppText style={{ color: category ? "#1F2937" : "#9CA3AF", fontSize: 16, fontFamily: "Mandali" }}>
+                          {category || (language === "te" ? "ఖర్చు రకాన్ని ఎంచుకోండి*" : "Select Category*")}
+                      </AppText>
                   </View>
-                )}
-                
-                {/* SAVE BUTTON - ORIGINAL THEME UNTOUCHED */}
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
-                    <LinearGradient colors={["#DC2626", "#991B1B"]} style={styles.saveGradient}>
-                        <AppText style={styles.saveText}>
-                            {editId ? (language === "te" ? "ఖర్చు సవరించండి" : "Update Expense") : (language === "te" ? "ఖర్చు భద్రపరచండి" : "Save Expense")}
-                        </AppText>
-                    </LinearGradient>
-                </TouchableOpacity>
-            </ScrollView>
-          </KeyboardAvoidingView>
+                  <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+              {errors.category && <AppText style={styles.errorText} language={language}>{errors.category}</AppText>}
+
+              {/* 💰 AMOUNT INPUT */}
+              <TouchableOpacity 
+                activeOpacity={1}
+                onPress={() => { setActiveInput("amt"); amtRef.current?.focus(); }}
+                style={[styles.inputBox, activeInput === "amt" && styles.inputFocused, errors.amount && styles.inputError]}
+              >
+                  <Ionicons name="cash-outline" size={20} color={amount ? "#DC2626" : "#9CA3AF"} />
+                  <View style={styles.inputWrapper}>
+                      {!amount && activeInput !== "amt" && (
+                          <AppText style={styles.customPlaceholder}>
+                              {language === "te" ? "ఖర్చు చేసిన మొత్తం*" : "Amount Spent*"}
+                          </AppText>
+                      )}
+                      <TextInput
+                          ref={amtRef}
+                          value={amount}
+                          cursorColor="#DC2626"
+                          selectionColor="#DC262640"
+                          onChangeText={(txt) => { setAmount(txt); if(errors.amount) setErrors({...errors, amount: ""}); }}
+                          style={[styles.input, { display: (amount || activeInput === "amt") ? "flex" : "none" }]}
+                          keyboardType="numeric"
+                          onFocus={() => setActiveInput("amt")}
+                          onBlur={() => setActiveInput(null)}
+                      />
+                  </View>
+              </TouchableOpacity>
+              {errors.amount && <AppText style={styles.errorText} language={language}>{errors.amount}</AppText>}
+
+              {/* LABOUR INFO NOTE */}
+              {showLabourInfo && (
+                <View style={styles.infoBox}>
+                  <Ionicons name="information-circle-outline" size={18} color="#F59E0B" />
+                  <AppText style={styles.infoText} language={language}>
+                    {language === "te"
+                      ? "గమనిక: మీరు 'కూలీల ఖాతా' ఫీచర్ వాడుతుంటే, ఆ ఖర్చులు ఆటోమేటిక్ గా లెక్కించబడతాయి. ఒకవేళ విడిగా బయట కూలీలకు డబ్బులు ఇస్తే ఇక్కడ రాసుకోవచ్చు."
+                      : "Note: If you use the 'Labour Account' feature, those costs sync automatically. You can add separate daily wage payments here."}
+                  </AppText>
+                </View>
+              )}
+
+              {/* RENT/KAVULU INFO NOTE */}
+              {showRentInfo && (
+                <View style={[styles.infoBox, { borderColor: "#F87171", backgroundColor: "#FEF2F2" }]}>
+                  <Ionicons name="alert-circle-outline" size={18} color="#DC2626" />
+                  <AppText style={[styles.infoText, { color: "#991B1B" }]} language={language}>
+                    {language === "te"
+                      ? "భూమి కౌలు (Lease) వివరాలు 'నా పొలాలు' (My Fields) విభాగంలో నమోదు చేస్తే బాగుంటుంది. ఇతరత్రా అద్దెలు అయితే ఇక్కడ రాసుకోవచ్చు."
+                      : "It is recommended to add Land Lease/Rent in the 'My Fields' section. You can add other rental expenses here."}
+                  </AppText>
+                </View>
+              )}
+
+              {/* 🔥 TRACTOR AUTO-SYNC INFO NOTE 🔥 */}
+              {showTractorInfo && (
+                <View style={[styles.infoBox, { borderColor: "#93C5FD", backgroundColor: "#EFF6FF" }]}>
+                  <Ionicons name="sync-circle-outline" size={20} color="#2563EB" />
+                  <AppText style={[styles.infoText, { color: "#1E3A8A" }]} language={language}>
+                    {language === "te"
+                      ? "గమనిక: 'కిరాయి పనులు' ఫీచర్ లో లాక్ చేసిన ట్రాక్టర్ ఖర్చులు ఆటోమేటిక్ గా ఇక్కడికి వస్తాయి. విడిగా యంత్రాలకు అద్దె చెల్లిస్తే ఇక్కడ నమోదు చేయండి."
+                      : "Note: Expenses locked in 'Rental Works' sync automatically. Add separate manual machinery payments here."}
+                  </AppText>
+                </View>
+              )}
+              
+              {/* SAVE BUTTON */}
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading} activeOpacity={0.9}>
+                  <LinearGradient colors={["#DC2626", "#991B1B"]} style={styles.saveGradient}>
+                      <AppText style={styles.saveText}>
+                          {editId ? (language === "te" ? "ఖర్చు సవరించండి" : "Update Expense") : (language === "te" ? "ఖర్చు భద్రపరచండి" : "Save Expense")}
+                      </AppText>
+                  </LinearGradient>
+              </TouchableOpacity>
+          </KeyboardAwareScrollView>
 
           {/* 🛠 HYBRID SELECTION MODAL */}
           <Modal visible={modalType !== null} animationType="slide" transparent>
@@ -405,10 +415,11 @@ export default function AddExpense() {
                               placeholderTextColor={"black"}
                               onChangeText={(text) => setSearchText(text)}
                               onSubmitEditing={() => {
-                                if (searchText.trim().length > 0) handlePick(searchText);
+                                if (searchText.trim().length > 0 && modalType === "crop") handlePick(searchText);
                               }}
                           />
-                          {modalType === "cat" && searchText.trim().length > 0 && (
+                          {/* 🔥 FIXED PATTERN: NO ADD CUSTOM BUTTON FOR FIXED CATEGORIES */}
+                          {modalType === "crop" && searchText.trim().length > 0 && !filteredData.length && (
                             <TouchableOpacity
                               onPress={() => handlePick(searchText)}
                               style={{ backgroundColor: "#DC2626", borderRadius: 12, padding: 6, marginLeft: 6 }}
@@ -453,18 +464,15 @@ export default function AddExpense() {
                                 </View>
                               );
                             }
-                          return searchText.trim().length > 0 ? (
-                              <TouchableOpacity
-                                style={[styles.option, { alignItems: "center" }]}
-                                onPress={() => handlePick(searchText)}
-                              >
-                                <AppText style={{ color: "#DC2626", fontWeight: "600" }}>
-                                  {language === "te"
-                                    ? `"${searchText}" ని చేర్చండి +`
-                                    : `Add "${searchText}" +`}
-                                </AppText>
-                              </TouchableOpacity>
-                            ) : null;
+                            
+                            // 🔥 CATEGORY EMPTY STATE
+                            return (
+                                <View style={{ padding: 20, alignItems: "center" }}>
+                                  <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali", fontSize: 14 }}>
+                                    {language === "te" ? "ఈ పేరుతో ఖర్చు రకం లేదు. 'ఇతర ఖర్చులు' ఎంచుకోండి." : "Category not found. Please select 'Other Expenses'."}
+                                  </AppText>
+                                </View>
+                            );
                           }}
                           renderItem={({ item }) => (
                               <TouchableOpacity 

@@ -1,18 +1,18 @@
+import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-    FlatList, Modal, SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TouchableOpacity,
-    View
+  FlatList, Modal, SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from "react-native";
 import ShimmerPlaceHolder from "react-native-shimmer-placeholder";
 
@@ -56,97 +56,171 @@ export default function OwnerWork() {
   const [statusId, setStatusId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<"pending" | "paid">("paid");
 
+  const [actionLoading, setActionLoading] = useState(false); // 🔥 Prevent double taps
+
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
+
   /* ---------------- LOAD ---------------- */
 
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
+      isMounted.current = true;
 
       const load = async () => {
-        const lang = await AsyncStorage.getItem("APP_LANG");
-        if (lang) setLanguage(lang as any);
+        try {
+          const lang = await AsyncStorage.getItem("APP_LANG");
+          if (lang && isMounted.current) setLanguage(lang as any);
 
-        const userPhone = await AsyncStorage.getItem("USER_PHONE");
-        if (!userPhone || !oId) return;
+          const userPhone = await AsyncStorage.getItem("USER_PHONE");
+          if (!userPhone || !oId) return;
 
-        // 🔥 FETCH ACTIVE SESSION
-        const userDoc = await firestore().collection("users").doc(userPhone).get();
-        const activeSession = userDoc.data()?.activeSession;
+          // 🔥 FETCH ACTIVE SESSION
+          const userDoc = await firestore().collection("users").doc(userPhone).get();
+          const activeSession = userDoc.data()?.activeSession;
 
-        if (!activeSession) {
-          setLoading(false);
-          return;
-        }
+          if (!activeSession) {
+            if (isMounted.current) setLoading(false);
+            return;
+          }
 
-        // 🔥 REALTIME SNAPSHOT WITH SESSION FILTER
-        // Path: users -> phone -> owners -> oId -> entries
-        unsub = firestore()
-          .collection("users")
-          .doc(userPhone)
-          .collection("owners")
-          .doc(oId)
-          .collection("entries")
-          .where("session", "==", activeSession) 
-          .onSnapshot(snap => {
-            if (!snap || !snap.docs) {
+          if (isMounted.current) setLoading(true);
+
+          // 🔥 REALTIME SNAPSHOT WITH SESSION FILTER
+          unsub = firestore()
+            .collection("users")
+            .doc(userPhone)
+            .collection("owners")
+            .doc(oId)
+            .collection("entries")
+            .where("session", "==", activeSession) 
+            .onSnapshot(snap => {
+              if (!isMounted.current) return;
+              
+              if (!snap || !snap.docs) {
+                setLoading(false);
+                return;
+              }
+
+              const list: WorkItem[] = [];
+              snap.forEach(doc => list.push({ id: doc.id, ...(doc.data() as any) }));
+
+              // 🔥 Client Side Sorting (Latest first)
+              list.sort((a, b) => {
+                const timeA = a.createdAt?.toMillis() || 0;
+                const timeB = b.createdAt?.toMillis() || 0;
+                return timeB - timeA;
+              });
+
+              setData(list);
               setLoading(false);
-              return;
-            }
-
-            const list: WorkItem[] = [];
-            snap.forEach(doc => list.push({ id: doc.id, ...(doc.data() as any) }));
-
-            // 🔥 Client Side Sorting (Latest first)
-            list.sort((a, b) => {
-              const timeA = a.createdAt?.toMillis() || 0;
-              const timeB = b.createdAt?.toMillis() || 0;
-              return timeB - timeA;
+            }, (err) => {
+              console.log("Snapshot error:", err);
+              if (isMounted.current) setLoading(false);
             });
-
-            setData(list);
-            setLoading(false);
-          });
+        } catch (error) {
+          console.log("Load error:", error);
+          if (isMounted.current) setLoading(false);
+        }
       };
 
       load();
       return () => {
+        isMounted.current = false;
         if (unsub) unsub();
       };
     }, [oId])
   );
 
+  /* ---------------- ACTIONS ---------------- */
+  
   const handleDelete = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone || !deleteId || !oId) return;
+    if (actionLoading) return;
+    try {
+      setActionLoading(true);
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone || !deleteId || !oId) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("owners")
-      .doc(oId)
-      .collection("entries")
-      .doc(deleteId)
-      .delete();
+      await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("owners")
+        .doc(oId)
+        .collection("entries")
+        .doc(deleteId)
+        .delete();
 
-    setDeleteId(null);
+    } catch (e) {
+      console.log("Error deleting entry:", e);
+    } finally {
+      if (isMounted.current) {
+        setDeleteId(null);
+        setActionLoading(false);
+      }
+    }
   };
 
+ /* ---------------- LOCK & AUTO-ADD EXPENSE (BATCH WRITE) ---------------- */
   const handleStatusUpdate = async () => {
-    const userPhone = await AsyncStorage.getItem("USER_PHONE");
-    if (!userPhone || !statusId || !oId) return;
+    if (actionLoading) return;
+    try {
+      setActionLoading(true);
+      const userPhone = await AsyncStorage.getItem("USER_PHONE");
+      if (!userPhone || !statusId || !oId) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("owners")
-      .doc(oId)
-      .collection("entries")
-      .doc(statusId)
-      .update({
-        paymentStatus: newStatus
+      const userDoc = await firestore().collection("users").doc(userPhone).get();
+      const activeSession = userDoc.data()?.activeSession;
+
+      // 1. మనం లాక్ చేస్తున్న పని (Work) వివరాలు ముందు తెచ్చుకోవాలి
+      const entryRef = firestore()
+        .collection("users").doc(userPhone)
+        .collection("owners").doc(oId)
+        .collection("entries").doc(statusId);
+
+      const entrySnap = await entryRef.get();
+      if (!entrySnap.exists) return;
+
+      const entryData = entrySnap.data();
+      const totalAmountNum = Number(entryData?.payableAmount || 0); // 🔥 (అడ్వాన్స్ + ఫైనల్) ఇదే మొత్తం రేటు!
+
+      // 2. Batch స్టార్ట్ చేస్తున్నాం
+      const batch = firestore().batch();
+
+      // 3. పనిని 'పెండింగ్' నుంచి 'పెయిడ్ (లాక్)' కి మారుస్తున్నాం
+      batch.update(entryRef, {
+        paymentStatus: newStatus // "paid"
       });
 
-    setStatusId(null);
+      // 4. ఇక్కడే మ్యాజిక్! ఆటోమేటిక్ గా Expenses లో వేస్తున్నాం
+      if (totalAmountNum > 0) {
+        const expenseRef = firestore()
+          .collection("users").doc(userPhone)
+          .collection("expenses").doc();
+
+        batch.set(expenseRef, {
+          crop: entryData?.crop || "Others",
+          category: language === "te" ? "ట్రాక్టర్ / యంత్రాలు" : "Tractor", // ఆటోమేటిక్ కేటగిరీ
+          amount: totalAmountNum,
+          session: activeSession,
+          linkedWorkId: statusId, // ఫ్యూచర్ రిఫరెన్స్ కోసం లింక్
+          notes: language === "te" 
+            ? `${entryData?.work} - ట్రాక్టర్ ఓనర్ కి చెల్లించిన పూర్తి ఖర్చు` 
+            : `${entryData?.work} - Total amount settled to tractor owner`,
+          createdAt: firestore.FieldValue.serverTimestamp()
+        });
+      }
+
+      // 5. రెండింటినీ ఒకేసారి సేవ్ చేస్తున్నాం (జీరో ఫెయిల్యూర్ ఛాన్స్)
+      await batch.commit();
+
+    } catch (e) {
+      console.log("Error locking and saving expense:", e);
+    } finally {
+      if (isMounted.current) {
+        setStatusId(null);
+        setActionLoading(false);
+      }
+    }
   };
 
   /* ---------------- GROUP BY CROP ---------------- */
@@ -197,7 +271,7 @@ export default function OwnerWork() {
       {/* 🔥 CLEAR HEADER */}
       <AppHeader
         title={language === "te" ? "పనుల చరిత్ర" : "Work History"}
-        subtitle={language === "te" ? "యజమాని ఖాతా" : "Owner Account"}
+        subtitle={oName ? `${oName} ${language === "te" ? "ఖాతా" : "Account"}` : (language === "te" ? "యజమాని ఖాతా" : "Owner Account")}
         language={language}
       />
 
@@ -207,7 +281,7 @@ export default function OwnerWork() {
           <Ionicons name="information-circle" size={20} color="#0284C7" />
           <AppText style={styles.infoText} language={language}>
             {language === "te" 
-              ? "గమనిక: పనికి సంబంధించిన చెల్లింపు పూర్తయిన తర్వాత దాన్ని లాక్ చేయండి. లాక్ చేసిన తర్వాత రికార్డును తొలగించడం కుదరదు." 
+              ? "గమనిక: పనికి సంబంధించిన చెల్లింపు పూర్తయిన తర్వాత లాక్ బటన్ నొక్కండి. లాక్ చేసిన తర్వాత రికార్డును తొలగించడం కుదరదు." 
               : "Note: Mark as paid once the payment is completed. Locked records cannot be deleted."}
           </AppText>
         </View>
@@ -225,13 +299,14 @@ export default function OwnerWork() {
             { padding: 16, paddingBottom: 120 },
             grouped.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
+          showsVerticalScrollIndicator={false}
           
           /* 🔥 EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="clipboard-outline"
-              title={language === "te" ? "పనులు లేవు" : "No Works Found"}
-              subtitle={language === "te" ? "పనులను చేర్చడానికి + బటన్ నొక్కండి" : "Tap + button to add work"}
+              title={language === "te" ? "పనులు ఏమీ లేవు" : "No Works Found"}
+              subtitle={language === "te" ? "పనులను చేర్చడానికి కింద ఉన్న '+' బటన్ నొక్కండి" : "Tap '+' button below to add a new work entry"}
               language={language}
             />
           }
@@ -249,8 +324,8 @@ export default function OwnerWork() {
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                     <View style={{
-                      width: 4, height: 50, borderRadius: 4,
-                      backgroundColor: getCropColor(item.crop), marginRight: 10
+                      width: 4, height: 40, borderRadius: 4,
+                      backgroundColor: getCropColor(item.crop), marginRight: 12
                     }} />
                     <View style={{ flex: 1 }}>
                       <AppText style={styles.cropTitle}>{item.crop}</AppText>
@@ -259,7 +334,9 @@ export default function OwnerWork() {
                       </AppText>
                     </View>
                   </View>
-                  <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
+<View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#E5E7EB", justifyContent: "center", alignItems: "center" }}>
+  <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
+</View>
                 </TouchableOpacity>
 
                 {/* EXPAND */}
@@ -285,7 +362,7 @@ export default function OwnerWork() {
                         </AppText>
                         <TouchableOpacity
                           activeOpacity={isPaid ? 1 : 0.8}
-                          disabled={isPaid}
+                          disabled={isPaid || actionLoading}
                           style={[styles.toggle, { backgroundColor: isPaid ? "#16A34A" : "#DC2626", opacity: isPaid ? 0.6 : 1 }]}
                           onPress={() => {
                             if (isPaid) return;
@@ -347,7 +424,7 @@ export default function OwnerWork() {
                         <View style={styles.detailItem}>
                           <View style={styles.leftPart}>
                             <Ionicons name="cash-outline" size={14} color="#6B7280" />
-                            <AppText style={styles.label}>{language === "te" ? "మొత్తం:" : "Payable:"}</AppText>
+                            <AppText style={styles.label}>{language === "te" ? "మొత్తం ఖర్చు:" : "Total Cost:"}</AppText>
                           </View>
                           <AppText style={styles.value}>₹ {Number(work.payableAmount || 0).toLocaleString("en-IN")}</AppText>
                         </View>
@@ -356,7 +433,7 @@ export default function OwnerWork() {
                         <View style={styles.detailItem}>
                           <View style={styles.leftPart}>
                             <Ionicons name="wallet-outline" size={14} color="#6B7280" />
-                            <AppText style={styles.label}>{language === "te" ? "అడ్వాన్స్:" : "Advance:"}</AppText>
+                            <AppText style={styles.label}>{language === "te" ? "అడ్వాన్స్ చెల్లించినది:" : "Advance Paid:"}</AppText>
                           </View>
                           <AppText style={styles.value}>₹ {Number(work.advanceAmount || 0).toLocaleString("en-IN")}</AppText>
                         </View>
@@ -364,15 +441,20 @@ export default function OwnerWork() {
 
                       {/* FINAL + DELETE */}
                       <View style={styles.bottomRow}>
-                        <AppText style={[styles.finalAmount, isPaid && {color: "#16A34A"}]}>₹ {amount.toLocaleString("en-IN")}</AppText>
+                        <View>
+                          <AppText style={{ fontSize: 11, color: "#6B7280", marginBottom: 2 }}>
+                            {language === "te" ? "మిగిలిన బ్యాలెన్స్" : "Remaining Balance"}
+                          </AppText>
+                          <AppText style={[styles.finalAmount, isPaid && {color: "#16A34A"}]}>₹ {amount.toLocaleString("en-IN")}</AppText>
+                        </View>
                         
                         {isPaid ? (
                           <View style={[styles.deleteBtn, { backgroundColor: '#DCFCE7' }]}>
-                             <Ionicons name="lock-closed" size={16} color="#16A34A" />
+                             <Ionicons name="lock-closed" size={18} color="#16A34A" />
                           </View>
                         ) : (
                           <TouchableOpacity activeOpacity={0.7} style={styles.deleteBtn} onPress={() => setDeleteId(work.id)}>
-                            <Ionicons name="trash" size={16} color="#DC2626" />
+                            <Ionicons name="trash" size={18} color="#DC2626" />
                           </TouchableOpacity>
                         )}
                       </View>
@@ -395,7 +477,7 @@ export default function OwnerWork() {
       )}
 
       {/* FAB */}
-      <TouchableOpacity activeOpacity={0.8}
+      <TouchableOpacity activeOpacity={0.9}
         style={styles.addBtn}
         onPress={() =>
           router.push({
@@ -405,7 +487,7 @@ export default function OwnerWork() {
         }
       >
         <LinearGradient colors={["#16A34A", "#166534"]} style={styles.addGradient}>
-          <Ionicons name="add" size={30} color="#fff" />
+          <Ionicons name="add" size={32} color="#fff" />
         </LinearGradient>
       </TouchableOpacity>
 
@@ -418,21 +500,23 @@ export default function OwnerWork() {
             </View>
             <AppText style={styles.modalTitle}>{language === "te" ? "తొలగించాలా?" : "Delete Work?"}</AppText>
             <AppText style={styles.modalSub}>
-              {language === "te" ? "ఈ పనిని తొలగించాలనుకుంటున్నారా?" : "Are you sure you want to delete this work?"}
+              {language === "te" ? "ఈ పనిని పూర్తిగా తొలగించాలనుకుంటున్నారా?" : "Are you sure you want to completely delete this work?"}
             </AppText>
             <View style={styles.modalRow}>
-              <TouchableOpacity activeOpacity={0.8} style={styles.cancelBtn} onPress={() => setDeleteId(null)}>
-                <AppText>{language === "te" ? "రద్దు చేయి" : "Cancel"}</AppText>
+              <TouchableOpacity activeOpacity={0.8} style={styles.cancelBtn} onPress={() => setDeleteId(null)} disabled={actionLoading}>
+                <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
               </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} style={styles.deleteConfirmBtn1} onPress={handleDelete}>
-                <AppText style={{ color: "#fff" }}>{language === "te" ? "తొలగించు" : "Delete"}</AppText>
+              <TouchableOpacity activeOpacity={0.8} style={styles.deleteConfirmBtn1} onPress={handleDelete} disabled={actionLoading}>
+                <AppText style={{ color: "#fff", fontWeight: "600" }}>
+                  {actionLoading ? (language === "te" ? "తొలగిస్తోంది..." : "Deleting...") : (language === "te" ? "తొలగించు" : "Delete")}
+                </AppText>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* PAYMENT MODAL */}
+     {/* PAYMENT MODAL */}
       <Modal visible={!!statusId} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
@@ -440,19 +524,21 @@ export default function OwnerWork() {
               <Ionicons name="checkmark-done" size={36} color="#16A34A" />
             </View>
             <AppText style={styles.modalTitle}>
-              {language === "te" ? "చెల్లింపు పూర్తయ్యిందా?" : "Confirm Payment Completion"}
+              {language === "te" ? "చెల్లింపు పూర్తయ్యిందా?" : "Confirm Payment"}
             </AppText>
             <AppText style={styles.modalSub}>
               {language === "te"
-                ? "ఈ పనికి సంబంధించిన చెల్లింపు పూర్తిగా పూర్తయిందని మీరు ఖచ్చితంగా అనుకుంటున్నారా?\n\nఒక్కసారి 'అవును' నొక్కితే, ఈ పని శాశ్వతంగా లాక్ చేయబడుతుంది మరియు చెల్లింపు జరిగినట్లుగా మార్క్ చేయబడుతుంది."
-                : "Are you sure the payment for this work is fully completed?\n\nOnce you press 'confirm', this work will be permanently locked and marked as paid."}
+                ? "ఈ పనికి సంబంధించిన చెల్లింపు పూర్తిగా పూర్తయిందని మీరు ఖచ్చితంగా అనుకుంటున్నారా?\n\nఒక్కసారి 'అవును' నొక్కితే, ఈ పని శాశ్వతంగా లాక్ చేయబడుతుంది మరియు ఈ మొత్తం ఆటోమేటిక్ గా మీ 'ఖర్చుల' ఖాతాలో (Expenses) నమోదు అవుతుంది."
+                : "Are you sure the payment for this work is fully completed?\n\nOnce you press 'confirm', this work will be permanently locked and the total amount will be automatically added to your 'Expenses'."}
             </AppText>
             <View style={styles.modalRow}>
-              <TouchableOpacity activeOpacity={0.8} style={styles.cancelBtn} onPress={() => setStatusId(null)}>
-                <AppText>{language === "te" ? "రద్దు చేయి" : "Cancel"}</AppText>
+              <TouchableOpacity activeOpacity={0.8} style={styles.cancelBtn} onPress={() => setStatusId(null)} disabled={actionLoading}>
+                <AppText>{language === "te" ? "వద్దు" : "Cancel"}</AppText>
               </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} style={styles.deleteConfirmBtn} onPress={handleStatusUpdate}>
-                <AppText style={{ color: "#ffffff" }}>{language === "te" ? "అవును" : "Confirm"}</AppText>
+              <TouchableOpacity activeOpacity={0.8} style={styles.deleteConfirmBtn} onPress={handleStatusUpdate} disabled={actionLoading}>
+                <AppText style={{ color: "#ffffff", fontWeight: "600" }}>
+                  {actionLoading ? (language === "te" ? "లాక్ చేస్తోంది..." : "Locking...") : (language === "te" ? "అవును" : "Confirm")}
+                </AppText>
               </TouchableOpacity>
             </View>
           </View>
@@ -466,58 +552,41 @@ export default function OwnerWork() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },  
 
-  infoBanner: {
-    flexDirection: "row",
-    backgroundColor: "#DBEAFE", 
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#BFDBFE"
-  },
-  infoText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
-    color: "#1E3A8A",
-    lineHeight: 22,
-    fontFamily: "Mandali"
-  },
+  infoBanner: { flexDirection: "row", backgroundColor: "#E0F2FE", padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 10, alignItems: "flex-start", borderWidth: 1, borderColor: "#BFDBFE" },
+  infoText: { flex: 1, marginLeft: 8, fontSize: 13, color: "#1E3A8A", lineHeight: 24, fontFamily: "Mandali" },
 
-  cropCard: { backgroundColor: "#fff", borderRadius: 16, marginBottom: 12, overflow: "hidden", borderWidth: 1, borderColor: "#E5E7EB", marginHorizontal: 4 },
+  cropCard: { backgroundColor: "#fff", borderRadius: 16, marginBottom: 16, overflow: "hidden", borderWidth: 1, borderColor: "#E5E7EB", marginHorizontal: 16,  shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 5 },
   cropHeader: { flexDirection: "row", justifyContent: "space-between", padding: 16, backgroundColor: "#F9FAFB" },
-  cropTitle: { fontSize: 20, fontWeight: "600", color: "#111827" },
-  cropCount: { fontSize: 15, color: "#6B7280", marginTop: 2 },
-  detailItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  cropTitle: { fontSize: 18, fontWeight: "600", color: "#111827" },
+  cropCount: { fontSize: 14, color: "#6B7280", marginTop: 2, fontWeight: "500" },
+  detailItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   leftPart: { flexDirection: "row", alignItems: "center", gap: 6 },
-  label: { fontSize: 12, color: "#6B7280" },
-  value: { fontSize: 12, fontWeight: "600", color: "#111827", textAlign: "right" },
-  detailsGrid: { marginTop: 10, gap: 8 },
-  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
-  finalAmount: { fontSize: 17, fontWeight: "bold", color: "#111827" },
-  deleteBtn: { backgroundColor: "#FEE2E2", padding: 8, borderRadius: 10 },
-  notesBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  notesText: { fontSize: 12, color: "#374151", flex: 1, lineHeight: 18 },
-  workCard: { padding: 14, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between" },
-  workTitle: { fontSize: 14, fontWeight: "600" },
-  date: { fontSize: 12, color: "#6B7280" },
+  label: { fontSize: 13, color: "#4B5563" },
+  value: { fontSize: 13, fontWeight: "600", color: "#111827", textAlign: "right" },
+  detailsGrid: { marginTop: 12, gap: 4 },
+  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  finalAmount: { fontSize: 22, fontWeight: "800", color: "#0F172A" },
+  deleteBtn: { backgroundColor: "#FEE2E2", padding: 10, borderRadius: 10 },
+  notesBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 12, padding: 12, backgroundColor: "#F9FAFB", borderRadius: 8, borderWidth: 1, borderColor: "#E5E7EB" },
+  notesText: { fontSize: 13, color: "#374151", flex: 1, lineHeight: 24 },
+  workCard: { padding: 16, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  workTitle: { fontSize: 18, fontWeight: "600", color: "#111827" },
+  date: { fontSize: 13, color: "#6B7280", fontWeight: "500" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
-  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
-  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
-  statusText: { fontSize: 12, fontWeight: "600" },
-  toggle: { width: 40, height: 20, borderRadius: 20, padding: 2, justifyContent: "center" },
-  toggleCircle: { width: 16, height: 16, borderRadius: 8, backgroundColor: "#fff" },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 16, width: "80%", alignItems: "center" },
-  modalTitle: { marginTop: 10, fontSize: 16, fontWeight: "600" },
-  modalSub: { fontSize: 13, color: "#6B7280", marginTop: 6, textAlign: "center" },
-  modalRow: { flexDirection: "row", marginTop: 20, gap: 30 },
-  iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#e2fef3", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  cancelBtn: { flex: 1, padding: 12, backgroundColor: "#F3F4F6", borderRadius: 10, alignItems: "center" },
-  deleteConfirmBtn: { flex: 1, padding: 12, backgroundColor: "#0c652f", borderRadius: 10, alignItems: "center" },
-  deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 10, alignItems: "center" }
+  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#166534", shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 5 },
+  statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, marginBottom: 4 },
+  statusText: { fontSize: 13, fontWeight: "600" },
+  toggle: { width: 44, height: 24, borderRadius: 12, padding: 2, justifyContent: "center" },
+  toggleCircle: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff", elevation: 2 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 },
+  modalBox: { backgroundColor: "#fff", padding: 24, borderRadius: 20, width: "100%", alignItems: "center", elevation: 10 },
+  modalTitle: { marginTop: 12, fontSize: 18, fontWeight: "600", color: "#111827" },
+  modalSub: { fontSize: 14, color: "#4B5563", marginTop: 8, textAlign: "center", lineHeight: 22 },
+  modalRow: { flexDirection: "row", marginTop: 24, gap: 16, width: "100%" },
+  iconBg: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center" },
+  iconBg1: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center" },
+  cancelBtn: { flex: 1, paddingVertical: 14, backgroundColor: "#F3F4F6", borderRadius: 12, alignItems: "center" },
+  deleteConfirmBtn: { flex: 1, paddingVertical: 14, backgroundColor: "#16A34A", borderRadius: 12, alignItems: "center" },
+  deleteConfirmBtn1: { flex: 1, paddingVertical: 14, backgroundColor: "#DC2626", borderRadius: 12, alignItems: "center" }
 });
