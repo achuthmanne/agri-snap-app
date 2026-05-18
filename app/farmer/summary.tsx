@@ -1,6 +1,8 @@
+// app/farmer/summary/index.tsx
+
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
+import AppEmptyState from "@/components/AppEmptyState";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -16,10 +18,10 @@ import {
   SafeAreaView,
   StatusBar,
   StyleSheet,
-  View
+  View,
+  TouchableOpacity
 } from "react-native";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
-import { TouchableOpacity } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -36,8 +38,8 @@ const CropProgressCircle = memo(({ percent, displayText, color }: { percent: num
   useEffect(() => {
     Animated.timing(animatedValue, {
       toValue: percent,
-      duration: 900,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      duration: 1000, // Smooth transition
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [percent]);
@@ -45,6 +47,7 @@ const CropProgressCircle = memo(({ percent, displayText, color }: { percent: num
   const strokeDashoffset = animatedValue.interpolate({
     inputRange: [0, 100],
     outputRange: [circumference, 0],
+    extrapolate: "clamp"
   });
 
   return (
@@ -54,7 +57,7 @@ const CropProgressCircle = memo(({ percent, displayText, color }: { percent: num
           cx={center}
           cy={center}
           r={radius}
-          stroke="#E5E7EB"
+          stroke="#F1F5F9"
           strokeWidth="6"
           fill="none"
         />
@@ -89,7 +92,6 @@ export default function SummaryScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [userName, setUserName] = useState("Farmer");
   const [typedName, setTypedName] = useState("");
-  const [showDots, setShowDots] = useState(false);
   
   // Top Progress Bar Animations
   const expenseAnim = useRef(new Animated.Value(0)).current;
@@ -102,31 +104,12 @@ export default function SummaryScreen() {
   const labourPercent = total ? (summary.labour / total) * 100 : 0;
   const rentPercent = total ? (summary.rent / total) * 100 : 0;
   const incomePercent = total ? (summary.income / total) * 100 : 0;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  
   const [barWidth, setBarWidth] = useState(0);
-  const dotAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.timing(dotAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      })
-    );
-    anim.start();
-    return () => anim.stop(); 
-  }, []);
 
   useEffect(() => {
     setAIState("idle");
   }, []);
-
-  const dotsOpacity = dotAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 1],
-  });
 
   useEffect(() => {
     if (!userName) return; 
@@ -147,50 +130,12 @@ export default function SummaryScreen() {
     return () => clearInterval(interval);
   }, [userName]);
 
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-  
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -10,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-
   const handleAIClick = () => {
     if (aiState !== "idle") return; 
     setAIState("loading");
     setTimeout(() => {
       setAIState("result");
-    }, 4000);
+    }, 3000); // Made slightly faster for better UX
   };
 
   const AnimatedAIItem = ({ text, index }: any) => {
@@ -201,7 +146,7 @@ export default function SummaryScreen() {
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 500,
-        delay: index * 500, 
+        delay: index * 400, 
         useNativeDriver: true,
       }).start();
 
@@ -214,12 +159,7 @@ export default function SummaryScreen() {
     }, []);
 
     return (
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY }],
-        }}
-      >
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY }] }}>
         <View style={styles.aiCard}>
           <View style={styles.aiBullet} />
           <AppText style={styles.aiText}>{text}</AppText>
@@ -228,94 +168,193 @@ export default function SummaryScreen() {
     );
   };
 
-  const ShimmerBars = () => (
-    <View style={styles.stickyBox}>
-      {[1, 2, 3].map((_, i) => (
-        <View key={i} style={{ marginBottom: 14 }}>
-          <ShimmerPlaceholder style={{ height: 12, width: "40%", borderRadius: 6 }} />
-          <ShimmerPlaceholder style={{ height: 8, width: "100%", marginTop: 6, borderRadius: 10 }} />
-        </View>
-      ))}
-    </View>
-  );
-
+  /* ---------------- 🔥 ULTRA HD PROFESSIONAL PDF GENERATOR ---------------- */
   const exportProfessionalPDF = async (existingInsights: string[]) => {
     try {
-      const logoAsset = Asset.fromModule(require('../../assets/images/logo.jpeg'));
-      await logoAsset.downloadAsync();
-      const logoBase64 = await FileSystem.readAsStringAsync(logoAsset.localUri!, {
-        encoding: 'base64',
+      // Fetching Logo safely
+      let logoBase64 = "";
+      try {
+        const logoAsset = Asset.fromModule(require('../../assets/images/logo.jpeg'));
+        await logoAsset.downloadAsync();
+        logoBase64 = await FileSystem.readAsStringAsync(logoAsset.localUri!, { encoding: 'base64' });
+      } catch (e) {
+        console.log("Logo missing, proceeding without logo");
+      }
+
+      const today = new Date().toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric'
+      });
+      const time = new Date().toLocaleTimeString('en-IN', {
+        hour: '2-digit', minute: '2-digit'
       });
 
-      const today = new Date().toLocaleDateString('te-IN');
-
+      // Commercial A4 Print Styles
       const htmlContent = `
+        <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="utf-8">
+            <title>AgriSnap Farm Report</title>
             <style>
-              body { font-family: sans-serif; padding: 30px; color: #1e293b; line-height: 1.5; }
-              .header { display: flex; flex-direction: row; justify-content: space-between; align-items: center; border-bottom: 4px solid #1b5e20; padding-bottom: 15px; }
-              .logo-img { width: 80px; height: 80px; border-radius: 10px; }
-              .brand-name { font-size: 32px; font-weight: 800; color: #1b5e20; margin: 0; }
+              body { 
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+                padding: 40px; 
+                color: #1e293b; 
+                line-height: 1.6; 
+                background-color: #ffffff;
+                margin: 0;
+              }
+              .header { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                border-bottom: 3px solid #16A34A; 
+                padding-bottom: 20px; 
+                margin-bottom: 30px;
+              }
+              .logo-container { display: flex; align-items: center; gap: 15px; }
+              .logo-img { width: 70px; height: 70px; border-radius: 12px; object-fit: cover; }
+              .brand-title { font-size: 34px; font-weight: 800; color: #166534; margin: 0; letter-spacing: -0.5px; }
+              .brand-sub { font-size: 13px; color: #64748b; margin: 2px 0 0 0; text-transform: uppercase; letter-spacing: 1px; }
               
-              /* AI Insights Section */
-              .ai-section { background-color: #f0fdf4; border: 1px dashed #16a34a; padding: 20px; border-radius: 12px; margin: 25px 0; }
-              .ai-title { color: #166534; font-size: 16px; font-weight: bold; margin-bottom: 10px; }
-              .ai-tip { font-size: 13px; color: #1e293b; margin-bottom: 8px; padding-left: 15px; position: relative; }
-              .ai-tip::before { content: "✨"; position: absolute; left: 0; font-size: 10px; top: 2px; }
+              .report-meta { text-align: right; }
+              .meta-title { font-size: 22px; font-weight: bold; color: #0f172a; margin: 0 0 5px 0; }
+              .meta-date { font-size: 13px; color: #64748b; margin: 0; }
+              .meta-farmer { font-size: 14px; font-weight: bold; color: #334155; margin-top: 5px; }
 
-              .dashboard { display: flex; flex-direction: row; justify-content: space-between; margin: 25px 0; gap: 15px; }
-              .card { flex: 1; padding: 15px; border-radius: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; text-align: center; }
-              .card-label { font-size: 11px; color: #64748b; font-weight: bold; }
-              .card-value { font-size: 18px; font-weight: bold; margin-top: 5px; }
+              /* AI Insights Section */
+              .ai-section { 
+                background-color: #F0FDF4; 
+                border-left: 4px solid #16A34A; 
+                padding: 20px 25px; 
+                border-radius: 0 12px 12px 0; 
+                margin-bottom: 35px; 
+              }
+              .ai-title { color: #166534; font-size: 18px; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+              .ai-tip { font-size: 14px; color: #1e293b; margin-bottom: 10px; padding-left: 20px; position: relative; }
+              .ai-tip::before { content: "✦"; position: absolute; left: 0; font-size: 14px; color: #16A34A; top: 0px; }
+
+              /* Financial Dashboard */
+              .dashboard { 
+                display: flex; 
+                justify-content: space-between; 
+                margin-bottom: 35px; 
+                gap: 20px; 
+              }
+              .card { 
+                flex: 1; 
+                padding: 20px; 
+                border-radius: 12px; 
+                background-color: #F8FAFC; 
+                border: 1px solid #E2E8F0; 
+                text-align: center; 
+              }
+              .card-label { font-size: 12px; color: #64748b; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+              .card-value { font-size: 24px; font-weight: 800; margin-top: 8px; color: #0F172A; }
+              .val-profit { color: #166534; }
+              .val-loss { color: #DC2626; }
+
+              /* Professional Table */
+              h2 { font-size: 20px; color: #0f172a; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; display: inline-block; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+              th { 
+                background-color: #F1F5F9; 
+                color: #334155; 
+                padding: 14px; 
+                text-align: left; 
+                font-size: 13px; 
+                font-weight: bold; 
+                text-transform: uppercase; 
+                border-bottom: 2px solid #CBD5E1; 
+              }
+              td { 
+                padding: 14px; 
+                border-bottom: 1px solid #E2E8F0; 
+                font-size: 14px; 
+                color: #1e293b; 
+              }
+              tr:nth-child(even) { background-color: #FAFAFA; }
+              .crop-name { font-weight: bold; color: #0f172a; }
+              .profit { color: #166534; font-weight: bold; }
+              .loss { color: #DC2626; font-weight: bold; }
               
-              table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 10px; overflow: hidden; }
-              th { background-color: #1b5e20; color: white; padding: 12px; text-align: left; font-size: 13px; }
-              td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-              .profit { color: #16a34a; font-weight: bold; }
-              .loss { color: #dc2626; font-weight: bold; }
-              
-              .footer { margin-top: 40px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+              /* Footer */
+              .footer { 
+                margin-top: 50px; 
+                text-align: center; 
+                border-top: 1px solid #E2E8F0; 
+                padding-top: 20px; 
+              }
+              .footer-brand { font-size: 14px; font-weight: bold; color: #166534; }
+              .footer-tag { font-size: 12px; color: #64748b; margin-top: 5px; }
             </style>
           </head>
           <body>
+
             <div class="header">
-              <img src="data:image/png;base64,${logoBase64}" class="logo-img" />
-              <div style="text-align: right;">
-                <h1 class="brand-name">AgriLog</h1>
-                <p style="font-size: 12px; color: #64748b; margin:0;">వ్యవసాయ నివేదిక | ${today}</p>
+              <div class="logo-container">
+                ${logoBase64 ? `<img src="data:image/jpeg;base64,${logoBase64}" class="logo-img" />` : ''}
+                <div>
+                  <h1 class="brand-title">Agrisnap</h1>
+                  <p class="brand-sub">మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు</p>
+                </div>
+              </div>
+              <div class="report-meta">
+                <h2 class="meta-title">Financial Report</h2>
+                <p class="meta-date">${today} | ${time}</p>
+                <p class="meta-farmer">Prepared for: ${userName}</p>
               </div>
             </div>
 
             <div class="ai-section">
-              <div class="ai-title">AgriLog AI విశ్లేషణ (AI Insights)</div>
+              <div class="ai-title">Agrisnap Smart Insights</div>
               ${existingInsights && existingInsights.length > 0 
                 ? existingInsights.map(insight => `<div class="ai-tip">${insight}</div>`).join('')
-                : '<div class="ai-tip">ప్రస్తుతానికి ఎటువంటి విశ్లేషణలు లేవు.</div>'
+                : '<div class="ai-tip">Sufficient data is not available to generate deep insights yet. Please log more records.</div>'
               }
             </div>
 
             <div class="dashboard">
-              <div class="card"><div class="card-label">మొత్తం ఆదాయం</div><div class="card-value" style="color: #16a34a;">₹${summary.income.toLocaleString('en-IN')}</div></div>
-              <div class="card"><div class="card-label">మొత్తం ఖర్చులు</div><div class="card-value">₹${(summary.expense + summary.labour + summary.rent).toLocaleString('en-IN')}</div></div>
-              <div class="card"><div class="card-label">నికర ఫలితం</div><div class="card-value ${summary.profit >= 0 ? 'profit' : 'loss'}">₹${Math.abs(summary.profit).toLocaleString('en-IN')}</div></div>
+              <div class="card">
+                <div class="card-label">Total Revenue</div>
+                <div class="card-value val-profit">₹${summary.income.toLocaleString('en-IN')}</div>
+              </div>
+              <div class="card">
+                <div class="card-label">Total Expenses</div>
+                <div class="card-value">₹${(summary.expense + summary.labour + summary.rent).toLocaleString('en-IN')}</div>
+              </div>
+              <div class="card" style="border-color: ${summary.profit >= 0 ? '#16A34A' : '#DC2626'}; background-color: ${summary.profit >= 0 ? '#F0FDF4' : '#FEF2F2'};">
+                <div class="card-label" style="color: ${summary.profit >= 0 ? '#166534' : '#991B1B'};">Net Result</div>
+                <div class="card-value ${summary.profit >= 0 ? 'val-profit' : 'val-loss'}">
+                  ${summary.profit >= 0 ? '+' : '-'}₹${Math.abs(summary.profit).toLocaleString('en-IN')}
+                </div>
+              </div>
             </div>
 
-            <h2 style="font-size: 16px; color: #1e293b;">పంటల వివరాలు</h2>
+            <h2>Crop-wise Breakdown</h2>
             <table>
               <thead>
-                <tr><th>పంట పేరు</th><th>దిగుబడి</th><th>పెట్టుబడి</th><th>ఆదాయం</th><th>ఫలితం</th></tr>
+                <tr>
+                  <th>Crop Name</th>
+                  <th>Yield/Acres</th>
+                  <th>Total Cost</th>
+                  <th>Revenue</th>
+                  <th>Net Profit/Loss</th>
+                </tr>
               </thead>
               <tbody>
                 ${Object.keys(crops).map(key => {
                   const c = crops[key];
+                  const totalCost = c.expense + c.labour + c.rent;
                   return `
                     <tr>
-                      <td><b>${key}</b></td>
-                      <td>${c.quantity} ${getUnitLabel(c.unit)}</td>
-                      <td>₹${(c.expense + c.labour + c.rent).toLocaleString('en-IN')}</td>
+                      <td class="crop-name">${key}</td>
+                      <td>${c.quantity} ${getUnitLabel(c.unit)}<br><span style="font-size: 11px; color: #64748b;">${c.acres} Acres</span></td>
+                      <td>₹${totalCost.toLocaleString('en-IN')}</td>
                       <td>₹${c.income.toLocaleString('en-IN')}</td>
-                      <td class="${c.profit >= 0 ? 'profit' : 'loss'}">₹${Math.abs(c.profit).toLocaleString('en-IN')}</td>
+                      <td class="${c.profit >= 0 ? 'profit' : 'loss'}">
+                        ${c.profit >= 0 ? '+' : '-'}₹${Math.abs(c.profit).toLocaleString('en-IN')}
+                      </td>
                     </tr>
                   `;
                 }).join('')}
@@ -323,20 +362,25 @@ export default function SummaryScreen() {
             </table>
 
             <div class="footer">
-              <div style="font-weight: bold; color: #1b5e20;">AgriLog - సాగు లెక్కల డిజిటల్ పుస్తకం</div>
-              <div style="font-size: 10px; color: #94a3b8; margin-top: 5px;">© 2026 AgriLog Management Solutions.</div>
+              <div class="footer-brand">Agrisnap</div>
+              <div class="footer-tag">Certified Digital Farm Ledger & Management Solution</div>
+              <div style="font-size: 10px; color: #94a3b8; margin-top: 8px;">Generated securely via Agrisnap App © ${new Date().getFullYear()}</div>
             </div>
+
           </body>
         </html>
       `;
 
       setTimeout(async () => {
-        const { uri } = await Print.printToFileAsync({ html: htmlContent });
+        const { uri } = await Print.printToFileAsync({ 
+          html: htmlContent,
+          margins: { left: 20, right: 20, top: 30, bottom: 30 } // Perfect A4 Margins
+        });
         await Sharing.shareAsync(uri);
       }, 100);
 
     } catch (error) {
-      console.error("PDF Error:", error);
+      console.error("PDF Generation Error:", error);
     }
   };
 
@@ -346,9 +390,7 @@ export default function SummaryScreen() {
   const r = round(rentPercent);
   const i = round(incomePercent);
 
-  // 🔥 final adjust (ensure 100%)
   const diff = 100 - (e + l + r + i);
-
   const finalIncomePercent = i + diff;
   const totalExpenses = summary.expense + summary.labour + summary.rent;
   const isEmpty = Object.keys(crops).length === 0;
@@ -357,29 +399,18 @@ export default function SummaryScreen() {
     <View style={styles.card}>
       <View style={{ width: 4, height: 60, backgroundColor: "#E5E7EB", borderRadius: 2 }} />
       <View style={{ flex: 1, marginLeft: 10 }}>
-        <ShimmerPlaceholder style={{ height: 18, width: "40%", borderRadius: 6 }} />
-        <ShimmerPlaceholder style={{ height: 12, width: "60%", marginTop: 8 }} />
-        <ShimmerPlaceholder style={{ height: 12, width: "50%", marginTop: 6 }} />
-        <ShimmerPlaceholder style={{ height: 12, width: "55%", marginTop: 6 }} />
-        <ShimmerPlaceholder style={{ height: 14, width: "45%", marginTop: 10 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 18, width: "40%", borderRadius: 6 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 12, width: "60%", marginTop: 8 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 12, width: "50%", marginTop: 6 }} />
+        <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ height: 12, width: "55%", marginTop: 6 }} />
       </View>
-      <ShimmerPlaceholder style={{ width: 50, height: 50, borderRadius: 25 }} />
+      <ShimmerPlaceholder LinearGradient={LinearGradient} style={{ width: 60, height: 60, borderRadius: 30 }} />
     </View>
   );
 
-  const ShimmerTopCard = () => (
-    <View style={[styles.topCard, { backgroundColor: "#E5E7EB" }]}>
-      <ShimmerPlaceholder style={{ height: 12, width: "30%" }} />
-      <ShimmerPlaceholder style={{ height: 30, width: "50%", marginTop: 10 }} />
-      <View style={{ flexDirection: "row", marginTop: 20, gap: 10 }}>
-        <ShimmerPlaceholder style={{ flex: 1, height: 60, borderRadius: 12 }} />
-        <ShimmerPlaceholder style={{ flex: 1, height: 60, borderRadius: 12 }} />
-      </View>
-    </View>
-  );
-
+  // 🔥 Smooth Bar Animation Initialization
   useEffect(() => {
-    if (!loading) {
+    if (!loading && !isEmpty) {
       expenseAnim.setValue(0);
       labourAnim.setValue(0);
       rentAnim.setValue(0);
@@ -387,34 +418,14 @@ export default function SummaryScreen() {
 
       InteractionManager.runAfterInteractions(() => {
         Animated.parallel([
-          Animated.timing(expenseAnim, {
-            toValue: e,
-            duration: 850,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(labourAnim, {
-            toValue: l,
-            duration: 850,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(rentAnim, {
-            toValue: r,
-            duration: 850,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(incomeAnim, {
-            toValue: finalIncomePercent,
-            duration: 850,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
+          Animated.timing(expenseAnim, { toValue: e, duration: 1000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(labourAnim, { toValue: l, duration: 1000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(rentAnim, { toValue: r, duration: 1000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(incomeAnim, { toValue: finalIncomePercent, duration: 1000, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
         ]).start();
       });
     }
-  }, [loading]);
+  }, [loading, isEmpty]);
 
   const generateSmartInsights = (cropMap: any, totalInc: number) => {
     const insights: string[] = [];
@@ -465,7 +476,7 @@ export default function SummaryScreen() {
 
       if (labourRatio > 55) {
         insights.push(language === "te" 
-          ? `👷 ${name}: కూలీల ఖర్చు విపరీతంగా ఉంది (${Math.round(labourRatio)}%). వీలైతే డ్రోన్ స్ప్రేయింగ్ లేదా యంత్రాలను వాడండి.` 
+          ? `👷 ${name}: కూలీల ఖర్చు విపరీతంగా ఉంది (${Math.round(labourRatio)}%). వీలైతే యంత్రాలను వాడండి.` 
           : `👷 ${name}: Excessive labour cost (${Math.round(labourRatio)}%). Explore automation or machinery.`);
       }
 
@@ -500,8 +511,8 @@ export default function SummaryScreen() {
 
       if (d.quantity > 0 && d.income <= 0) {
         insights.push(language === "te" 
-          ? `❗ ${name}: ${d.quantity} ${getUnitLabel(d.unit)} దిగుబడి ఉంది, కానీ అమ్మకం ధర రాయలేదు. లాభం లెక్కించలేను.` 
-          : `❗ ${name}: Yield is ${d.quantity} ${d.unit}, but sales amount is missing. Profit cannot be calculated.`);
+          ? `❗ ${name}: ${d.quantity} ${getUnitLabel(d.unit)} దిగుబడి ఉంది, కానీ అమ్మకం ధర రాయలేదు.` 
+          : `❗ ${name}: Yield is ${d.quantity} ${d.unit}, but sales amount is missing.`);
       }
 
       if (d.income > 0 && totalCost <= 0) {
@@ -510,16 +521,10 @@ export default function SummaryScreen() {
           : `❗ ${name}: Income recorded but expenses are 0. Add costs to see real profit.`);
       }
 
-      if (d.rent <= 0 && d.acres > 0) {
-        insights.push(language === "te" 
-          ? `🧐 ${name}: కౌలు ఖర్చు సున్నా ఉంది. ఇది మీ సొంత భూమి అయితే పర్వాలేదు, లేదంటే అప్‌డేట్ చేయండి.` 
-          : `🧐 ${name}: Rent is 0. If this is leased land, please update the rent amount.`);
-      }
-
       if (d.quantity > 0 && (!d.unit || d.unit === "")) {
         insights.push(language === "te" 
-          ? `📦 ${name}: దిగుబడి రాశారు కానీ కొలమానం (Units: kg/quintal/tons) ఎంచుకోలేదు.` 
-          : `📦 ${name}: Quantity added but Units (kg/bags/tons) are missing.`);
+          ? `📦 ${name}: దిగుబడి రాశారు కానీ కొలమానం (Units) ఎంచుకోలేదు.` 
+          : `📦 ${name}: Quantity added but Units are missing.`);
       }
     });
 
@@ -565,49 +570,33 @@ export default function SummaryScreen() {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadData = async () => {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       const lang = await AsyncStorage.getItem("APP_LANG");
-      if (lang) setLanguage(lang as any);
+      if (lang && isMounted) setLanguage(lang as any);
       if (!phone) return;
-      const userDoc = await firestore()
-        .collection("users")
-        .doc(phone)
-        .get();
-
+      
+      const userDoc = await firestore().collection("users").doc(phone).get();
       const activeSession = userDoc.data()?.activeSession;
 
-      if (!activeSession) return;
-      setLoading(true);
+      if (!activeSession) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+      
+      if (isMounted) setLoading(true);
+
       try {
         const [expSnap, salesSnap, paySnap, fieldsSnap] = await Promise.all([
-          firestore()
-            .collection("users")
-            .doc(phone)
-            .collection("expenses")
-            .where("session", "==", activeSession)
-            .get(),
-          firestore()
-            .collection("users")
-            .doc(phone)
-            .collection("sales")
-            .where("session", "==", activeSession)
-            .get(),
-          firestore()
-            .collection("users")
-            .doc(phone)
-            .collection("payments")
-            .where("session", "==", activeSession)
-            .get(),
-          firestore()
-            .collection("users")
-            .doc(phone)
-            .collection("fields")
-            .where("session", "==", activeSession)
-            .get()
+          firestore().collection("users").doc(phone).collection("expenses").where("session", "==", activeSession).get(),
+          firestore().collection("users").doc(phone).collection("sales").where("session", "==", activeSession).get(),
+          firestore().collection("users").doc(phone).collection("payments").where("session", "==", activeSession).get(),
+          firestore().collection("users").doc(phone).collection("fields").where("session", "==", activeSession).get()
         ]);
         
-        await new Promise(resolve => setTimeout(resolve, 0)); 
+        if (!isMounted) return;
 
         const cropMap: any = {};
         let totalExp = 0, totalLab = 0, totalInc = 0, totalRent = 0;
@@ -694,17 +683,22 @@ export default function SummaryScreen() {
         });
         setCrops(cropMap);
         setTimeout(() => {
-          generateSmartInsights(cropMap, totalInc);
+          if (isMounted) generateSmartInsights(cropMap, totalInc);
         }, 300);
       } catch (e) {
         console.log(e);
-        setSuggestions([
-          language === "te" ? "డేటా లోడ్ చేయడంలో సమస్య వచ్చింది" : "Error loading data"
-        ]);
+        if (isMounted) {
+          setSuggestions([
+            language === "te" ? "డేటా లోడ్ చేయడంలో సమస్య వచ్చింది" : "Error loading data"
+          ]);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     };
+    
     loadData();
+    return () => { isMounted = false; };
   }, [language]);
 
   const isProfit = summary.profit >= 0;
@@ -739,7 +733,7 @@ export default function SummaryScreen() {
           <ShimmerCard />
         </View>
       ) : isEmpty ? (
-        /* 🔥 ONLY EMPTY SCREEN - పక్కా సెంటర్ లోకి వచ్చేస్తుంది */
+        /* 🔥 FIXED EMPTY STATE */
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <AppEmptyState
             iconName="analytics-outline"
@@ -760,6 +754,7 @@ export default function SummaryScreen() {
           data={Object.keys(crops)}
           keyExtractor={(item, index) => item + index}
           contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
           
           ListHeaderComponent={
             <View style={styles.stickyBox}>
@@ -826,20 +821,20 @@ export default function SummaryScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                     <AppText style={styles.cropName}>{item}</AppText>
                     <View style={[styles.qtyBadge, { marginLeft: 10, backgroundColor: color === "#16A34A" ? "#ECFDF5" : color === "#DC2626" ? "#FEF2F2" : "#FFFBEB", borderColor: color === "#16A34A" ? "#A7F3D0" : color === "#DC2626" ? "#FECACA" : "#FDE68A" }]}>
-                      <AppText style={[styles.qtyText, { color, fontSize: 11, fontWeight: '600' }]}>
+                      <AppText style={[styles.qtyText, { color }]}>
                         {c.acres} {language === "te" ? "ఎకరాలు" : "Acres"}
                       </AppText>
                     </View>
                   </View>
                   <AppText style={styles.row}>{language === "te" ? "పరిమాణం" : "Quantity"}: {c.quantity} {getUnitLabel(c.unit)}</AppText>
-                  <AppText style={styles.row}>{language === "te" ? "ఇతర ఖర్చులు" : "Other Expense"}: ₹{c.expense}</AppText>
-                  <AppText style={styles.row}>{language === "te" ? "కూలీ ఖర్చులు" : "Kulis Expenses"}: ₹{c.labour}</AppText>
+                  <AppText style={styles.row}>{language === "te" ? "ఇతర ఖర్చులు" : "Other Expense"}: ₹{c.expense.toLocaleString("en-IN")}</AppText>
+                  <AppText style={styles.row}>{language === "te" ? "కూలీ ఖర్చులు" : "Labour Expenses"}: ₹{c.labour.toLocaleString("en-IN")}</AppText>
                   {c.rent > 0 && (
                     <AppText style={styles.row}>
-                      {language === "te" ? "కౌలు ఖర్చులు" : "Field Rent"}: ₹{c.rent}
+                      {language === "te" ? "కౌలు ఖర్చులు" : "Field Rent"}: ₹{c.rent.toLocaleString("en-IN")}
                     </AppText>
                   )}
-                  <AppText style={styles.row}>{language === "te" ? "మొత్తం ఆదాయం" : "Total Income"}: ₹{c.income}</AppText>
+                  <AppText style={styles.row}>{language === "te" ? "మొత్తం ఆదాయం" : "Total Income"}: ₹{c.income.toLocaleString("en-IN")}</AppText>
                   {c.profit !== undefined && !isNaN(c.profit) && c.profit !== 0 && (
                     <AppText style={[styles.profitText, { color }]}>
                       {c.profit > 0 ? (language === "te" ? "వచ్చిన లాభం" : "Profit Gained") : (language === "te" ? "పోయిన నష్టం" : "Loss Incurred")}: ₹{Math.abs(c.profit).toLocaleString("en-IN")}
@@ -927,7 +922,7 @@ export default function SummaryScreen() {
                   <View style={styles.aiHeader}>
                     <Ionicons name="bulb" size={20} color="#F59E0B" />
                     <AppText style={styles.aiTitle}>
-                      {language === "te" ? "AgriLog స్మార్ట్ సూచనలు" : "AgriLog SMART INSIGHTS"}
+                      {language === "te" ? "AgriSnap స్మార్ట్ సూచనలు" : "AgriSnap SMART INSIGHTS"}
                     </AppText>
                   </View>
                   {suggestions.map((s, i) => (
@@ -957,60 +952,42 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   barItem: { marginBottom: 16 },
-  barTopRow: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: 'center',
-    marginBottom: 8 
-  },
+  barTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: 'center', marginBottom: 8 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   barLabel: { fontSize: 13, color: "#64748B", fontWeight: "600", letterSpacing: 0.3 },
   barValue: { fontSize: 14, fontWeight: "600" },
-  barBg: {
-    height: 10,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
-    overflow: "hidden",
-    flexDirection: "row",
-  },
-  barFill: {
-    height: "100%",
-    width: "100%",
-    borderRadius: 12,
-    transform: [{ scaleX: 0.01 }],
-  },
+  barBg: { height: 10, backgroundColor: "#F1F5F9", borderRadius: 12, overflow: "hidden", flexDirection: "row" },
+  barFill: { height: "100%", width: "100%", borderRadius: 12, transform: [{ scaleX: 0.01 }] },
   card: { marginHorizontal: 20, marginVertical: 6, flexDirection: "row", backgroundColor: "#fff", padding: 14, borderRadius: 16, borderWidth: 1, borderColor: "#E5E7EB", alignItems: 'center' },
   sideBar: { width: 4, height: '80%', marginRight: 12, borderRadius: 2 },
-  cropName: { fontSize: 20, fontWeight: "600", marginBottom: 4 },
-  row: { fontSize: 12, color: "#6B7280", marginTop: 1 },
-  profitText: { fontSize: 14, fontWeight: "600", marginTop: 6 },
+  cropName: { fontSize: 18, fontWeight: "600", color: "#0F172A", flexShrink: 1 },
+  row: { fontSize: 13, color: "#475569", marginTop: 2, fontWeight: "500" },
+  profitText: { fontSize: 14, fontWeight: "600", marginTop: 8 },
   circleWrap: { justifyContent: "center", alignItems: "center", marginLeft: 10 },
   circleCenter: { position: "absolute", width: 80, height: 80, justifyContent: "center", alignItems: "center" },
-  circleText: { fontSize: 11, fontWeight: "600" },
-  topCard: { margin: 20, padding: 24, borderRadius: 28, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-  glassBox: { flex: 1, alignItems: "center", paddingVertical: 12, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
-  glassLabel: { color: "#E5E7EB", fontSize: 11, marginTop: 4 },
-  glassValue: { color: "#fff", fontSize: 16, fontWeight: "600", marginTop: 2 },
-  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 12 },
-  resultBox: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 6 },
-  resultTitle: { color: "#fff", fontSize: 16, fontWeight: "600", letterSpacing: 1.2 },
-  resultAmount: { color: "#fff", fontSize: 30, fontWeight: "600", textAlign: "center", marginTop: 4 },
-  messageGlass: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 14, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
-  messageText: { color: "#fff", fontSize: 12, fontWeight: "500" },
-  topLabel: { color: "rgba(255,255,255,0.7)", fontSize: 11, fontWeight: "600", letterSpacing: 1.5, lineHeight: 16 },
-  topValue: { color: "#fff", fontSize: 34, fontWeight: "600", marginTop: -4 },
+  circleText: { fontSize: 13, fontWeight: "700" },
+  topCard: { margin: 20, padding: 24, borderRadius: 24, elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  glassBox: { flex: 1, alignItems: "center", paddingVertical: 14, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.1)", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
+  glassLabel: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 6, fontWeight: "500", textTransform: "uppercase", letterSpacing: 0.5 },
+  glassValue: { color: "#fff", fontSize: 18, fontWeight: "700", marginTop: 4 },
+  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginVertical: 16 },
+  resultBox: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 4 },
+  resultTitle: { color: "#fff", fontSize: 14, fontWeight: "600", letterSpacing: 1.5, opacity: 0.9 },
+  resultAmount: { color: "#fff", fontSize: 36, fontWeight: "800", textAlign: "center", marginTop: 2 },
+  messageGlass: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", borderWidth: 1, borderColor: "rgba(255,255,255,0.25)" },
+  messageText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   qtyBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
-  qtyText: { fontSize: 12, fontWeight: "500" },
-  aiContainer: { margin: 20, backgroundColor: "#1E293B", padding: 16, borderRadius: 24, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", elevation: 10 },
-  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 15, borderBottomWidth: 1, borderBottomColor: "rgba(245, 158, 11, 0.2)", paddingBottom: 8 },
-  aiTitle: { fontSize: 14, fontWeight: "600", color: "#F59E0B", letterSpacing: 1 },
-  aiCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: "rgba(255,255,255,0.05)", padding: 12, borderRadius: 12, marginBottom: 10, gap: 10 },
-  aiBullet: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#F59E0B", marginTop: 6 },
-  aiText: { flex: 1, fontSize: 13, color: "#E2E8F0", lineHeight: 22, fontWeight: "500" },
-  aiSmartCard: { marginHorizontal: 20, marginTop: 18, transform: [{ translateY: -6 }] },
-  aiSmartInner: { flexDirection: "row", alignItems: "center", padding: 16, borderRadius: 20, elevation: 12 },
-  aiSmartIcon: { width: 42, height: 42, borderRadius: 21, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(255,255,255,0.15)", borderWidth: 1, borderColor: "rgba(255,255,255,0.25)" },
-  aiSmartTitle: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  aiSmartSub: { color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 }
+  qtyText: { fontSize: 11, fontWeight: "600" },
+  aiContainer: { margin: 20, backgroundColor: "#0F172A", padding: 20, borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.1)", elevation: 10 },
+  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: "rgba(245, 158, 11, 0.2)", paddingBottom: 10 },
+  aiTitle: { fontSize: 15, fontWeight: "600", color: "#F59E0B", letterSpacing: 1, textTransform: "uppercase" },
+  aiCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: "rgba(255,255,255,0.06)", padding: 14, borderRadius: 12, marginBottom: 10, gap: 12 },
+  aiBullet: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#F59E0B", marginTop: 7 },
+  aiText: { flex: 1, fontSize: 14, color: "#F1F5F9", lineHeight: 24, fontWeight: "500" },
+  aiSmartCard: { marginHorizontal: 20, marginTop: 10, marginBottom: 10 },
+  aiSmartInner: { flexDirection: "row", alignItems: "center", padding: 18, borderRadius: 20, elevation: 6 },
+  aiSmartIcon: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(255,255,255,0.2)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
+  aiSmartTitle: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  aiSmartSub: { color: "rgba(255,255,255,0.9)", fontSize: 13, marginTop: 2, fontWeight: "500" }
 });
