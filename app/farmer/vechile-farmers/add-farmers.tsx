@@ -128,11 +128,7 @@ export default function AddWork() {
 
   /* ---------------- OPEN CONTACTS LOGIC ---------------- */
   const handleOpenContacts = async () => {
-    if (isLocked) {
-      setShowLockInfo(true);
-      return;
-    }
-
+    // 🔥 PRO FIX: ఇక్కడ లాక్ ఉన్నా కూడా కాంటాక్ట్స్ ఓపెన్ అవ్వాలి, ఎందుకంటే వాళ్ళు నంబర్ మార్చుకోవచ్చు!
     try {
       setLoadingContacts(true);
       const { status } = await Contacts.requestPermissionsAsync();
@@ -182,10 +178,14 @@ export default function AddWork() {
         cleanNum = cleanNum.slice(-10);
       }
 
-      setName(contact.name || "");
+      // 🔥 PRO FIX: లాక్ అయి ఉంటే పేరు అప్‌డేట్ అవ్వదు, కేవలం ఫోన్ నంబర్ మాత్రమే అప్‌డేట్ అవుతుంది!
+      if (!isLocked) {
+        setName(contact.name || "");
+        setErrors(prev => ({...prev, name: ""}));
+      }
+
       setPhone(cleanNum);
-      
-      setErrors(prev => ({...prev, name: "", phone: ""}));
+      setErrors(prev => ({...prev, phone: ""}));
     }
     setShowContactsModal(false);
     setContactSearch("");
@@ -311,31 +311,26 @@ export default function AddWork() {
         showsVerticalScrollIndicator={false}
       >
 
-        {/* 🔥 IMPORT FROM CONTACTS BUTTON */}
-        {!editId && (
-          <TouchableOpacity 
-            style={[styles.contactImportBtn, isLocked && { opacity: 0.6 }]} 
-            onPress={handleOpenContacts}
-            activeOpacity={0.7}
-          >
-            {loadingContacts ? (
-               <ActivityIndicator size="small" color="#16A34A" />
-            ) : (
-               <>
-                 <View style={styles.contactIconBg}>
-                    <Ionicons name="people" size={18} color="#16A34A" />
-                 </View>
-                <AppText style={styles.contactImportText}>
-  {language === "te" 
-    ? "కాంటాక్ట్స్ నుండి ఎంచుకోండి" 
-    : "Select from Contacts"}
-</AppText>
-
-                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-               </>
-            )}
-          </TouchableOpacity>
-        )}
+        {/* 🔥 IMPORT FROM CONTACTS BUTTON (Available in both Add and Edit Modes) */}
+        <TouchableOpacity 
+          style={styles.contactImportBtn} 
+          onPress={handleOpenContacts}
+          activeOpacity={0.7}
+        >
+          {loadingContacts ? (
+             <ActivityIndicator size="small" color="#16A34A" />
+          ) : (
+             <>
+               <View style={styles.contactIconBg}>
+                  <Ionicons name="people" size={18} color="#16A34A" />
+               </View>
+               <AppText style={styles.contactImportText}>
+                {language === "te" ? "కాంటాక్ట్స్ నుండి ఎంచుకోండి" : "Select from Contacts"}
+               </AppText>
+               <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+             </>
+          )}
+        </TouchableOpacity>
 
         {/* 👤 NAME */}
         <TouchableOpacity
@@ -774,11 +769,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Mandali",
     color: "#1F2937",
-    paddingTop: 0,               // పైన ప్యాడింగ్ పూర్తిగా తీసేయడానికి
-    paddingBottom: 0,            // కింద ప్యాడింగ్ తీసేయడానికి
-    textAlignVertical: "center", // ఆండ్రాయిడ్ లో వర్టికల్ సెంటర్ కి
-    height: "100%",              // 👈 అసలైన మ్యాజిక్ ఇక్కడే ఉంది (పేరెంట్ హైట్ కి మ్యాచ్ అవుతుంది)
-    marginTop: 2                 // ఫాంట్ వల్ల ఇంకా పైకే ఉంటే.. ఈ 2px దాన్ని కిందకు లాగుతుంది
+    paddingTop: 0,               
+    paddingBottom: 0,            
+    textAlignVertical: "center", 
+    height: "100%",              
+    marginTop: 2                 
   },
   contactItem: {
     flexDirection: "row",

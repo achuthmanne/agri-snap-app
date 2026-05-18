@@ -20,7 +20,7 @@ import {
   FlatList
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; 
-import * as Contacts from 'expo-contacts'; // 🔥 NEW: Contacts Package
+import * as Contacts from 'expo-contacts'; 
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
@@ -28,7 +28,7 @@ import AppText from "@/components/AppText";
 
 const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val[0] : val || "");
 
-export default function AddWork() {
+export default function AddDriver() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const isMounted = useRef(true); 
@@ -125,11 +125,6 @@ export default function AddWork() {
 
   /* ---------------- OPEN CONTACTS LOGIC ---------------- */
   const handleOpenContacts = async () => {
-    if (isLocked) {
-      setShowLockInfo(true);
-      return;
-    }
-
     try {
       setLoadingContacts(true);
       const { status } = await Contacts.requestPermissionsAsync();
@@ -179,10 +174,13 @@ export default function AddWork() {
         cleanNum = cleanNum.slice(-10);
       }
 
-      setName(contact.name || "");
+      if (!isLocked) {
+        setName(contact.name || "");
+        setErrors(prev => ({...prev, name: ""}));
+      }
+
       setPhone(cleanNum);
-      
-      setErrors(prev => ({...prev, name: "", phone: ""}));
+      setErrors(prev => ({...prev, phone: ""}));
     }
     setShowContactsModal(false);
     setContactSearch("");
@@ -250,6 +248,7 @@ export default function AddWork() {
         .doc(vehicleId)
         .collection("drivers");
 
+      // 🔥 PRO FIX: Updated to driverName
       if (editId) {
         await ref.doc(editId).update({
           driverName: cleanName, 
@@ -306,30 +305,25 @@ export default function AddWork() {
       >
 
         {/* 🔥 IMPORT FROM CONTACTS BUTTON */}
-        {!editId && (
-          <TouchableOpacity 
-            style={[styles.contactImportBtn, isLocked && { opacity: 0.6 }]} 
-            onPress={handleOpenContacts}
-            activeOpacity={0.7}
-          >
-            {loadingContacts ? (
-               <ActivityIndicator size="small" color="#16A34A" />
-            ) : (
-               <>
-                 <View style={styles.contactIconBg}>
-                    <Ionicons name="people" size={18} color="#16A34A" />
-                 </View>
-                 <AppText style={styles.contactImportText}>
-  {language === "te" 
-    ? "కాంటాక్ట్స్ నుండి ఎంచుకోండి" 
-    : "Select from Contacts"}
-</AppText>
-
-                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-               </>
-            )}
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          style={[styles.contactImportBtn, isLocked && { opacity: 0.8 }]} 
+          onPress={handleOpenContacts}
+          activeOpacity={0.7}
+        >
+          {loadingContacts ? (
+             <ActivityIndicator size="small" color="#16A34A" />
+          ) : (
+             <>
+               <View style={styles.contactIconBg}>
+                  <Ionicons name="people" size={18} color="#16A34A" />
+               </View>
+               <AppText style={styles.contactImportText}>
+                {language === "te" ? "కాంటాక్ట్స్ నుండి ఎంచుకోండి" : "Select from Contacts"}
+               </AppText>
+               <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+             </>
+          )}
+        </TouchableOpacity>
 
         {/* 👤 NAME */}
         <TouchableOpacity

@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
+import * as Contacts from 'expo-contacts'; // 🔥 PRO FIX: Contacts Import Added
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
@@ -13,9 +14,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Keyboard
+  Keyboard,
+  Alert,
+  Linking,
+  ActivityIndicator,
+  FlatList
 } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // 🔥 PRO FIX: For small screens
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; 
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
@@ -49,11 +54,18 @@ export default function AddOwner() {
   // 🔥 Lock Info Modal State
   const [showLockInfo, setShowLockInfo] = useState(false);
 
+  // 🔥 CONTACTS STATES
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
+  const [contactSearch, setContactSearch] = useState("");
+  const [loadingContacts, setLoadingContacts] = useState(false);
+
   const nameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
   const villageRef = useRef<TextInput>(null);
 
-  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
+  const isMounted = useRef(true); 
 
   const placeholders = {
     en: {
@@ -73,6 +85,7 @@ export default function AddOwner() {
 
   // వాయిస్ రిజల్ట్ ని హ్యాండిల్ చేయడం
   useSpeechRecognitionEvent("result", (event) => {
+    if (!isMounted.current) return;
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
       if (activeInput === "name" && !isLocked) {
@@ -83,10 +96,22 @@ export default function AddOwner() {
         setVillage(transcript);
         if (errors.village) setErrors({ ...errors, village: "" });
       }
+      // 🔥 VOICE SEARCH FOR CONTACTS
+      else if (activeInput === "contactSearch") {
+        setContactSearch(transcript);
+        if(transcript.trim() === "") {
+          setFilteredContacts(contacts);
+        } else {
+          const lower = transcript.toLowerCase();
+          setFilteredContacts(contacts.filter(c => c.name?.toLowerCase().includes(lower)));
+        }
+      }
     }
   });
 
-  useSpeechRecognitionEvent("end", () => setIsListening(false));
+  useSpeechRecognitionEvent("end", () => {
+    if (isMounted.current) setIsListening(false);
+  });
 
   const handleVoiceInput = async (target: string) => {
     if (target === "name" && isLocked) {
@@ -102,6 +127,70 @@ export default function AddOwner() {
       lang: language === "te" ? "te-IN" : "en-US",
       interimResults: true,
     });
+  };
+
+  /* ---------------- OPEN CONTACTS LOGIC ---------------- */
+  const handleOpenContacts = async () => {
+    try {
+      setLoadingContacts(true);
+      const { status } = await Contacts.requestPermissionsAsync();
+
+      if (status === 'granted') {
+        const { data } = await Contacts.getContactsAsync({
+          fields: [Contacts.Fields.PhoneNumbers],
+          sort: Contacts.SortTypes.FirstName
+        });
+
+        if (data.length > 0) {
+          const validContacts = data.filter(c => c.phoneNumbers && c.phoneNumbers.length > 0);
+          setContacts(validContacts);
+          setFilteredContacts(validContacts);
+          setShowContactsModal(true);
+        } else {
+          Alert.alert(
+            language === 'te' ? "నంబర్లు లేవు" : "No Contacts Found", 
+            language === 'te' ? "మీ ఫోన్ లో నంబర్లు లేవు." : "Your phonebook is empty."
+          );
+        }
+      } else {
+        Alert.alert(
+          language === 'te' ? "పర్మిషన్ అవసరం!" : "Permission Required!",
+          language === 'te' ? "యజమాని ఫోన్ నంబర్లను సులభంగా యాడ్ చేయడానికి పర్మిషన్ కావాలి. దయచేసి సెట్టింగ్స్ లోకి వెళ్లి 'Contacts' పర్మిషన్ ఆన్ చేయండి." : "Please enable Contacts permission in Settings to easily add owners.",
+          [
+            { text: language === 'te' ? "వద్దు" : "Cancel", style: "cancel" },
+            { text: language === 'te' ? "సెట్టింగ్స్" : "Settings", onPress: () => Linking.openSettings() }
+          ]
+        );
+      }
+    } catch (error) {
+      console.log("Contacts Error: ", error);
+    } finally {
+      if (isMounted.current) setLoadingContacts(false);
+    }
+  };
+
+  const selectContact = (contact: any) => {
+    if (contact.phoneNumbers && contact.phoneNumbers.length > 0) {
+      let rawNum = contact.phoneNumbers[0].number || "";
+      let cleanNum = rawNum.replace(/\D/g, ''); 
+      
+      if (cleanNum.length > 10 && cleanNum.startsWith('91')) {
+        cleanNum = cleanNum.slice(2);
+      } else if (cleanNum.length > 10) {
+        cleanNum = cleanNum.slice(-10);
+      }
+
+      // 🔥 PRO FIX: లాక్ అయి ఉంటే పేరు అప్‌డేట్ అవ్వదు, కేవలం ఫోన్ నంబర్ మాత్రమే అప్‌డేట్ అవుతుంది!
+      if (!isLocked) {
+        setName(contact.name || "");
+        setErrors(prev => ({...prev, name: ""}));
+      }
+
+      setPhone(cleanNum);
+      setErrors(prev => ({...prev, phone: ""}));
+    }
+    setShowContactsModal(false);
+    setContactSearch("");
   };
 
   /* ---------------- LOAD ---------------- */
@@ -218,13 +307,33 @@ export default function AddOwner() {
         language={language}
       />
 
-      {/* 🔥 PRO FIX: Wrapped in KeyboardAwareScrollView */}
       <KeyboardAwareScrollView 
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid={true}
         showsVerticalScrollIndicator={false}
       >
+
+        {/* 🔥 IMPORT FROM CONTACTS BUTTON */}
+        <TouchableOpacity 
+          style={[styles.contactImportBtn, isLocked && { opacity: 0.8 }]} 
+          onPress={handleOpenContacts}
+          activeOpacity={0.7}
+        >
+          {loadingContacts ? (
+             <ActivityIndicator size="small" color="#16A34A" />
+          ) : (
+             <>
+               <View style={styles.contactIconBg}>
+                  <Ionicons name="people" size={18} color="#16A34A" />
+               </View>
+               <AppText style={styles.contactImportText}>
+                {language === "te" ? "కాంటాక్ట్స్ నుండి ఎంచుకోండి" : "Select from Contacts"}
+               </AppText>
+               <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+             </>
+          )}
+        </TouchableOpacity>
 
         {/* 👤 NAME (LOCKED IF hasRecords === true) */}
         <TouchableOpacity
@@ -390,6 +499,87 @@ export default function AddOwner() {
 
       <AgriLoader visible={loading} type={editId ? "updating" : "saving"} language={language} />
 
+      {/* 🔥 CONTACTS PICKER MODAL */}
+      <Modal visible={showContactsModal} animationType="slide" transparent>
+        <View style={styles.modalOverlayFull}>
+          <View style={styles.contactModalContent}>
+            <View style={styles.modalHeader}>
+              <AppText style={styles.modalTitleText}>
+                {language === 'te' ? "ఫోన్ నంబర్ల జాబితా" : "Select Contact"}
+              </AppText>
+              <TouchableOpacity onPress={() => setShowContactsModal(false)} hitSlop={{top:10, bottom:10, left:10, right:10}}>
+                <Ionicons name="close-circle" size={28} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 🔥 REFINED SEARCH BAR */}
+            <View style={styles.searchBar}>
+              <Ionicons name="search" size={20} color="#9CA3AF" />
+              <TextInput 
+                value={contactSearch}
+                onChangeText={(txt) => {
+                  setContactSearch(txt);
+                  if(txt.trim() === "") {
+                    setFilteredContacts(contacts);
+                  } else {
+                    const lower = txt.toLowerCase();
+                    setFilteredContacts(contacts.filter(c => c.name?.toLowerCase().includes(lower)));
+                  }
+                }}
+                placeholder={language === 'te' ? "పేరుతో వెతకండి..." : "Search name..."}
+                placeholderTextColor="#9CA3AF"
+                selectionColor="#16A34A40"
+                cursorColor="#16A34A"
+                style={styles.contactSearchInput}
+                onFocus={() => setActiveInput("contactSearch")}
+                onBlur={() => setActiveInput(null)}
+              />
+
+              {contactSearch.trim().length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => {
+                    setContactSearch("");
+                    setFilteredContacts(contacts);
+                  }}
+                  style={{ padding: 6 }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                onPress={() => handleVoiceInput("contactSearch")}
+                style={{ marginLeft: 5, padding: 6, borderRadius: 10, backgroundColor: "#E5E7EB" }}
+              >
+                <MaterialCommunityIcons
+                  name={isListening && activeInput === "contactSearch" ? "microphone" : "microphone-outline"}
+                  size={20}
+                  color={isListening && activeInput === "contactSearch" ? "#EF4444" : "#2E7D32"}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList 
+              data={filteredContacts}
+              keyExtractor={(item, idx) => item.id || idx.toString()}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 20 }}
+              renderItem={({item}) => (
+                <TouchableOpacity style={styles.contactItem} onPress={() => selectContact(item)}>
+                  <View style={styles.contactAvatar}>
+                    <AppText style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>{item.name?.charAt(0) || "U"}</AppText>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppText style={styles.contactName} numberOfLines={1}>{item.name}</AppText>
+                    <AppText style={styles.contactPhone}>{item.phoneNumbers?.[0]?.number}</AppText>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* 🔥 LOCK INFO MODAL */}
       <Modal visible={showLockInfo} transparent animationType="fade" statusBarTranslucent>
         <View style={styles.overlay}>
@@ -429,7 +619,34 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 20,
-    paddingBottom: 40 // 🔥 Extra padding for scroll
+    paddingBottom: 40 
+  },
+  contactImportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderStyle: 'dashed'
+  },
+  contactIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#DCFCE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10
+  },
+  contactImportText: {
+    flex: 1,
+    color: '#166534',
+    fontWeight: '600',
+    fontSize: 14,
+    fontFamily: "Mandali"
   },
   inputBox: {
     flexDirection: "row",
@@ -515,5 +732,79 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   modalSub: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 6 },
   okBtn: { marginTop: 20, backgroundColor: "#1B5E20", paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
-  okText: { color: "white", fontWeight: "600" }
+  okText: { color: "white", fontWeight: "600" },
+  
+  // 🔥 CONTACT MODAL STYLES
+  modalOverlayFull: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end"
+  },
+  contactModalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    height: "80%",
+    paddingHorizontal: 20
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 20
+  },
+  modalTitleText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: '#111827'
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 45,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "#E5E7EB"
+  },
+  contactSearchInput: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    fontFamily: "Mandali",
+    color: "#1F2937",
+    paddingTop: 0,               
+    paddingBottom: 0,            
+    textAlignVertical: "center", 
+    height: "100%",              
+    marginTop: 2                 
+  },
+  contactItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6"
+  },
+  contactAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#16A34A",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15
+  },
+  contactName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 2
+  },
+  contactPhone: {
+    fontSize: 13,
+    color: "#6B7280"
+  }
 });
