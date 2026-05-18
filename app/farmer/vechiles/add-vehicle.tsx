@@ -1,3 +1,5 @@
+// app/vehicle/add-vehicle.tsx
+
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
@@ -16,9 +18,9 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   TouchableWithoutFeedback
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // 🔥 PRO FIX
 
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
@@ -30,6 +32,7 @@ const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val
 export default function AddVehicle() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
 
   const vehicleId = getStr(params.vehicleId);
   const paramName = getStr(params.name);
@@ -72,7 +75,7 @@ export default function AddVehicle() {
     { en: "Mahindra Bolero Pickup", te: "మహీంద్రా బొలెరో పికప్" },
     { en: "Ashok Leyland Dost", te: "అశోక్ లేలాండ్ దోస్త్" },
     { en: "Auto Rickshaw (Trolley Auto)", te: "ట్రాలీ ఆటో" },
-    { en: "Seven Seater / Passenger Auto", te: "ప్యాసింజర్ auto" },
+    { en: "Seven Seater / Passenger Auto", te: "ప్యాసింజర్ ఆటో" },
     { en: "Bullock Cart", te: "ఎద్దుల బండి" },
     { en: "JCB / Backhoe Loader", te: "జెసిబి" },
     { en: "Dozer", te: "డోజర్" },
@@ -80,9 +83,7 @@ export default function AddVehicle() {
   ];
   
   const filteredVehicles = vehicleOptions.filter(item => {
-    const value = (language === "te" ? item.te : item.en)
-      .toLowerCase()
-      .trim();
+    const value = (language === "te" ? item.te : item.en).toLowerCase().trim();
     return value.includes(searchText.toLowerCase().trim());
   });
 
@@ -125,6 +126,7 @@ export default function AddVehicle() {
   };
 
   useSpeechRecognitionEvent("result", (event) => {
+    if (!isMounted.current) return;
     if (event.results && event.results.length > 0) {
       const transcript = event.results[0].transcript;
       if (activeInput === "name" && !isLocked) {
@@ -137,12 +139,13 @@ export default function AddVehicle() {
       }
       else if (activeInput === "modal") { 
         setSearchText(transcript); 
-        setType(transcript); 
       }
     }
   });
 
-  useSpeechRecognitionEvent("end", () => setIsListening(false));
+  useSpeechRecognitionEvent("end", () => {
+    if (isMounted.current) setIsListening(false);
+  });
 
   const handleVoiceInput = async (target: string) => {
     if (target === "name" && isLocked) {
@@ -160,7 +163,13 @@ export default function AddVehicle() {
   };
 
   useEffect(() => {
-    AsyncStorage.getItem("APP_LANG").then((l) => { if (l) setLanguage(l as any); });
+    isMounted.current = true;
+    AsyncStorage.getItem("APP_LANG").then((l) => { if (l && isMounted.current) setLanguage(l as any); });
+    
+    return () => {
+      isMounted.current = false;
+      ExpoSpeechRecognitionModule.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -178,13 +187,12 @@ export default function AddVehicle() {
     if (!name.trim()) newErrors.name = language === "te" ? "వాహనం పేరు నమోదు చేయండి*" : "Enter Vehicle Name*";
     if (!type.trim()) newErrors.type = language === "te" ? "వాహనం రకం ఎంచుకోండి*" : "Select Vehicle Type*";
     
+    // 🔥 PRO FIX: Number is completely optional now
     const cleanNumber = vehicleNumber.replace(/\s/g, "");
-    if (!cleanNumber) {
-        newErrors.number = language === "te" ? "వాహనం నంబర్ నమోదు చేయండి*" : "Enter Vehicle Number*";
-    } else {
+    if (cleanNumber.length > 0) {
         const isValid = /^[A-Z]{2}\d{2}[A-Z]{0,2}\d{4}$/.test(cleanNumber);
         if (!isValid) {
-            newErrors.number = language === "te" ? "పూర్తి నంబర్ (ఉదా: AP 16 CD 1234) ఇవ్వండి*" : "Enter full number (Ex: AP 16 CD 1234)*";
+            newErrors.number = language === "te" ? "సరైన నంబర్ (ఉదా: AP 16 CD 1234) ఇవ్వండి" : "Enter proper number (Ex: AP 16 CD 1234)";
         }
     }
 
@@ -201,24 +209,30 @@ export default function AddVehicle() {
       setSaving(false); 
       return;
     }
+    
     const userDoc = await firestore().collection("users").doc(phone).get();
     const activeSession = userDoc.data()?.activeSession;
-    if (!activeSession) return;
-    
-    // DUPLICATE CHECK
-    const existing = await firestore()
-      .collection("users")
-      .doc(phone)
-      .collection("vehicles")
-      .where("number", "==", cleanNumber)
-      .where("session", "==", activeSession)
-      .get();
-      
-    if (!existing.empty && !vehicleId) {
-      setErrorType("duplicate");
-      setShowValidationModal(true);
-      setSaving(false); 
+    if (!activeSession) {
+      setSaving(false);
       return;
+    }
+    
+    // 🔥 DUPLICATE CHECK (Only if number is provided)
+    if (cleanNumber.length > 0) {
+      const existing = await firestore()
+        .collection("users")
+        .doc(phone)
+        .collection("vehicles")
+        .where("number", "==", cleanNumber)
+        .where("session", "==", activeSession)
+        .get();
+        
+      if (!existing.empty && !vehicleId) {
+        setErrorType("duplicate");
+        setShowValidationModal(true);
+        setSaving(false); 
+        return;
+      }
     }
 
     setLoading(true);
@@ -226,7 +240,7 @@ export default function AddVehicle() {
     const data = {
       nickname: name.trim(),
       type,
-      number: cleanNumber,
+      number: cleanNumber, // Will save as empty string if not provided
       session: activeSession, 
       createdAt: firestore.FieldValue.serverTimestamp()
     };
@@ -235,12 +249,15 @@ export default function AddVehicle() {
       const col = firestore().collection("users").doc(phone).collection("vehicles");
       if (vehicleId) await col.doc(vehicleId as string).update(data);
       else await col.add(data);
-      router.back();
+      
+      if (isMounted.current) router.back();
     } catch (e) {
       console.log(e);
     } finally {
-      setLoading(false);
-      setSaving(false); 
+      if (isMounted.current) {
+        setLoading(false);
+        setSaving(false); 
+      }
     }
   };
 
@@ -253,17 +270,21 @@ export default function AddVehicle() {
         language={language}
       />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView 
+        contentContainerStyle={styles.container} 
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        showsVerticalScrollIndicator={false}
+      >
           
-          {/* 🚜 VEHICLE NAME (LOCKED IF hasRecords === true) */}
+          {/* 🚜 VEHICLE NAME */}
           <TouchableOpacity
             activeOpacity={1}
             style={[
               styles.inputBox,
               activeInput === "name" && !isLocked && styles.inputFocused,
               errors.name && styles.inputError,
-              isLocked && styles.inputLocked // 🔥 లాక్ అయితే గ్రే కలర్
+              isLocked && styles.inputLocked 
             ]}
             onPress={() => {
               if (isLocked) setShowLockInfo(true);
@@ -285,7 +306,7 @@ export default function AddVehicle() {
               <TextInput
                 ref={nameRef}
                 value={name}
-                editable={!isLocked} // 🔥 THE MAIN LOCK
+                editable={!isLocked} 
                 onChangeText={(txt) => {
                   setName(txt);
                   if (errors.name) setErrors({ ...errors, name: "" });
@@ -317,7 +338,31 @@ export default function AddVehicle() {
           </TouchableOpacity>
           {errors.name && <AppText style={styles.errorText} language={language}>{errors.name}</AppText>}
 
-          {/* 🔢 VEHICLE NUMBER */}
+          {/* 🔽 VEHICLE TYPE */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[
+              styles.inputBox,
+              modalType === "vehicle" && styles.inputFocused,
+              errors.type && styles.inputError
+            ]}
+            onPress={() => {
+              setModalType("vehicle");
+              setActiveInput("type");
+              if (errors.type) setErrors({ ...errors, type: "" });
+            }}
+          >
+            <MaterialCommunityIcons name="forklift" size={22} color={type || modalType === "vehicle" ? "#16A34A" : "#9CA3AF"} />
+            <View style={styles.inputWrapper}>
+              <AppText style={{ color: type ? "#1F2937" : "#9CA3AF", fontFamily: "Mandali" }}>
+                {type || (language === "te" ? "వాహనం రకం ఎంచుకోండి*" : "Select Type*")}
+              </AppText>
+            </View>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+          {errors.type && <AppText style={styles.errorText} language={language}>{errors.type}</AppText>}
+
+          {/* 🔢 VEHICLE NUMBER (OPTIONAL) */}
           <TouchableOpacity
             activeOpacity={1}
             style={[
@@ -333,8 +378,8 @@ export default function AddVehicle() {
             <Ionicons name="card-outline" size={20} color={vehicleNumber || activeInput === "number" ? "#16A34A" : "#9CA3AF"} />
             <View style={styles.inputWrapper}>
               {!vehicleNumber && activeInput !== "number" && (
-                <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali" }}>
-                  {language === "te" ? "వాహనం నంబర్ (Ex: AP 16 CD 1234)*" : "Vehicle Number (Ex: AP 16 CD 1234)*"}
+                <AppText style={{ color: "#9CA3AF", fontFamily: "Mandali", fontSize: 14 }}>
+                  {language === "te" ? "వాహనం నంబర్ (ఐచ్ఛికం/Optional)" : "Vehicle Number (Optional)"}
                 </AppText>
               )}
               <TextInput
@@ -367,30 +412,6 @@ export default function AddVehicle() {
           </TouchableOpacity>
           {errors.number && <AppText style={styles.errorText} language={language}>{errors.number}</AppText>}
 
-          {/* 🔽 VEHICLE TYPE */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.inputBox,
-              modalType === "vehicle" && styles.inputFocused,
-              errors.type && styles.inputError
-            ]}
-            onPress={() => {
-              setModalType("vehicle");
-              setActiveInput("type");
-              if (errors.type) setErrors({ ...errors, type: "" });
-            }}
-          >
-            <MaterialCommunityIcons name="forklift" size={22} color={type || modalType === "vehicle" ? "#16A34A" : "#9CA3AF"} />
-            <View style={styles.inputWrapper}>
-              <AppText style={{ color: type ? "#1F2937" : "#9CA3AF", fontFamily: "Mandali" }}>
-                {type || (language === "te" ? "వాహనం రకం ఎంచుకోండి*" : "Select Type*")}
-              </AppText>
-            </View>
-            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-          {errors.type && <AppText style={styles.errorText} language={language}>{errors.type}</AppText>}
-
           {/* SAVE BUTTON */}
           <TouchableOpacity
             activeOpacity={0.85}
@@ -404,8 +425,7 @@ export default function AddVehicle() {
               </AppText>
             </LinearGradient>
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       {/* 🚀 PREMIUM VALIDATION / DUPLICATE MODAL */}
       <Modal visible={showValidationModal} transparent animationType="fade" statusBarTranslucent>
@@ -482,14 +502,10 @@ export default function AddVehicle() {
             <View style={styles.bottomSheetBackdrop} />
           </TouchableWithoutFeedback>
           <View style={styles.bottomSheetContent}>
-            
-            {/* Drag Indicator */}
             <View style={styles.dragIndicator} />
-
             <View style={styles.modalHeader}>
               <AppText style={styles.sheetTitleText}>{language === "te" ? "వాహనం ఎంచుకోండి" : "Select Vehicle"}</AppText>
             </View>
-
             <View style={styles.searchBar}>
               <Ionicons name="search" size={20} color="#9CA3AF" style={{ marginRight: 8 }} />
               <TextInput
@@ -525,7 +541,6 @@ export default function AddVehicle() {
                 </TouchableOpacity>
               )}
             </View>
-
             <FlatList
               data={filteredVehicles}
               keyExtractor={(_, i) => i.toString()}

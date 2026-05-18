@@ -1,13 +1,13 @@
+import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState, useCallback } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,19 +19,20 @@ import {
   TouchableWithoutFeedback,
   View
 } from "react-native";
-import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; // 🔥 NEW PREMIUM MENU
+import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu";
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
 export default function VehiclesScreen() {
 
   const router = useRouter();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
 
   const [data, setData] = useState<any[]>([]);
   const [grouped, setGrouped] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [language, setLanguage] = useState<"te" | "en">("te");
 
-  // 🔥 NEW STATES FOR PREMIUM UI & LOCK LOGIC
+  // 🔥 STATES FOR PREMIUM UI & LOCK LOGIC
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [typeModalVisible, setTypeModalVisible] = useState(false);
@@ -42,9 +43,11 @@ export default function VehiclesScreen() {
   /* ---------------- LOAD ---------------- */
 
   useEffect(() => {
+    isMounted.current = true;
     AsyncStorage.getItem("APP_LANG").then((l) => {
-      if (l) setLanguage(l as any);
+      if (l && isMounted.current) setLanguage(l as any);
     });
+    return () => { isMounted.current = false; };
   }, []);
 
   useFocusEffect(
@@ -56,7 +59,7 @@ export default function VehiclesScreen() {
 
         const phone = await AsyncStorage.getItem("USER_PHONE");
         if (!phone) {
-          setLoading(false);
+          if (isMounted.current) setLoading(false);
           return;
         }
 
@@ -64,7 +67,7 @@ export default function VehiclesScreen() {
         const activeSession = userDoc.data()?.activeSession;
 
         if (!activeSession) {
-          setLoading(false);
+          if (isMounted.current) setLoading(false);
           return;
         }
 
@@ -73,12 +76,11 @@ export default function VehiclesScreen() {
           .doc(phone)
           .collection("vehicles")
           .where("session", "==", activeSession)
-          .where("createdAt", "!=", null)  
           .orderBy("createdAt", "desc")
           .onSnapshot((snap) => {
 
           if (!snap || !snap.docs) {
-            setLoading(false);
+            if (isMounted.current) setLoading(false);
             return;
           }
 
@@ -96,15 +98,18 @@ export default function VehiclesScreen() {
             group[type].push({ id: doc.id, ...d });
           });
 
-          setData(list);
-          setGrouped(group);
-          setLoading(false);
+          if (isMounted.current) {
+            setData(list);
+            setGrouped(group);
+            setLoading(false);
+          }
         });
       };
 
       load();
-      return () => unsubscribe && unsubscribe();
-
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
     }, [])
   );
 
@@ -150,6 +155,7 @@ export default function VehiclesScreen() {
   );
 
   const formatDisplay = (num: string) => {
+    if (!num) return "";
     const match = num.match(/^([A-Z]{2})(\d{2})([A-Z]{2})(\d{4})$/);
     return match ? `${match[1]} ${match[2]} ${match[3]} ${match[4]}` : num;
   };
@@ -183,16 +189,17 @@ export default function VehiclesScreen() {
   const handleEditClick = async (vehicle: any) => {
     setActionLoading(true);
     const hasRecords = await checkVehicleHasRecords(vehicle.id);
+    if (!isMounted.current) return;
     setActionLoading(false);
 
     router.push({
-      pathname: "/farmer/add-vehicle",
+      pathname: "/farmer/vechiles/add-vehicle",
       params: {
         vehicleId: vehicle.id,
         name: vehicle.nickname,
         type: vehicle.type,
         number: vehicle.number || "",
-        hasRecords: hasRecords ? "true" : "false" // 🔥 Flag పంపుతున్నాం
+        hasRecords: hasRecords ? "true" : "false"
       }
     });
   };
@@ -201,6 +208,7 @@ export default function VehiclesScreen() {
   const handleDeleteClick = async (vehicle: any) => {
     setActionLoading(true);
     const hasRecords = await checkVehicleHasRecords(vehicle.id);
+    if (!isMounted.current) return;
     setActionLoading(false);
 
     if (hasRecords) {
@@ -211,7 +219,6 @@ export default function VehiclesScreen() {
     }
   };
 
-  // 🔥 MODERN MENU STYLES
   const optionsStyles = {
     optionsContainer: {
       borderRadius: 14,
@@ -258,14 +265,18 @@ export default function VehiclesScreen() {
           !loading && Object.keys(grouped).length === 0 && { flexGrow: 1, justifyContent: 'center' }
         ]}
 
-        ListEmptyComponent={
+       ListEmptyComponent={
           !loading && Object.keys(grouped).length === 0 ? (
-            <AppEmptyState
-              iconName="tractor" 
-              title={language === "te" ? "వాహనాలు లేవు" : "No Vehicles Yet"}
-              subtitle={language === "te" ? "మీ వాహనాలను చేర్చడానికి + బటన్ నొక్కండి" : "Tap + button to add your vehicles"}
-              language={language}
-            />
+            <View style={{ marginTop: 40 }}>
+              <AppEmptyState
+                iconName="tractor" 
+                title={language === "te" ? "వాహనాల యజమానుల కోసం" : "For Vehicle Owners"}
+                subtitle={language === "te" 
+                  ? "మీరు ట్రాక్టర్ లేదా ఇతర యంత్రాలతో కిరాయి పనులు చేస్తుంటే.. రైతుల కిరాయి లెక్కలు, డ్రైవర్ల ఖర్చులు రాసుకోవడానికి ముందుగా ఇక్కడ మీ వాహనాన్ని యాడ్ చేయండి." 
+                  : "If you rent out machinery for farm works, add your vehicle here to track farmer incomes and driver expenses."}
+                language={language}
+              />
+            </View>
           ) : null
         }
 
@@ -290,19 +301,21 @@ export default function VehiclesScreen() {
                   <View style={[styles.cardBar, { backgroundColor: getColor(v.type)}]} />
 
                   <View style={styles.cardInfo}>
-                    <AppText style={styles.cardTitle}>{v.nickname}</AppText>
-                    <AppText style={styles.cardSub}>
+                    {/* 🔥 PRO FIX: numberOfLines యాడ్ చేశాను UI బ్రేక్ అవ్వకుండా */}
+                    <AppText style={styles.cardTitle} numberOfLines={1} ellipsizeMode="tail">
+                      {v.nickname}
+                    </AppText>
+                    <AppText style={styles.cardSub} numberOfLines={1}>
                       {language === "te" ? "రకం" : "Type"}: {v.type}
                     </AppText>
 
-                    {v.number && (
+                    {v.number ? (
                       <View style={styles.plate}>
                         <AppText style={styles.plateText}>{formatDisplay(v.number)}</AppText>
                       </View>
-                    )}
+                    ) : null}
                   </View>
 
-                  {/* 🔥 NEW POPUP MENU */}
                   <Menu>
                     <MenuTrigger style={styles.menuBtn}>
                       <Ionicons name="ellipsis-vertical" size={18} color="#9CA3AF" />
@@ -463,7 +476,7 @@ export default function VehiclesScreen() {
                     onPress={() => {
                       setTypeModalVisible(false);
                       router.push({
-                        pathname: "/farmer/vechile-farmers/farmers", // (Change this to vehicle-farmers if renamed)
+                        pathname: "/farmer/vechile-farmers/farmers", // 🔥 Make sure this path is correct
                         params: {
                           id: selectedVehicle.id,
                           name: selectedVehicle.nickname,
@@ -482,8 +495,8 @@ export default function VehiclesScreen() {
                       </AppText>
                       <AppText style={styles.premiumCardSub}>
                         {language === "te"
-                          ? "రైతుల పొలాల్లో చేసిన పనులు"
-                          : "Works done in farmer fields"}
+                          ? "రైతుల పొలాల్లో చేసిన పనులు (Income)"
+                          : "Works done in farmer fields (Income)"}
                       </AppText>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -495,7 +508,7 @@ export default function VehiclesScreen() {
                       onPress={() => {
                         setTypeModalVisible(false);
                         router.push({
-                          pathname: "/farmer/vechile-drivers/drivers",
+                          pathname: "/farmer/vechile-drivers/drivers", // 🔥 Make sure this path is correct
                           params: {
                             id: selectedVehicle.id,
                             name: selectedVehicle.nickname,
@@ -514,8 +527,8 @@ export default function VehiclesScreen() {
                       </AppText>
                       <AppText style={styles.premiumCardSub}>
                         {language === "te"
-                          ? "డ్రైవర్ల హాజరు మరియు పనులు"
-                          : "Manage driver attendance"}
+                          ? "డ్రైవర్ల హాజరు మరియు ఖర్చులు (Expense)"
+                          : "Driver attendance & payments (Expense)"}
                       </AppText>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -567,7 +580,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 12,
     borderBottomLeftRadius: 12
   },
-  cardInfo: { flex: 1, marginLeft: 15 },
+  cardInfo: { flex: 1, marginLeft: 15, paddingRight: 10 },
   cardTitle: { fontSize: 16, fontWeight: "600", color: "#111827" },
   cardSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
 
@@ -588,7 +601,6 @@ const styles = StyleSheet.create({
     color: "#111827"
   },
   
-  // NEW MENU STYLES
   menuBtn: {
     justifyContent: "center",
     alignItems: "center",
@@ -621,7 +633,6 @@ const styles = StyleSheet.create({
   shimmerPlate: { height: 18, width: 100, marginTop: 8, borderRadius: 6 },
   shimmerMenu: { width: 32, height: 32, borderRadius: 10 },
 
-  // MODALS
   overlay: {
     flex: 1,
     justifyContent: "center",
@@ -660,7 +671,6 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontWeight: "600", color: "#475569" },
   deleteBtnText: { fontWeight: "600", color: "#fff" },
 
-  // PREMIUM CHOOSE WORK MODAL
   premiumModalBox: {
     width: "85%",
     backgroundColor: "#ffffff",

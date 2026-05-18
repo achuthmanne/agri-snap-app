@@ -1,18 +1,23 @@
+//vechile drivers work history
+import AppEmptyState from "@/components/AppEmptyState"; 
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; 
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
-    FlatList, Modal, SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from "react-native";
 import ShimmerPlaceHolder from "react-native-shimmer-placeholder";
 
@@ -33,6 +38,7 @@ export default function DriverHistory() {
 
   const router = useRouter();
   const { vehicleId, driverId, name, phone } = useLocalSearchParams();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
 
   // 🔥 URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా
   const dName = Array.isArray(name) ? name[0] : name;
@@ -52,23 +58,31 @@ export default function DriverHistory() {
 
   /* ---------------- LOAD ---------------- */
 
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
 
       const load = async () => {
         const lang = await AsyncStorage.getItem("APP_LANG");
-        if (lang) setLanguage(lang as any);
+        if (lang && isMounted.current) setLanguage(lang as any);
 
         const userPhone = await AsyncStorage.getItem("USER_PHONE");
-        if (!userPhone || !vId || !dId) return;
+        if (!userPhone || !vId || !dId) {
+            if (isMounted.current) setLoading(false);
+            return;
+        }
 
         // 🔥 1. FETCH ACTIVE SESSION
         const userDoc = await firestore().collection("users").doc(userPhone).get();
         const activeSession = userDoc.data()?.activeSession;
 
         if (!activeSession) {
-          setLoading(false);
+          if (isMounted.current) setLoading(false);
           return;
         }
 
@@ -84,7 +98,7 @@ export default function DriverHistory() {
           .where("session", "==", activeSession)
           .onSnapshot(snap => {
             if (!snap || !snap.docs) {
-              setLoading(false);
+              if (isMounted.current) setLoading(false);
               return;
             }
 
@@ -98,8 +112,13 @@ export default function DriverHistory() {
               return timeB - timeA;
             });
 
-            setData(list);
-            setLoading(false);
+            if (isMounted.current) {
+                setData(list);
+                setLoading(false);
+            }
+          }, (error) => {
+            console.log("Snapshot Error:", error);
+            if (isMounted.current) setLoading(false);
           });
       };
 
@@ -114,38 +133,46 @@ export default function DriverHistory() {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone || !deleteId || !vId || !dId) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("vehicles")
-      .doc(vId)
-      .collection("drivers")
-      .doc(dId)
-      .collection("entries")
-      .doc(deleteId)
-      .delete();
+    try {
+        await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("drivers")
+        .doc(dId)
+        .collection("entries")
+        .doc(deleteId)
+        .delete();
+    } catch (e) {
+        console.log("Delete error", e);
+    }
 
-    setDeleteId(null);
+    if (isMounted.current) setDeleteId(null);
   };
 
   const handleStatusUpdate = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone || !statusId || !vId || !dId) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("vehicles")
-      .doc(vId)
-      .collection("drivers")
-      .doc(dId)
-      .collection("entries")
-      .doc(statusId)
-      .update({
-        paymentStatus: newStatus
-      });
+    try {
+        await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("drivers")
+        .doc(dId)
+        .collection("entries")
+        .doc(statusId)
+        .update({
+            paymentStatus: newStatus
+        });
+    } catch (e) {
+        console.log("Update error", e);
+    }
 
-    setStatusId(null);
+    if (isMounted.current) setStatusId(null);
   };
 
   /* ---------------- GROUP BY WORK ---------------- */
@@ -195,7 +222,7 @@ export default function DriverHistory() {
       <AppHeader
         title={language === "te" ? "పనుల చరిత్ర" : "Work History"}
         subtitle={language === "te" ? "ఖాతా వివరాలు" : "Account Details"}
-                language={language}
+        language={language}
       />
 
       {/* 🔥 INFO BOX (ONLY SHOWS IF THERE IS DATA) */}
@@ -211,7 +238,7 @@ export default function DriverHistory() {
       )}
  
       {loading ? (
-        <View style={{ paddingTop: 10 }}>
+        <View style={{ padding: 10 }}>
           <ShimmerCard />
           <ShimmerCard />
           <ShimmerCard />
@@ -245,13 +272,14 @@ export default function DriverHistory() {
                   style={[styles.cropHeader, { alignItems: "center" }]}
                   onPress={() => setExpanded(isOpen ? null : item.work)}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 10 }}>
                     <View style={{
                       width: 4, height: 50, borderRadius: 4,
                       backgroundColor: getCropColor(item.work), marginRight: 10
                     }} />
                     <View style={{ flex: 1 }}>
-                      <AppText style={styles.cropTitle}>
+                      {/* 🔥 PRO FIX: Truncate long work names */}
+                      <AppText style={styles.cropTitle} numberOfLines={1} ellipsizeMode="tail">
                         {item.work}
                       </AppText>
                       <AppText style={styles.cropCount}>
@@ -259,7 +287,11 @@ export default function DriverHistory() {
                       </AppText>
                     </View>
                   </View>
-                  <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
+
+                  {/* 🔥 PRO FIX: PREMIUM CHEVRON BACKGROUND */}
+                  <View style={{ width: 32, height: 32, borderRadius: 20, backgroundColor: "#e9e9e9", justifyContent: "center", alignItems: "center" }}>
+                    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
+                  </View>
                 </TouchableOpacity>
 
                 {/* EXPAND */}
@@ -279,7 +311,7 @@ export default function DriverHistory() {
                       <View style={styles.statusRow}>
                         <AppText style={[styles.statusText, { color: isPaid ? "#16A34A" : "#DC2626" }]}>
                           {isPaid
-                            ? (language === "te" ? "చెల్లింపు పూర్తైంది" : "Payment Done")
+                            ? (language === "te" ? "చెల్లింపు పూర్తైంది (లాక్)" : "Payment Done (Locked)")
                             : (language === "te" ? "చెల్లింపు పెండింగ్" : "Payment Pending")}
                         </AppText>
                         <TouchableOpacity
@@ -334,7 +366,7 @@ export default function DriverHistory() {
                       {work.notes ? (
                         <View style={styles.notesBox}>
                           <Ionicons name="document-text-outline" size={14} color="#6B7280" style={{ marginTop: 2 }} />
-                          <AppText style={styles.notesText}>{work.notes}</AppText>
+                          <AppText style={styles.notesText} numberOfLines={2} ellipsizeMode="tail">{work.notes}</AppText>
                         </View>
                       ) : null}
 
@@ -369,7 +401,7 @@ export default function DriverHistory() {
             <View style={styles.iconBg}>
               <Ionicons name="trash-outline" size={36} color="#DC2626" />
             </View>
-            <AppText style={styles.modalTitle}>{language === "te" ? "తొలగించాలా?" : "Delete Work?"}</AppText>
+            <AppText style={styles.modalTitleText}>{language === "te" ? "తొలగించాలా?" : "Delete Work?"}</AppText>
             <AppText style={styles.modalSub}>
               {language === "te" ? "ఈ పనిని తొలగించాలనుకుంటున్నారా?" : "Are you sure you want to delete this work?"}
             </AppText>
@@ -392,7 +424,7 @@ export default function DriverHistory() {
             <View style={styles.iconBg1}>
               <Ionicons name="checkmark-done" size={36} color="#16A34A" />
             </View>
-            <AppText style={styles.modalTitle}>
+            <AppText style={styles.modalTitleText}>
               {language === "te" ? "చెల్లింపు పూర్తయ్యిందా?" : "Confirm Payment Completion"}
             </AppText>
             <AppText style={styles.modalSub}>
@@ -417,7 +449,7 @@ export default function DriverHistory() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },
+  safe: { flex: 1, backgroundColor: "#F8FAFC" }, // Lighter background for premium look
   
   infoBanner: {
     flexDirection: "row",
@@ -452,24 +484,24 @@ const styles = StyleSheet.create({
   finalAmount: { fontSize: 17, fontWeight: "bold", color: "#111827" },
   deleteBtn: { backgroundColor: "#FEE2E2", padding: 8, borderRadius: 10 },
   notesBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  notesText: { fontSize: 12, color: "#374151", flex: 1, lineHeight: 18 },
+  notesText: { fontSize: 14, color: "#374151", flex: 1, lineHeight: 24 },
   workCard: { padding: 14, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between" },
   date: { fontSize: 12, color: "#6B7280" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
-  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
+  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset:{width:0, height:2}, shadowOpacity:0.2, shadowRadius:4 },
   statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
   statusText: { fontSize: 12, fontWeight: "600" },
   toggle: { width: 40, height: 20, borderRadius: 20, padding: 2, justifyContent: "center" },
   toggleCircle: { width: 16, height: 16, borderRadius: 8, backgroundColor: "#fff" },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 16, width: "80%", alignItems: "center" },
-  modalTitle: { marginTop: 10, fontSize: 16, fontWeight: "600" },
-  modalSub: { fontSize: 13, color: "#6B7280", marginTop: 6, textAlign: "center" },
-  modalRow: { flexDirection: "row", marginTop: 20, gap: 30 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 999 },
+  modalBox: { backgroundColor: "#fff", padding: 24, borderRadius: 20, width: "80%", alignItems: "center", elevation: 10 },
+  modalTitleText: { marginTop: 10, fontSize: 18, fontWeight: "600", color: "#111827", textAlign: "center" }, // Changed to avoid clash with other modalTitle
+  modalSub: { fontSize: 13, color: "#6B7280", marginTop: 8, textAlign: "center", lineHeight: 20 },
+  modalRow: { flexDirection: "row", marginTop: 20, gap: 12 }, // 🔥 PRO FIX: Standardized gap
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#e2fef3", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  cancelBtn: { flex: 1, padding: 12, backgroundColor: "#F3F4F6", borderRadius: 10, alignItems: "center" },
-  deleteConfirmBtn: { flex: 1, padding: 12, backgroundColor: "#0c652f", borderRadius: 10, alignItems: "center" },
-  deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 10, alignItems: "center" },
+  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  cancelBtn: { flex: 1, paddingVertical: 12, backgroundColor: "#F1F5F9", borderRadius: 12, alignItems: "center" },
+  deleteConfirmBtn: { flex: 1, paddingVertical: 12, backgroundColor: "#16A34A", borderRadius: 12, alignItems: "center" },
+  deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 12, alignItems: "center" },
 });

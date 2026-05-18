@@ -1,18 +1,19 @@
+//vechile farmer work history
+import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
-import AppEmptyState from "@/components/AppEmptyState"; // 🔥 మన గ్లోబల్ కాంపోనెంట్
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    FlatList, Modal, SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TouchableOpacity,
-    View
+  FlatList, Modal, SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from "react-native";
 import ShimmerPlaceHolder from "react-native-shimmer-placeholder";
 
@@ -40,6 +41,7 @@ export default function FarmerHistory() {
 
   const router = useRouter();
   const { vehicleId, farmerId, name, phone } = useLocalSearchParams();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Prevent memory leaks
 
   // URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా
   const fName = Array.isArray(name) ? name[0] : name;
@@ -59,23 +61,31 @@ export default function FarmerHistory() {
 
   /* ---------------- LOAD ---------------- */
 
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       let unsub: any;
 
       const load = async () => {
         const lang = await AsyncStorage.getItem("APP_LANG");
-        if (lang) setLanguage(lang as any);
+        if (lang && isMounted.current) setLanguage(lang as any);
 
         const userPhone = await AsyncStorage.getItem("USER_PHONE");
-        if (!userPhone || !vId || !fId) return;
+        if (!userPhone || !vId || !fId) {
+            if (isMounted.current) setLoading(false);
+            return;
+        }
 
         // 🔥 FETCH ACTIVE SESSION
         const userDoc = await firestore().collection("users").doc(userPhone).get();
         const activeSession = userDoc.data()?.activeSession;
 
         if (!activeSession) {
-          setLoading(false);
+          if (isMounted.current) setLoading(false);
           return;
         }
 
@@ -91,7 +101,7 @@ export default function FarmerHistory() {
           .where("session", "==", activeSession) // సెషన్ బేస్డ్ ఫిల్టర్
           .onSnapshot(snap => {
             if (!snap || !snap.docs) {
-              setLoading(false);
+              if (isMounted.current) setLoading(false);
               return;
             }
 
@@ -105,8 +115,13 @@ export default function FarmerHistory() {
               return timeB - timeA;
             });
 
-            setData(list);
-            setLoading(false);
+            if (isMounted.current) {
+                setData(list);
+                setLoading(false);
+            }
+          }, (error) => {
+              console.log("Snapshot error: ", error);
+              if (isMounted.current) setLoading(false);
           });
       };
 
@@ -121,38 +136,46 @@ export default function FarmerHistory() {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone || !deleteId || !vId || !fId) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("vehicles")
-      .doc(vId)
-      .collection("works")
-      .doc(fId)
-      .collection("entries")
-      .doc(deleteId)
-      .delete();
+    try {
+        await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("works")
+        .doc(fId)
+        .collection("entries")
+        .doc(deleteId)
+        .delete();
+    } catch (error) {
+        console.log("Delete Error: ", error);
+    }
 
-    setDeleteId(null);
+    if (isMounted.current) setDeleteId(null);
   };
 
   const handleStatusUpdate = async () => {
     const userPhone = await AsyncStorage.getItem("USER_PHONE");
     if (!userPhone || !statusId || !vId || !fId) return;
 
-    await firestore()
-      .collection("users")
-      .doc(userPhone)
-      .collection("vehicles")
-      .doc(vId)
-      .collection("works")
-      .doc(fId)
-      .collection("entries")
-      .doc(statusId)
-      .update({
-        paymentStatus: newStatus
-      });
+    try {
+        await firestore()
+        .collection("users")
+        .doc(userPhone)
+        .collection("vehicles")
+        .doc(vId)
+        .collection("works")
+        .doc(fId)
+        .collection("entries")
+        .doc(statusId)
+        .update({
+            paymentStatus: newStatus
+        });
+    } catch (error) {
+        console.log("Update Error: ", error);
+    }
 
-    setStatusId(null);
+    if (isMounted.current) setStatusId(null);
   };
 
   /* ---------------- GROUP BY CROP ---------------- */
@@ -206,7 +229,7 @@ export default function FarmerHistory() {
         language={language}
       />
 
-      {/* 🔥 INFO BOX (ONLY SHOWS IF THERE IS DATA) */}
+      {/* 🔥 INFO BANNER (ONLY SHOWS IF THERE IS DATA) */}
       {!loading && data.length > 0 && (
         <View style={styles.infoBanner}>
           <Ionicons name="information-circle" size={20} color="#0284C7" />
@@ -219,7 +242,7 @@ export default function FarmerHistory() {
       )}
 
       {loading ? (
-        <View style={{ paddingTop: 10 }}>
+        <View style={{ padding: 10 }}>
           <ShimmerCard />
           <ShimmerCard />
           <ShimmerCard />
@@ -255,19 +278,22 @@ export default function FarmerHistory() {
                   style={[styles.cropHeader, { alignItems: "center" }]}
                   onPress={() => setExpanded(isOpen ? null : item.crop)}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 10 }}>
                     <View style={{
                       width: 4, height: 50, borderRadius: 4,
                       backgroundColor: getCropColor(item.crop), marginRight: 10
                     }} />
                     <View style={{ flex: 1 }}>
-                      <AppText style={styles.cropTitle}>{item.crop}</AppText>
+                      {/* 🔥 PRO FIX: Ellipsize for long crop names */}
+                      <AppText style={styles.cropTitle} numberOfLines={1} ellipsizeMode="tail">{item.crop}</AppText>
                       <AppText style={styles.cropCount}>
                         {language === "te" ? `${item.list.length} పనులు` : `${item.list.length} Works`}
                       </AppText>
                     </View>
                   </View>
-                  <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
+<View style={{ width: 32, height: 32, borderRadius: 20, backgroundColor: "#e6e8e9", justifyContent: "center", alignItems: "center" }}>
+    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
+</View>
                 </TouchableOpacity>
 
                 {/* EXPAND */}
@@ -280,7 +306,8 @@ export default function FarmerHistory() {
                       
                       {/* TOP */}
                       <View style={styles.rowBetween}>
-                        <AppText style={styles.workTitle}>{work.work}</AppText>
+                        {/* 🔥 PRO FIX: Ellipsize for long work names */}
+                        <AppText style={styles.workTitle} numberOfLines={1} ellipsizeMode="tail">{work.work}</AppText>
                         <AppText style={styles.date}>{work.date}</AppText>
                       </View>
 
@@ -389,7 +416,7 @@ export default function FarmerHistory() {
                       {work.notes ? (
                         <View style={styles.notesBox}>
                           <Ionicons name="document-text-outline" size={14} color="#6B7280" style={{ marginTop: 2 }} />
-                          <AppText style={styles.notesText}>{work.notes}</AppText>
+                          <AppText style={styles.notesText} numberOfLines={2} ellipsizeMode="tail">{work.notes}</AppText>
                         </View>
                       ) : null}
 
@@ -472,12 +499,12 @@ export default function FarmerHistory() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },  
+  safe: { flex: 1, backgroundColor: "#F8FAFC" },  
 
   // 🔥 NEW INFO BANNER STYLE
   infoBanner: {
     flexDirection: "row",
-    backgroundColor: "#DBEAFE", // Light blue
+    backgroundColor: "#DBEAFE", 
     padding: 12,
     marginHorizontal: 16,
     marginTop: 12,
@@ -508,25 +535,25 @@ const styles = StyleSheet.create({
   finalAmount: { fontSize: 17, fontWeight: "bold", color: "#111827" },
   deleteBtn: { backgroundColor: "#FEE2E2", padding: 8, borderRadius: 10 },
   notesBox: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB" },
-  notesText: { fontSize: 12, color: "#374151", flex: 1, lineHeight: 18 },
+  notesText: { fontSize: 14, color: "#374151", flex: 1, lineHeight: 24 },
   workCard: { padding: 14, borderTopWidth: 1, borderTopColor: "#F1F5F9" },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between" },
-  workTitle: { fontSize: 14, fontWeight: "600" },
+  rowBetween: { flexDirection: "row", justifyContent: "space-between", paddingRight: 5 },
+  workTitle: { fontSize: 14, fontWeight: "600", flex: 1, marginRight: 10 },
   date: { fontSize: 12, color: "#6B7280" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },
-  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
+  addGradient: { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOffset:{width:0, height:2}, shadowOpacity:0.2, shadowRadius:4 },
   statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
   statusText: { fontSize: 12, fontWeight: "600" },
   toggle: { width: 40, height: 20, borderRadius: 20, padding: 2, justifyContent: "center" },
   toggleCircle: { width: 16, height: 16, borderRadius: 8, backgroundColor: "#fff" },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
-  modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 16, width: "80%", alignItems: "center" },
-  modalTitle: { marginTop: 10, fontSize: 16, fontWeight: "600" },
-  modalSub: { fontSize: 13, color: "#6B7280", marginTop: 6, textAlign: "center" },
-  modalRow: { flexDirection: "row", marginTop: 20, gap: 30 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 999 },
+  modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 16, width: "80%", alignItems: "center", elevation: 10 },
+  modalTitle: { marginTop: 10, fontSize: 16, fontWeight: "600", color: "#111827" },
+  modalSub: { fontSize: 13, color: "#6B7280", marginTop: 6, textAlign: "center", lineHeight: 20 },
+  modalRow: { flexDirection: "row", marginTop: 20, gap: 12 }, // 🔥 PRO FIX: Changed gap from 30 to 12 for standard look
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#e2fef3", justifyContent: "center", alignItems: "center", marginBottom: 10 },
+  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginBottom: 10 }, // Light green
   cancelBtn: { flex: 1, padding: 12, backgroundColor: "#F3F4F6", borderRadius: 10, alignItems: "center" },
-  deleteConfirmBtn: { flex: 1, padding: 12, backgroundColor: "#0c652f", borderRadius: 10, alignItems: "center" },
+  deleteConfirmBtn: { flex: 1, padding: 12, backgroundColor: "#16A34A", borderRadius: 10, alignItems: "center" },
   deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 10, alignItems: "center" }
 });

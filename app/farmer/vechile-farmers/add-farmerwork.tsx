@@ -1,4 +1,5 @@
-//add farmer work
+// add-farmerwork.tsx WITH DUPLICATE WARNING SAFETY
+
 import AgriLoader from "@/components/AgriLoader";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
@@ -15,15 +16,19 @@ import {
   FlatList,
   Modal,
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 export default function AddFarmerWork() {
+  const router = useRouter();
+  const { vehicleId, farmerId } = useLocalSearchParams(); 
+  const isMounted = useRef(true);
+
   const acresInputRef = useRef<TextInput>(null);
   const [language, setLanguage] = useState<"te" | "en">("te");
 
@@ -33,7 +38,7 @@ export default function AddFarmerWork() {
 
   const isFocused = useIsFocused();
   const [isListening, setIsListening] = useState(false);
-  const [voiceTarget, setVoiceTarget] = useState<"crop" | "work" | "notes" | null>(null); // 🔥 Added exact voice target logic
+  const [voiceTarget, setVoiceTarget] = useState<"crop" | "work" | "notes" | null>(null); 
 
   const [date, setDate] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -69,15 +74,28 @@ export default function AddFarmerWork() {
 
   const [errorModal, setErrorModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [errors, setErrors] = useState<{ [key: string]: string }>({}); // 🔥 Inline Errors State
+  const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   const [saving, setSaving] = useState(false);
-  const router = useRouter();
-  const { vehicleId, farmerId } = useLocalSearchParams(); 
+  
+  // 🔥 NEW STATES FOR DUPLICATE WARNING FLOW
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
   const notesInputRef = useRef<TextInput>(null);
 
-  // Automatic ga Calculation maragane Payable Amount update avvali
   useEffect(() => {
+    isMounted.current = true;
+    AsyncStorage.getItem("APP_LANG").then((l) => {
+      if (l && isMounted.current) setLanguage(l as any);
+    });
+
+    return () => {
+      isMounted.current = false;
+      ExpoSpeechRecognitionModule.stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted.current) return;
     if (workType === "time") {
       const h = parseFloat(hrs) || 0;
       const m = parseFloat(mins) || 0;
@@ -138,7 +156,7 @@ export default function AddFarmerWork() {
 
   const cropOptions = [
     { "en": "Acid Lime / Lemon", "te": "నిమ్మ" },
-    { "en": "Apple Gourd", "te": "దండకాయ" },
+    { "en": "Apple Gourd", "te": "దొండకాయ" },
     { "en": "Areca Nut", "te": "పోక చెక్క" },
     { "en": "Banana", "te": "అరటి" },
     { "en": "Bajra / Pearl Millet", "te": "సజ్జలు" },
@@ -213,7 +231,7 @@ export default function AddFarmerWork() {
     { "en": "Bund Forming", "te": "గట్లు వేయడం" },
     { "en": "Cage Wheel Puddling", "te": "కేజ్ వీల్ దమ్మి (పల్లేరు చక్రాలు)" },
     { "en": "Chaff Cutting", "te": "గడ్డి కత్తిరించడం" },
-    { "en": "Combined Harvesting (Paddy)", "te": "వరి కోత (హార్వెస్టర్)" },
+    { "en": "Combine Harvesting (Paddy)", "te": "వరి కోత (హార్వెస్టర్)" },
     { "en": "Corn Shelling", "te": "మొక్కజొన్న వలుపు" },
     { "en": "Cultivator Ploughing", "te": "కల్టివేటర్ దుక్కి" },
     { "en": "Digging (Earth)", "te": "జేసీబీ మట్టి పని (JCB/Excavator)" },
@@ -242,10 +260,8 @@ export default function AddFarmerWork() {
     { "en": "Tractor Spraying", "te": "ట్రాక్టర్ పిచికారీ" }
   ];
 
-  // 🔥 EXACT MIC LOGIC FROM FIRST SCREEN
   const handleVoiceInput = async (target: "crop" | "work" | "notes") => {
     setVoiceTarget(target);
-
     const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!res.granted) return;
 
@@ -257,11 +273,10 @@ export default function AddFarmerWork() {
   };
 
   useSpeechRecognitionEvent("result", (event) => {
-    if (!isFocused) return;
+    if (!isFocused || !isMounted.current) return;
     if (!event.results || event.results.length === 0) return;
 
     const text = event.results[0].transcript;
-
     if (voiceTarget === "crop") {
       setCrop(text);
       setSearchText(text);
@@ -276,18 +291,54 @@ export default function AddFarmerWork() {
   });
 
   useSpeechRecognitionEvent("end", () => {
-    setIsListening(false);
-    setVoiceTarget(null);
+    if (isMounted.current) {
+      setIsListening(false);
+      setVoiceTarget(null);
+    }
   });
 
-  useEffect(() => {
-    return () => {
-      ExpoSpeechRecognitionModule.stop();
-    };
-  }, []);
+  /* ---------------- SAVE ENTRY FUNCTION ---------------- */
+  const executeSave = async (activeSession: string, phone: string, vId: string, fId: string) => {
+    await firestore()
+      .collection("users")
+      .doc(phone)
+      .collection("vehicles")
+      .doc(vId)
+      .collection("works")
+      .doc(fId)
+      .collection("entries")
+      .add({
+        date,
+        crop: crop.trim(),
+        work: work.trim(),
+        acres: acres.trim(),
+        workType,
+        hrs: hrs.trim(),
+        mins: mins.trim(),
+        ratePerHour: ratePerHour.trim(),
+        saalluCount: saalluCount.trim(),
+        ratePerSaalu: ratePerSaalu.trim(),
+        payableAmount: payableAmount.trim(),
+        advanceAmount: advanceAmount.trim(),
+        finalAmount: getFinalAmount(),
+        notes: notes.trim(),
+        paymentStatus: "pending", 
+        session: activeSession,
+        createdAt: firestore.FieldValue.serverTimestamp()
+      });
 
-  /* ---------------- SAVE ---------------- */
-  const handleSave = async () => {
+    setTimeout(() => {
+      if (isMounted.current) {
+        setSaving(false);
+        router.back();
+      }
+    }, 500);
+  };
+
+  /* ---------------- HANDLE SAVE ---------------- */
+  const handleSave = async (bypassDuplicate = false) => {
+    if (saving) return;
+
     // 🔥 Inline Error Checks
     const newErrors: any = {};
     if (!date) newErrors.date = language === "te" ? "తేదీని ఎంచుకోండి*" : "Select Date*";
@@ -315,11 +366,9 @@ export default function AddFarmerWork() {
 
     try {
       setSaving(true);
-      await new Promise(resolve => setTimeout(resolve, 0));
-
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone || !vehicleId || !farmerId) {
-        setSaving(false);
+        if (isMounted.current) setSaving(false);
         return;
       }
 
@@ -327,60 +376,54 @@ export default function AddFarmerWork() {
       const activeSession = userDoc.data()?.activeSession;
 
       if (!activeSession) {
-        setSaving(false);
-        setErrorMsg(language === "te" ? "సెషన్ కనుగొనబడలేదు!" : "Active session not found!");
-        setErrorModal(true);
+        if (isMounted.current) {
+          setSaving(false);
+          setErrorMsg(language === "te" ? "సెషన్ కనుగొనబడలేదు!" : "Active session not found!");
+          setErrorModal(true);
+        }
         return;
       }
 
       const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
       const fId = Array.isArray(farmerId) ? farmerId[0] : farmerId;
 
-      await firestore()
-        .collection("users")
-        .doc(phone)
-        .collection("vehicles")
-        .doc(vId)
-        .collection("works")
-        .doc(fId)
-        .collection("entries")
-        .add({
-          date,
-          crop: crop.trim(),
-          work: work.trim(),
-          acres: acres.trim(),
-          workType,
-          hrs: hrs.trim(),
-          mins: mins.trim(),
-          ratePerHour: ratePerHour.trim(),
-          saalluCount: saalluCount.trim(),
-          ratePerSaalu: ratePerSaalu.trim(),
-          payableAmount: payableAmount.trim(),
-          advanceAmount: advanceAmount.trim(),
-          finalAmount: getFinalAmount(),
-          notes: notes.trim(),
-          session: activeSession,
-          createdAt: firestore.FieldValue.serverTimestamp()
-        });
+      // 🔥 DUPLICATE CHECK SAFETY (Only if not bypassed)
+      if (!bypassDuplicate) {
+        const duplicateCheck = await firestore()
+          .collection("users")
+          .doc(phone)
+          .collection("vehicles")
+          .doc(vId)
+          .collection("works")
+          .doc(fId)
+          .collection("entries")
+          .where("session", "==", activeSession)
+          .where("date", "==", date)
+          .where("crop", "==", crop.trim())
+          .where("work", "==", work.trim())
+          .get();
 
-      setTimeout(() => {
-        setSaving(false);
-        router.back();
-      }, 500); 
+        if (!duplicateCheck.empty) {
+          if (isMounted.current) {
+            setSaving(false);
+            setShowDuplicateModal(true); // Open the Warning Confirmation Modal!
+          }
+          return;
+        }
+      }
+
+      // If no duplicate or user bypassed, proceed to save securely
+      await executeSave(activeSession, phone, vId, fId);
 
     } catch (e) {
       console.log("Save Error: ", e);
-      setSaving(false);
-      setErrorMsg(language === "te" ? "నెట్వర్క్ లేదా సర్వర్ సమస్య, మళ్లీ ప్రయత్నించండి." : "Something went wrong, please try again.");
-      setErrorModal(true);
+      if (isMounted.current) {
+        setSaving(false);
+        setErrorMsg(language === "te" ? "నెట్వర్క్ లేదా సర్వర్ సమస్య, మళ్లీ ప్రయత్నించండి." : "Something went wrong, please try again.");
+        setErrorModal(true);
+      }
     }
   };
-
-  useEffect(() => {
-    AsyncStorage.getItem("APP_LANG").then((l) => {
-      if (l) setLanguage(l as any);
-    });
-  }, []);
 
   const options = modalType === "crop" ? cropOptions : workOptions;
   const filteredData = options.filter(item => {
@@ -398,9 +441,11 @@ export default function AddFarmerWork() {
         language={language}
       />
 
-      <ScrollView 
-        contentContainerStyle={{ padding: 16, paddingBottom: 300 }} 
+      <KeyboardAwareScrollView 
+        contentContainerStyle={{ padding: 16, paddingBottom: 100 }} 
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        showsVerticalScrollIndicator={false}
       >
   
         {/* 📋 SECTION 1: WORK DETAILS */}
@@ -591,9 +636,9 @@ export default function AddFarmerWork() {
                     </AppText>
                   )}
                   <TextInput
-                    ref={saalluInputRef}
-                    value={saalluCount}
-                    onChangeText={(txt) => {
+  ref={saalluInputRef} // ✅ దీన్ని మార్చు (ఇది కరెక్ట్ ref)
+  value={saalluCount}
+  onChangeText={(txt) => {
                       setSaalluCount(txt);
                       if (errors.saalluCount) setErrors({ ...errors, saalluCount: "" });
                     }}
@@ -651,7 +696,7 @@ export default function AddFarmerWork() {
               </TouchableOpacity>
             </View> 
 
-            {/* Error Message for Saallu/Rate row */}
+            {/* Error Message */}
             {(errors.saalluCount || errors.ratePerSaalu) && (
               <AppText style={[styles.errorText, { marginTop: 4, marginBottom: 16 }]} language={language}>
                 {errors.saalluCount || errors.ratePerSaalu}
@@ -659,16 +704,16 @@ export default function AddFarmerWork() {
             )}
 
             <View style={{ paddingHorizontal: 4, marginBottom: 5 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                            <Ionicons name="information-circle-outline" size={16} color="#059669" style={{ marginTop: 2 }} />
-                            <View style={{ marginLeft: 6, flex: 1 }}>
-                              <AppText style={{ fontSize: 13, color: "#166534", lineHeight: 20, fontFamily: "Mandali" }}>
-                                {language === "te" 
-                                  ? "గమనిక: ఒక ఎకరాను ఒకసారి దున్నితే అది '1 సాలు' కింద లెక్క. ఒకవేళ మీరు 2 ఎకరాల పొలాన్ని 2 సార్లు దున్నితే... ఇక్కడ మొత్తం '4 సాళ్లు' (2 ఎకరాలు × 2 సార్లు) అని నమోదు చేయాలి." 
-                                  : "Note: Ploughing 1 acre once equals '1 Saalu'. If you ploughed a 2-acre field 2 times, you should enter '4 Saallu' (2 acres × 2 times) here."}
-                              </AppText>
-                            </View>
-                          </View>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <Ionicons name="information-circle-outline" size={16} color="#059669" style={{ marginTop: 2 }} />
+                <View style={{ marginLeft: 6, flex: 1 }}>
+                  <AppText style={{ fontSize: 13, color: "#166534", lineHeight: 20, fontFamily: "Mandali" }}>
+                    {language === "te" 
+                      ? "గమనిక: ఒక ఎకరాను ఒకసారి దున్నితే అది '1 సాలు' కింద లెక్క. ఒకవేళ మీరు 2 ఎకరాల పొలాన్ని 2 సార్లు దున్నితే... ఇక్కడ మొత్తం '4 సాళ్లు' (2 ఎకరాలు × 2 సార్లు) అని నమోదు చేయాలి." 
+                      : "Note: Ploughing 1 acre once equals '1 Saalu'. If you ploughed a 2-acre field 2 times, you should enter '4 Saallu' (2 acres × 2 times) here."}
+                  </AppText>
+                </View>
+              </View>
            </View>  
           </View>
         ) : (
@@ -680,7 +725,6 @@ export default function AddFarmerWork() {
               </AppText>
 
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                {/* HOURS INPUT */}
                 <TouchableOpacity
                   activeOpacity={1}
                   style={[
@@ -719,10 +763,8 @@ export default function AddFarmerWork() {
                   </AppText>
                 </TouchableOpacity>
 
-                {/* SEPARATOR */}
                 <AppText style={{ fontSize: 24, fontWeight: "bold", color: "#9CA3AF" }}>:</AppText>
 
-                {/* MINUTES INPUT */}
                 <TouchableOpacity
                   activeOpacity={1}
                   style={[
@@ -771,7 +813,6 @@ export default function AddFarmerWork() {
           {workType === "time" && (
             <>
               <View style={{ flexDirection: "row", gap: 12 }}>
-                {/* LEFT: RATE PER HOUR */}
                 <TouchableOpacity
                   activeOpacity={1}
                   style={[
@@ -816,7 +857,6 @@ export default function AddFarmerWork() {
                   </View>
                 </TouchableOpacity>
 
-                {/* RIGHT: TOTAL DISPLAY */}
                 <View
                   style={[
                     styles.inputBox,
@@ -837,7 +877,6 @@ export default function AddFarmerWork() {
             </>
           )}
 
-          {/* 🔥 ACRES BASED FULL WIDTH TOTAL */}
           {workType === "acres" && saalluCount && ratePerSaalu && (
             <View
               style={[
@@ -862,18 +901,15 @@ export default function AddFarmerWork() {
             </View>
           )}
 
-          {/* 💡 DYNAMIC CALCULATION INFO BOX */}
           {getCalculationDetails().hasValue ? (
             <View style={styles.calculationInfoBox}>
               <View style={styles.infoIconWrapper}>
                 <Ionicons name="calculator" size={16} color="#2E7D32" />
               </View>
-              
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <AppText style={styles.calcLabel}>
                   {language === "te" ? "లెక్కించిన విధానం:" : "Calculation:"}
                 </AppText>
-                
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <AppText style={styles.calcStepText}>
                     {getCalculationDetails().calcStep}
@@ -897,11 +933,8 @@ export default function AddFarmerWork() {
            </AppText>
         </View>
 
-        {/* 💸 BILLING SECTION: PAYABLE - ADVANCE */}
         <View style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            
-            {/* LEFT: PAYABLE AMOUNT (AUTO + EDITABLE) */}
             <View style={{ flex: 1 }}>
               <AppText style={styles.label}>
                 {language === "te" ? "చెల్లించాల్సిన మొత్తం*" : "Payable Amount*"}
@@ -937,10 +970,8 @@ export default function AddFarmerWork() {
               {errors.payableAmount && <AppText style={[styles.errorText, { marginTop: 0, marginBottom: 5 }]} language={language}>{errors.payableAmount}</AppText>}
             </View>
             
-            {/* MINUS SYMBOL */}
             <Ionicons name="remove" size={24} color="#9CA3AF" style={{ marginTop: 25 }} />
 
-            {/* RIGHT: ADVANCE AMOUNT */}
             <View style={{ flex: 1 }}>
               <AppText style={styles.label}>
                 {language === "te" ? "అడ్వాన్స్ (ముందస్తు)" : "Advance"}
@@ -974,14 +1005,14 @@ export default function AddFarmerWork() {
           
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginLeft: 4 }}>
             <Ionicons name="information-circle-outline" size={14} color="#6B7280" />
-            <AppText style={{ fontSize: 11, color: "#6B7280", marginLeft: 4 }}>
-              {language === "te"
-            ? "లెక్కలో తప్పు ఉంటే, మీరు చెల్లించాల్సిన మొత్తం* సవరించుకోవచ్చు."
-            : "If the calculated Payable Amount* is incorrect, you can edit it."}
-            </AppText>
+           <AppText style={{ fontSize: 11, color: "#6B7280", marginLeft: 4 }}>
+  {language === "te"
+    ? "లెక్కించిన చెల్లింపు మొత్తంలో* తప్పు ఉంటే, మీరు దానిని సవరించుకోవచ్చు."
+    : "If the calculated Payable Amount* is incorrect, you can edit it."}
+</AppText>
+
           </View>
           
-          {/* 🏆 FINAL SETTLEMENT BOX */}
           <View style={styles.finalBox}>
             <View>
               <AppText style={{ color: "#fff", opacity: 0.9, fontSize: 13 }}>
@@ -998,21 +1029,17 @@ export default function AddFarmerWork() {
         {/* 📝 REMARKS / NOTES */}
         <View style={{ marginBottom: 20 }}>
           <AppText style={styles.label}>
-            {language === "te"
-              ? "ఇతర వివరాలు (అవసరమైతేనే)" 
-              : "Additional Remarks (Optional)"}
-          </AppText>
+  {language === "te" 
+    ? "అదనపు సమాచారం (ఐచ్ఛికం)" 
+    : "Additional Remarks (Optional)"}
+</AppText>
+
 
           <TouchableOpacity
             activeOpacity={1}
             style={[
               styles.inputBox,
-              {
-                minHeight: 120,
-                alignItems: "flex-start",
-                paddingVertical: 14,
-                marginBottom: 40
-              },
+              { minHeight: 120, alignItems: "flex-start", paddingVertical: 14, marginBottom: 20 },
               activeInput === "notes" && styles.inputFocused,
             ]}
             onPress={() => {
@@ -1020,26 +1047,18 @@ export default function AddFarmerWork() {
               notesInputRef.current?.focus();
             }}
           >
-            {/* LEFT ICON */}
             <Ionicons
               name="document-text-outline"
               size={20}
               color={notes || activeInput === "notes" ? "#16A34A" : "#9CA3AF"}
               style={{ marginTop: 4 }}
             />
-
-            {/* TEXT + INPUT */}
             <View style={[styles.inputWrapper, { marginLeft: 12, flex: 1 }]}>
-              {/* PLACEHOLDER */}
               {!notes && activeInput !== "notes" && (
                 <AppText style={{ color: "#9CA3AF", lineHeight: 22, fontFamily: "Mandali" }}>
-                  {language === "te"
-                    ? "ఈ పనికి సంబంధించిన మరిన్ని వివరాలు ఇక్కడ రాయండి..."
-                    : "Write additional details..."}
+                  {language === "te" ? "ఈ పనికి సంబంధించిన మరిన్ని వివరాలు ఇక్కడ రాయండి..." : "Write additional details..."}
                 </AppText>
               )}
-
-              {/* TEXT INPUT */}
               <TextInput
                 ref={notesInputRef}
                 value={notes}
@@ -1049,13 +1068,7 @@ export default function AddFarmerWork() {
                 placeholderTextColor="#EF4444"
                 style={[
                   styles.input,
-                  {
-                    lineHeight: 22,
-                    minHeight: 80,
-                    textAlignVertical: "top",
-                    padding: 0,
-                    display: notes || activeInput === "notes" ? "flex" : "none",
-                  }
+                  { lineHeight: 22, minHeight: 80, textAlignVertical: "top", padding: 0, display: notes || activeInput === "notes" ? "flex" : "none" }
                 ]}
                 cursorColor="#16A34A"
                 selectionColor="#16A34A40"
@@ -1063,12 +1076,7 @@ export default function AddFarmerWork() {
                 onBlur={() => setActiveInput(null)}
               />
             </View>
-
-            {/* 🎤 EXACT MIC BUTTON FROM FIRST SCREEN */}
-            <TouchableOpacity
-              onPress={() => handleVoiceInput("notes")}
-              style={styles.micBtn}
-            >
+            <TouchableOpacity onPress={() => handleVoiceInput("notes")} style={styles.micBtn}>
               <Ionicons
                 name={isListening && voiceTarget === "notes" ? "mic" : "mic-outline"}
                 size={24}
@@ -1080,21 +1088,18 @@ export default function AddFarmerWork() {
 
         <TouchableOpacity 
           activeOpacity={0.85} 
-          style={styles.saveBtn} 
-          onPress={handleSave}
+          style={[styles.saveBtn, {marginTop: 50}]} 
+          onPress={() => handleSave(false)}
           disabled={saving}
         >
-          <LinearGradient
-            colors={["#2E7D32", "#1B5E20"]}
-            style={styles.saveGradient}
-          >
+          <LinearGradient colors={["#2E7D32", "#1B5E20"]} style={styles.saveGradient}>
             <Ionicons name="save-outline" size={18} color="#fff" />
             <AppText style={styles.saveText}>
               {language === "te" ? "భద్రపరచండి" : "Save Work"}
             </AppText>
           </LinearGradient>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* 📅 DATE PICKER */}
       {showDatePicker && (
@@ -1123,7 +1128,6 @@ export default function AddFarmerWork() {
               {language === "te" ? "పని రకాన్ని ఎంచుకోండి" : "Select Work Type"}
             </AppText>
             <View style={styles.typeOptionsRow}>
-              {/* TIME BASED OPTION */}
               <TouchableOpacity activeOpacity={0.8}
                 style={styles.typeOptionCard} 
                 onPress={() => {
@@ -1139,7 +1143,6 @@ export default function AddFarmerWork() {
                 </AppText>
               </TouchableOpacity>
 
-              {/* ACRES BASED OPTION */}
               <TouchableOpacity activeOpacity={0.8}
                 style={styles.typeOptionCard} 
                 onPress={() => {
@@ -1159,6 +1162,47 @@ export default function AddFarmerWork() {
         </View>
       </Modal>
 
+      {/* 🔥 DUPLICATE ENTRY WARNING MODAL 🔥 */}
+      <Modal visible={showDuplicateModal} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.errorBox}>
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="warning" size={36} color="#F59E0B" />
+            </View>
+            <AppText style={[styles.errorTitle, { color: '#111827', fontSize: 18 }]}>
+              {language === "te" ? "ఇప్పటికే నమోదు అయి ఉంది!" : "Duplicate Work Entry!"}
+            </AppText>
+            <AppText style={[styles.errorMsg, { lineHeight: 20 }]}>
+              {language === "te" 
+                ? "ఈ తేదీన, ఇదే పంట మరియు పని వివరాలతో రికార్డు ఇప్పటికే ఉంది.\n\nమీరు ఖచ్చితంగా ఈ పనిని మళ్లీ జతచేయాలనుకుంటున్నారా?" 
+                : "An entry with the same date, crop, and work already exists.\n\nAre you sure you want to add this duplicate work entry?"}
+            </AppText>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, width: '100%' }}>
+              <TouchableOpacity activeOpacity={0.8}
+                style={[styles.okBtn, { flex: 1, backgroundColor: "#F3F4F6", marginTop: 0 }]}
+                onPress={() => setShowDuplicateModal(false)}
+              >
+                <AppText style={{ color: "#4B5563", fontWeight: '600' }}>
+                  {language === 'te' ? "వద్దు" : "Cancel"}
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8}
+                style={[styles.okBtn, { flex: 1, backgroundColor: "#16A34A", marginTop: 0 }]}
+                onPress={() => {
+                  setShowDuplicateModal(false);
+                  handleSave(true); // Bypass duplicate check on force save!
+                }}
+              >
+                <AppText style={{ color: "#fff", fontWeight: '600' }}>
+                  {language === 'te' ? "అవును, సేవ్ చేయి" : "Yes, Save"}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CROP / WORK DROPDOWN MODAL */}
       <Modal visible={modalType !== null} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -1176,15 +1220,11 @@ export default function AddFarmerWork() {
               </TouchableOpacity>
             </View>
 
-            {/* 🔥 SEARCH + MIC (Exactly like screen 1) */}
             <View style={styles.searchBar}>
               <TextInput
                 autoFocus
                 value={searchText}
-                onChangeText={(text) => {
-                  setSearchText(text);
-                  modalType === "crop" ? setCrop(text) : setWork(text);
-                }}
+                onChangeText={(text) => setSearchText(text)}
                 placeholder={language === "te" ? "ఇక్కడ రాయండి..." : "Type here..."}
                 placeholderTextColor="#9CA3AF"
                 cursorColor={'green'}
@@ -1195,7 +1235,6 @@ export default function AddFarmerWork() {
                   onPress={() => {
                     if (modalType === "crop") setCrop(searchText);
                     else setWork(searchText);
-
                     setModalType(null);
                     setSearchText("");
                     setActiveInput(null);
@@ -1205,7 +1244,6 @@ export default function AddFarmerWork() {
                   <Ionicons name="add" size={20} color="#fff" />
                 </TouchableOpacity>
               )}
-              {/* 🎤 MODAL MIC (Exactly like screen 1) */}
               <TouchableOpacity
                 onPress={() => handleVoiceInput(modalType === "crop" ? "crop" : "work")}
                 style={{ marginLeft: 10, padding: 6, borderRadius: 10, backgroundColor: "#E5E7EB" }}
@@ -1227,7 +1265,6 @@ export default function AddFarmerWork() {
                     onPress={() => {
                       if (modalType === "crop") setCrop(searchText);
                       else setWork(searchText);
-
                       setModalType(null);
                       setSearchText("");
                       setActiveInput(null);
@@ -1245,11 +1282,6 @@ export default function AddFarmerWork() {
                   onPress={() => {
                     const value = language === "te" ? item.te : item.en;
                     modalType === "crop" ? setCrop(value) : setWork(value);
-
-                    if (searchText.trim()) {
-                      modalType === "crop" ? setCrop(searchText) : setWork(searchText);
-                    }
-
                     setModalType(null);
                     setSearchText("");
                     setActiveInput(null);
@@ -1265,14 +1297,13 @@ export default function AddFarmerWork() {
         </View>
       </Modal>
       
+      {/* ERROR MESSAGE MODAL */}
       <Modal visible={errorModal} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.errorBox}>
             <Ionicons name="alert-circle" size={40} color="#DC2626" />
             <AppText style={styles.errorTitle}>
-              {language === "te" 
-                ? "ఒక్క నిమిషం!" 
-                : "Just a moment!"}
+              {language === "te" ? "ఒక్క నిమిషం!" : "Just a moment!"}
             </AppText>
             <AppText style={styles.errorMsg}>
               {errorMsg}
@@ -1289,14 +1320,11 @@ export default function AddFarmerWork() {
         </View>
       </Modal>
 
-      {saving && (
-        <AgriLoader visible type="saving" language={language} />
-      )}
+      {saving && <AgriLoader visible type="saving" language={language} />}
     </SafeAreaView>
   );
 }
 
-// 🔥 EXACT STYLES FROM FIRST SCREEN 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F6F7F6" },
   inputBox: {
@@ -1554,14 +1582,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    zIndex: 9999
   },
   errorBox: {
-    width: "80%",
+    width: "85%",
     backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 20,
-    alignItems: "center"
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    elevation: 10
   },
   errorTitle: {
     fontSize: 16,
@@ -1578,7 +1608,9 @@ const styles = StyleSheet.create({
     marginTop: 15,
     backgroundColor: "#DC2626",
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center"
   },
 });

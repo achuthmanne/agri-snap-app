@@ -9,7 +9,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -29,6 +29,7 @@ export default function VehicleDetails() {
 
   const router = useRouter();
   const { id, name, number, type } = useLocalSearchParams();
+  const isMounted = useRef(true); // 🔥 PRO FIX: Complete memory leak protection
 
   const vehicleNumber = Array.isArray(number) ? number[0] : number;
   const vehicleType = Array.isArray(type) ? type[0] : type;
@@ -51,13 +52,15 @@ export default function VehicleDetails() {
   const [showCannotDeleteModal, setShowCannotDeleteModal] = useState(false);
 
   useSpeechRecognitionEvent("result", (event) => {
-    if (!isScreenFocused || !isListening) return;
+    if (!isScreenFocused || !isMounted.current) return;
     if (event.results && event.results.length > 0) {
       setSearch(event.results[0].transcript);
     }
   });
 
-  useSpeechRecognitionEvent("end", () => setIsListening(false));
+  useSpeechRecognitionEvent("end", () => {
+    if (isMounted.current) setIsListening(false);
+  });
 
   const handleVoiceSearch = async () => {
     const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -71,15 +74,15 @@ export default function VehicleDetails() {
   };
 
   useEffect(() => {
+    isMounted.current = true;
+    AsyncStorage.getItem("APP_LANG").then(l => {
+      if (l && isMounted.current) setLanguage(l as any);
+    });
+
     return () => {
+      isMounted.current = false;
       ExpoSpeechRecognitionModule.stop();
     };
-  }, []);
-
-  useEffect(() => {
-    AsyncStorage.getItem("APP_LANG").then(l => {
-      if (l) setLanguage(l as any);
-    });
   }, []);
 
   /* ---------------- LOAD DATA ---------------- */
@@ -90,20 +93,23 @@ export default function VehicleDetails() {
       const loadData = async () => {
         try {
           const phone = await AsyncStorage.getItem("USER_PHONE");
-          if (!phone || !vId) return;
-
-          setLoading(true);
+          if (!phone || !vId) {
+             if (isMounted.current) setLoading(false);
+             return;
+          }
 
           const userDoc = await firestore().collection("users").doc(phone).get();
           const session = userDoc.data()?.activeSession;
 
           if (!session) {
-            setData([]); 
-            setLoading(false);
+            if (isMounted.current) {
+              setData([]); 
+              setLoading(false);
+            }
             return;
           }
           
-          setActiveSession(session);
+          if (isMounted.current) setActiveSession(session);
 
           unsub = firestore()
             .collection("users")
@@ -115,8 +121,10 @@ export default function VehicleDetails() {
             .onSnapshot(
               (snap) => {
                 if (!snap || !snap.docs) {
-                  setData([]);
-                  setLoading(false);
+                  if (isMounted.current) {
+                    setData([]);
+                    setLoading(false);
+                  }
                   return;
                 }
 
@@ -133,17 +141,19 @@ export default function VehicleDetails() {
                   return timeB - timeA;
                 });
 
-                setData(list);
-                setLoading(false);
+                if (isMounted.current) {
+                  setData(list);
+                  setLoading(false);
+                }
               },
               (error) => {
                 console.log("Firestore Error: ", error);
-                setLoading(false);
+                if (isMounted.current) setLoading(false);
               }
             );
         } catch (error) {
           console.log("Loading Error: ", error);
-          setLoading(false);
+          if (isMounted.current) setLoading(false);
         }
       };
 
@@ -157,7 +167,8 @@ export default function VehicleDetails() {
 
   /* ---------------- FILTER ---------------- */
   const filtered = data.filter(item =>
-    item.driverName?.toLowerCase().includes(search.toLowerCase())
+    item.driverName?.toLowerCase().includes(search.toLowerCase()) ||
+    item.village?.toLowerCase().includes(search.toLowerCase()) // 🔥 PRO FIX: Added village search
   );
 
   /* ---------------- COLORS ---------------- */
@@ -179,28 +190,19 @@ export default function VehicleDetails() {
       const phone = await AsyncStorage.getItem("USER_PHONE");
       if (!phone || !vId || !activeSession) return false;
 
-      // నీ డేటాబేస్ స్ట్రక్చర్: users -> phone -> vehicles -> vId -> drivers -> dId -> entries
       const entriesSnap = await firestore()
         .collection("users").doc(phone)
         .collection("vehicles").doc(vId as string)
         .collection("drivers").doc(driverId)
         .collection("entries")
-        .where("session", "==", activeSession) // ఆక్టివ్ సెషన్ లో ఏమైనా వర్క్ ఉందా
-        .limit(1) // ఒక్కటి దొరికినా చాలు
+        .where("session", "==", activeSession)
+        .limit(1) 
         .get();
 
-      // entries కలెక్షన్ ఎంప్టీ కాకపోతే రికార్డ్స్ ఉన్నట్టే
-      if (!entriesSnap.empty) {
-        return true;
-      }
-
-      // ఏ రికార్డ్స్ లేకపోతే false
-      return false;
-      
+      return !entriesSnap.empty;
     } catch (error) {
       console.log("Error checking records", error);
-      // ఎర్రర్ వస్తే సేఫ్టీ కోసం true పంపి లాక్ చేస్తాం
-      return true; 
+      return true; // సేఫ్టీ కోసం
     }
   };
 
@@ -208,17 +210,18 @@ export default function VehicleDetails() {
   const handleEditClick = async (item: any) => {
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
+    if (!isMounted.current) return;
     setActionLoading(false);
 
     router.push({
-      pathname: "/farmer/vehicle-drivers",
+      pathname: "/farmer/vechile-drivers/add-drivers",
       params: {
         vehicleId: vId,
         editId: item.id,
         name: item.driverName,
         phone: item.phone,
         village: item.village,
-        hasRecords: hasRecords ? "true" : "false" // 🔥 Flag పంపుతున్నాం
+        hasRecords: hasRecords ? "true" : "false" 
       }
     });
   };
@@ -227,6 +230,7 @@ export default function VehicleDetails() {
   const handleDeleteClick = async (item: any) => {
     setActionLoading(true);
     const hasRecords = await checkHasRecords(item.id);
+    if (!isMounted.current) return;
     setActionLoading(false);
 
     if (hasRecords) {
@@ -260,7 +264,7 @@ export default function VehicleDetails() {
       console.log("Delete Error:", e);
     }
 
-    setDeleteItem(null);
+    if (isMounted.current) setDeleteItem(null);
   };
 
   // 🔥 MODERN MENU STYLES
@@ -404,9 +408,10 @@ export default function VehicleDetails() {
                   </View>
 
                   <View style={styles.details}>
-                    <AppText style={styles.name}>{item.driverName}</AppText>
+                    {/* 🔥 PRO FIX: Text truncate for long names */}
+                    <AppText style={styles.name} numberOfLines={1} ellipsizeMode="tail">{item.driverName}</AppText>
                     <AppText style={styles.phone}>+91 - {item.phone || "----"}</AppText>
-                    <AppText style={styles.sub}>{item.village || "----"}</AppText>
+                    <AppText style={styles.sub} numberOfLines={1} ellipsizeMode="tail">{item.village || "----"}</AppText>
                   </View>
                 </TouchableOpacity>
 
@@ -533,13 +538,13 @@ const styles = StyleSheet.create({
   searchFocused: { borderColor: "#16A34A", backgroundColor: "#FFFFFF" },
   searchInput: { flex: 1, height: "100%", marginLeft: 10, fontSize: 15, paddingTop: 0, paddingBottom: 0, textAlignVertical: "center", color: "#1F2937", fontFamily: "Mandali", includeFontPadding: false },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, marginHorizontal: 20, marginVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor:"#E5E7EB", borderRadius: 12, backgroundColor:"#ffffff", justifyContent: "space-between" },
-  left: { flexDirection: "row", alignItems: "center", flex: 1 },
+  left: { flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 10 },
   avatar: { width: 42, height: 42, borderRadius: 21, justifyContent: "center", alignItems: "center", marginRight: 12 },
   avatarText: { color: "#fff", fontWeight: "600" },
   details: { flex: 1 },
   name: { fontSize: 15, fontWeight: "600" },
   phone: { fontSize: 12, color: "#16A34A" },
-  sub: { fontSize: 12, color: "#6B7280" },
+  sub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
   right: { flexDirection: "row", alignItems: "center", gap: 8 },
   callBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: "#ECFDF5", justifyContent: "center", alignItems: "center" },
   addBtn: { position: "absolute", bottom: 30, right: 20 },

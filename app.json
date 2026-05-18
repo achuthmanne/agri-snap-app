@@ -66,7 +66,13 @@
           "microphonePermission": "రైతులకు వాయిస్ సెర్చ్ కోసం మైక్రోఫోన్ అనుమతి అవసరం."
         }
       ],
-      "expo-contacts"
+      
+     [
+        "expo-contacts",
+        {
+          "contactsPermission": "మీ రైతులు మరియు డ్రైవర్లను సులభంగా యాడ్ చేయడానికి కాంటాక్ట్స్ పర్మిషన్ అవసరం."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
