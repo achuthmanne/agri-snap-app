@@ -23,6 +23,7 @@ type WorkItem = {
   date: string;
   workType?: string;
   acres?: string;
+  ratePerAcre?: string; // 🔥 కొత్తగా యాడ్ చేశాం (ఎకరాకు ధర)
   saalluCount?: string;
   ratePerSaalu?: string;
   ratePerHour?: string;
@@ -56,9 +57,9 @@ export default function OwnerWork() {
   const [statusId, setStatusId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<"pending" | "paid">("paid");
 
-  const [actionLoading, setActionLoading] = useState(false); // 🔥 Prevent double taps
+  const [actionLoading, setActionLoading] = useState(false); 
 
-  const isMounted = useRef(true); // 🔥 PRO FIX: Memory leak protection
+  const isMounted = useRef(true); 
 
   /* ---------------- LOAD ---------------- */
 
@@ -171,7 +172,6 @@ export default function OwnerWork() {
       const userDoc = await firestore().collection("users").doc(userPhone).get();
       const activeSession = userDoc.data()?.activeSession;
 
-      // 1. మనం లాక్ చేస్తున్న పని (Work) వివరాలు ముందు తెచ్చుకోవాలి
       const entryRef = firestore()
         .collection("users").doc(userPhone)
         .collection("owners").doc(oId)
@@ -181,17 +181,14 @@ export default function OwnerWork() {
       if (!entrySnap.exists) return;
 
       const entryData = entrySnap.data();
-      const totalAmountNum = Number(entryData?.payableAmount || 0); // 🔥 (అడ్వాన్స్ + ఫైనల్) ఇదే మొత్తం రేటు!
+      const totalAmountNum = Number(entryData?.payableAmount || 0); 
 
-      // 2. Batch స్టార్ట్ చేస్తున్నాం
       const batch = firestore().batch();
 
-      // 3. పనిని 'పెండింగ్' నుంచి 'పెయిడ్ (లాక్)' కి మారుస్తున్నాం
       batch.update(entryRef, {
-        paymentStatus: newStatus // "paid"
+        paymentStatus: newStatus 
       });
 
-      // 4. ఇక్కడే మ్యాజిక్! ఆటోమేటిక్ గా Expenses లో వేస్తున్నాం
       if (totalAmountNum > 0) {
         const expenseRef = firestore()
           .collection("users").doc(userPhone)
@@ -199,10 +196,10 @@ export default function OwnerWork() {
 
         batch.set(expenseRef, {
           crop: entryData?.crop || "Others",
-          category: language === "te" ? "ట్రాక్టర్ / యంత్రాలు" : "Tractor", // ఆటోమేటిక్ కేటగిరీ
+          category: language === "te" ? "ట్రాక్టర్ / యంత్రాలు" : "Tractor", 
           amount: totalAmountNum,
           session: activeSession,
-          linkedWorkId: statusId, // ఫ్యూచర్ రిఫరెన్స్ కోసం లింక్
+          linkedWorkId: statusId, 
           notes: language === "te" 
             ? `${entryData?.work} - ట్రాక్టర్ ఓనర్ కి చెల్లించిన పూర్తి ఖర్చు` 
             : `${entryData?.work} - Total amount settled to tractor owner`,
@@ -210,7 +207,6 @@ export default function OwnerWork() {
         });
       }
 
-      // 5. రెండింటినీ ఒకేసారి సేవ్ చేస్తున్నాం (జీరో ఫెయిల్యూర్ ఛాన్స్)
       await batch.commit();
 
     } catch (e) {
@@ -268,14 +264,12 @@ export default function OwnerWork() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      {/* 🔥 CLEAR HEADER */}
       <AppHeader
         title={language === "te" ? "పనుల చరిత్ర" : "Work History"}
         subtitle={oName ? `${oName} ${language === "te" ? "ఖాతా" : "Account"}` : (language === "te" ? "యజమాని ఖాతా" : "Owner Account")}
         language={language}
       />
 
-      {/* 🔥 INFO BOX (ONLY SHOWS IF THERE IS DATA) */}
       {!loading && data.length > 0 && (
         <View style={styles.infoBanner}>
           <Ionicons name="information-circle" size={20} color="#0284C7" />
@@ -301,7 +295,6 @@ export default function OwnerWork() {
           ]}
           showsVerticalScrollIndicator={false}
           
-          /* 🔥 EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="clipboard-outline"
@@ -317,7 +310,6 @@ export default function OwnerWork() {
             return (
               <View style={styles.cropCard}>
 
-                {/* CROP HEADER */}
                 <TouchableOpacity activeOpacity={0.7}
                   style={[styles.cropHeader, { alignItems: "center" }]}
                   onPress={() => setExpanded(isOpen ? null : item.crop)}
@@ -334,26 +326,23 @@ export default function OwnerWork() {
                       </AppText>
                     </View>
                   </View>
-<View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#E5E7EB", justifyContent: "center", alignItems: "center" }}>
-  <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
-</View>
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#E5E7EB", justifyContent: "center", alignItems: "center" }}>
+                    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
+                  </View>
                 </TouchableOpacity>
 
-                {/* EXPAND */}
                 {isOpen && item.list.map((work: any) => {
                   const amount = Number(work.finalAmount?.toString().replace(/,/g, "") || 0);
-                  const isPaid = work.paymentStatus === "paid"; // 🔥 Check if Paid
+                  const isPaid = work.paymentStatus === "paid"; 
 
                   return (
                     <View key={work.id} style={[styles.workCard]}>
                       
-                      {/* TOP */}
                       <View style={styles.rowBetween}>
                         <AppText style={styles.workTitle}>{work.work}</AppText>
                         <AppText style={styles.date}>{work.date}</AppText>
                       </View>
 
-                      {/* PAYMENT STATUS */}
                       <View style={styles.statusRow}>
                         <AppText style={[styles.statusText, { color: isPaid ? "#16A34A" : "#DC2626" }]}>
                           {isPaid
@@ -397,7 +386,7 @@ export default function OwnerWork() {
                             </View>
                             <AppText style={styles.value}>{work.hrs || 0}h {work.mins || 0}m</AppText>
                           </View>
-                        ) : (
+                        ) : work.saalluCount ? (
                           <View style={styles.detailItem}>
                             <View style={styles.leftPart}>
                               <Ionicons name="list-outline" size={14} color="#6B7280" />
@@ -405,18 +394,22 @@ export default function OwnerWork() {
                             </View>
                             <AppText style={styles.value}>{work.saalluCount || 0}</AppText>
                           </View>
-                        )}
+                        ) : null}
 
-                        {/* RATE */}
+                        {/* 🔥 RATE DYNAMIC LOGIC */}
                         <View style={styles.detailItem}>
                           <View style={styles.leftPart}>
                             <Ionicons name="pricetag-outline" size={14} color="#6B7280" />
                             <AppText style={styles.label}>{language === "te" ? "ధర:" : "Rate:"}</AppText>
                           </View>
                           <AppText style={styles.value}>
-                            ₹ {work.workType === "time"
-                              ? `${Number(work.ratePerHour || 0).toLocaleString("en-IN")}${language === "te" ? " / గం" : " / hr"}`
-                              : `${Number(work.ratePerSaalu || 0).toLocaleString("en-IN")}${language === "te" ? " / సాలు" : " / saalu"}`}
+                            ₹ {
+                              work.workType === "time"
+                                ? `${Number(work.ratePerHour || 0).toLocaleString("en-IN")}${language === "te" ? " / గం" : " / hr"}`
+                                : work.ratePerAcre 
+                                  ? `${Number(work.ratePerAcre || 0).toLocaleString("en-IN")}${language === "te" ? " / ఎకరా" : " / acre"}`
+                                  : `${Number(work.ratePerSaalu || 0).toLocaleString("en-IN")}${language === "te" ? " / సాలు" : " / saalu"}`
+                            }
                           </AppText>
                         </View>
 
@@ -550,7 +543,7 @@ export default function OwnerWork() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F7F6" },  
+  safe: { flex: 1, backgroundColor: "#F8FAFC" },  
 
   infoBanner: { flexDirection: "row", backgroundColor: "#E0F2FE", padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 10, alignItems: "flex-start", borderWidth: 1, borderColor: "#BFDBFE" },
   infoText: { flex: 1, marginLeft: 8, fontSize: 13, color: "#1E3A8A", lineHeight: 24, fontFamily: "Mandali" },

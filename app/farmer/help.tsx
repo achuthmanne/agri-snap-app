@@ -56,35 +56,51 @@ export default function HelpSupport() {
     faqTitle: language === "te" ? "తరచుగా అడిగే ప్రశ్నలు (FAQs)" : "Frequently Asked Questions",
   };
 
-  // 🔥 FAQs DATA (నువ్వు ఇక్కడ క్వశ్చన్స్ మార్చుకోవచ్చు)
+ // 🔥 FAQs DATA (6 ACCURATE & PRACTICAL QUESTIONS)
   const faqs = [
     {
       id: "1",
-      q: language === "te" ? "యాప్‌లో కూలీని / మేస్త్రీని ఎలా చేర్చాలి?" : "How to add a new worker / mestri?",
+      q: language === "te" ? "ఈ అగ్రిలాగ్ యాప్ ఎవరి కోసం?" : "Who is this AgriLog app for?",
       a: language === "te" 
-        ? "'కూలీల హాజరు' సెక్షన్‌కు వెళ్లి, కింద ఉన్న ప్లస్ (+) బటన్ నొక్కండి. పేరు మరియు మొబైల్ నంబర్ ఇచ్చి సేవ్ చేయండి." 
-        : "Go to the 'Attendance' section, click on the plus (+) button at the bottom, enter the name and phone number, and save."
+        ? "ఈ యాప్ రైతులు కోసం ప్రత్యేకం. రోజువారీ కూలీల హాజరు, పంట ఖర్చులు, మరియు అమ్మకాల లెక్కలు సులభంగా వేసుకోవడానికి ఇది ఉపయోగపడుతుంది." 
+        : "This app is strictly for farmers. It helps you easily track daily labor attendance, crop expenses, and sales records."
     },
     {
       id: "2",
       q: language === "te" ? "ఇంటర్నెట్ లేకపోయినా యాప్ పనిచేస్తుందా?" : "Does the app work without the internet?",
       a: language === "te" 
-        ? "అవును! డేటా సేవ్ చేయడానికి ఇంటర్నెట్ అవసరం లేదు. మీరు ఆఫ్లైన్ లో ఉన్నా లెక్కలు వేసుకోవచ్చు, ఇంటర్నెట్ వచ్చాక ఆటోమేటిక్ గా సింక్ అవుతుంది." 
-        : "Yes! You don't need internet to save records. You can enter data offline, and it will sync automatically when you are online."
+        ? "లేదు. మీ డేటా 100% సురక్షితంగా మా క్లౌడ్ (Cloud) లో సేవ్ అవ్వడానికి మరియు పాత లెక్కలు ఎప్పుడైనా చూసుకోవడానికి తప్పనిసరిగా ఇంటర్నెట్ కనెక్షన్ అవసరం." 
+        : "No. An active internet connection is strictly required to securely save your data in our cloud and to access your previous records anytime."
     },
     {
-      id: "3",
-      q: language === "te" ? "పాత సంవత్సరం లెక్కలు ఎక్కడ చూడాలి?" : "Where can I see my previous year's records?",
-      a: language === "te" 
-        ? "డాష్‌బోర్డ్ లో పైన ఉన్న 'ప్రస్తుత సాగు సంవత్సరం' బటన్ పైన నొక్కి, మీరు చూడాలనుకుంటున్న పాత సంవత్సరాన్ని ఎంచుకోవచ్చు." 
-        : "Click on the 'Active Season' button on the dashboard and select the previous year you want to view."
-    },
+  id: "3",
+  q: language === "te" ? "కూలీల హాజరు మరియు జీతాలు ఎలా లెక్కించాలి?" : "How to calculate labor attendance and wages?",
+  a: language === "te" 
+    ? "'కూలీల హాజరు' సెక్షన్‌లో రోజువారీ అటెండెన్స్ వేయండి. ఆ తర్వాత 'కూలీల చెల్లింపులు' సెక్షన్‌లో మీరు ఇచ్చే నగదును నమోదు చేస్తే, మొత్తం పని దినాలకు ఇంకా ఎంత బాకీ ఉందో యాప్ ఆటోమేటిక్ గా లెక్కిస్తుంది." 
+    : "Mark daily attendance in the 'Worker Attendance' section. Then, enter the amounts paid in the 'Worker Payments' section; the app will automatically calculate the remaining balance based on the total days worked."
+},
+
     {
-      id: "4",
-      q: language === "te" ? "రిపోర్ట్స్ పీడీఎఫ్ (PDF) లో డౌన్‌లోడ్ చేయవచ్చా?" : "Can I download reports in PDF format?",
+  id: "4",
+  q: language === "te" ? "పంట లాభనష్టాలు ఎలా తెలుసుకోవాలి?" : "How to check crop profit and loss?",
+  a: language === "te" 
+    ? "మీరు నమోదు చేసే 'పెట్టుబడి ఖర్చులు' మరియు 'పంట అమ్మకాలు' ఆధారంగా, మీ లాభనష్టాల వివరాలను 'వ్యవసాయ నివేదిక' (Farm Report) సెక్షన్ లో చార్ట్ రూపంలో క్లియర్ గా చూడవచ్చు." 
+    : "Based on the 'Expenses' and 'Crop Sales' you enter, you can clearly check your profit or loss details in the 'Farm Report' section via visual charts."
+},
+{
+  id: "5",
+  q: language === "te" ? "రిపోర్ట్స్ పీడీఎఫ్ (PDF) లో డౌన్‌లోడ్ చేయవచ్చా?" : "Can I download reports in PDF format?",
+  a: language === "te" 
+    ? "అవును, 'వ్యవసాయ నివేదిక' (Farm Report) లోనే మీ లాభనష్టాలు మరియు ఇతర డేటాను PDF రూపంలో డౌన్‌లోడ్ చేసుకొని షేర్ చేయవచ్చు లేదా ప్రింట్ తీసుకోవచ్చు." 
+    : "Yes, within the 'Farm Report' section, you can download your profit/loss and all other data in PDF format to share or print."
+},
+
+    {
+      id: "6",
+      q: language === "te" ? "నా ఫోన్ పోతే నా వ్యవసాయ డేటా పోతుందా?" : "Will I lose my data if I lose my phone?",
       a: language === "te" 
-        ? "అవును, 'వ్యవసాయ నివేదిక' (Farm Report) సెక్షన్ లోకి వెళ్లి మీ డేటాను క్లియర్ గా PDF రూపంలో డౌన్‌లోడ్ చేసుకొని ప్రింట్ తీసుకోవచ్చు." 
-        : "Yes, go to the 'Farm Report' section where you can download all your data clearly in PDF format and print it."
+        ? "ఖచ్చితంగా పోదు! మీ డేటా అంతా ఆన్లైన్ లో సురక్షితంగా ఉంటుంది. కొత్త ఫోన్ లో మీ పాత మొబైల్ నంబర్ తో లాగిన్ అవ్వగానే, మీ లెక్కలన్నీ ఆటోమేటిక్ గా వచ్చేస్తాయి." 
+        : "Absolutely not! Your data is safely backed up online. Just login with your same mobile number on a new phone, and all your records will be restored automatically."
     }
   ];
 

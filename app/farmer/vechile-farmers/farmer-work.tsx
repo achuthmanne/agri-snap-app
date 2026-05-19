@@ -1,4 +1,4 @@
-//vechile farmer work history
+// vechile farmer work history
 import AppEmptyState from "@/components/AppEmptyState";
 import AppHeader from "@/components/AppHeader";
 import AppText from "@/components/AppText";
@@ -24,6 +24,7 @@ type WorkItem = {
   date: string;
   workType?: string;
   acres?: string;
+  ratePerAcre?: string; // 🔥 కొత్తగా యాడ్ చేశాం (ఎకరాకు ధర)
   saalluCount?: string;
   ratePerSaalu?: string;
   ratePerHour?: string;
@@ -41,9 +42,8 @@ export default function FarmerHistory() {
 
   const router = useRouter();
   const { vehicleId, farmerId, name, phone } = useLocalSearchParams();
-  const isMounted = useRef(true); // 🔥 PRO FIX: Prevent memory leaks
+  const isMounted = useRef(true); 
 
-  // URL Params Array లాగా వస్తే క్రాష్ అవ్వకుండా
   const fName = Array.isArray(name) ? name[0] : name;
   const fPhone = Array.isArray(phone) ? phone[0] : phone;
   const vId = Array.isArray(vehicleId) ? vehicleId[0] : vehicleId;
@@ -80,7 +80,6 @@ export default function FarmerHistory() {
             return;
         }
 
-        // 🔥 FETCH ACTIVE SESSION
         const userDoc = await firestore().collection("users").doc(userPhone).get();
         const activeSession = userDoc.data()?.activeSession;
 
@@ -89,7 +88,6 @@ export default function FarmerHistory() {
           return;
         }
 
-        // 🔥 REALTIME SNAPSHOT WITH SESSION FILTER
         unsub = firestore()
           .collection("users")
           .doc(userPhone)
@@ -98,7 +96,7 @@ export default function FarmerHistory() {
           .collection("works")
           .doc(fId)
           .collection("entries")
-          .where("session", "==", activeSession) // సెషన్ బేస్డ్ ఫిల్టర్
+          .where("session", "==", activeSession) 
           .onSnapshot(snap => {
             if (!snap || !snap.docs) {
               if (isMounted.current) setLoading(false);
@@ -108,7 +106,6 @@ export default function FarmerHistory() {
             const list: WorkItem[] = [];
             snap.forEach(doc => list.push({ id: doc.id, ...(doc.data() as any) }));
 
-            // 🔥 Pro Trick: Firebase Index Error రాకుండా క్లయింట్ సైడ్ సార్టింగ్ (Latest first)
             list.sort((a, b) => {
               const timeA = a.createdAt?.toMillis() || 0;
               const timeB = b.createdAt?.toMillis() || 0;
@@ -222,14 +219,12 @@ export default function FarmerHistory() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
 
-      {/* 🔥 CLEAR HEADER (Screen Related) */}
       <AppHeader
         title={language === "te" ? "పనుల చరిత్ర" : "Work History"}
         subtitle={language === "te" ? "ఖాతా వివరాలు" : "Account Details"}
         language={language}
       />
 
-      {/* 🔥 INFO BANNER (ONLY SHOWS IF THERE IS DATA) */}
       {!loading && data.length > 0 && (
         <View style={styles.infoBanner}>
           <Ionicons name="information-circle" size={20} color="#0284C7" />
@@ -253,11 +248,8 @@ export default function FarmerHistory() {
           keyExtractor={(item: any) => item.crop}
           contentContainerStyle={[
             { padding: 16, paddingBottom: 120 },
-            // 🔥 సెంటర్ లో రావడానికి ఫ్లెక్స్ లాజిక్
             grouped.length === 0 && { flexGrow: 1, justifyContent: 'center' }
           ]}
-          
-          /* 🔥 OUR NEW GLOBAL EMPTY STATE COMPONENT */
           ListEmptyComponent={
             <AppEmptyState
               iconName="clipboard-outline"
@@ -266,7 +258,6 @@ export default function FarmerHistory() {
               language={language}
             />
           }
-
           renderItem={({ item }: any) => {
             const isOpen = expanded === item.crop;
 
@@ -284,29 +275,27 @@ export default function FarmerHistory() {
                       backgroundColor: getCropColor(item.crop), marginRight: 10
                     }} />
                     <View style={{ flex: 1 }}>
-                      {/* 🔥 PRO FIX: Ellipsize for long crop names */}
                       <AppText style={styles.cropTitle} numberOfLines={1} ellipsizeMode="tail">{item.crop}</AppText>
                       <AppText style={styles.cropCount}>
                         {language === "te" ? `${item.list.length} పనులు` : `${item.list.length} Works`}
                       </AppText>
                     </View>
                   </View>
-<View style={{ width: 32, height: 32, borderRadius: 20, backgroundColor: "#e6e8e9", justifyContent: "center", alignItems: "center" }}>
-    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
-</View>
+                  <View style={{ width: 32, height: 32, borderRadius: 20, backgroundColor: "#e6e8e9", justifyContent: "center", alignItems: "center" }}>
+                    <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#4B5563" />
+                  </View>
                 </TouchableOpacity>
 
                 {/* EXPAND */}
                 {isOpen && item.list.map((work: any) => {
                   const amount = Number(work.finalAmount?.toString().replace(/,/g, "") || 0);
-                  const isPaid = work.paymentStatus === "paid"; // 🔥 Check if Paid
+                  const isPaid = work.paymentStatus === "paid"; 
 
                   return (
                     <View key={work.id} style={[styles.workCard]}>
                       
                       {/* TOP */}
                       <View style={styles.rowBetween}>
-                        {/* 🔥 PRO FIX: Ellipsize for long work names */}
                         <AppText style={styles.workTitle} numberOfLines={1} ellipsizeMode="tail">{work.work}</AppText>
                         <AppText style={styles.date}>{work.date}</AppText>
                       </View>
@@ -332,10 +321,10 @@ export default function FarmerHistory() {
                         </TouchableOpacity>
                       </View>
 
-                      {/* 🔥 DETAILED GRID EXACTLY LIKE OWNER WORK */}
+                      {/* 🔥 DETAILED GRID (ACRES vs SAALLU vs TIME DYNAMIC LOGIC) */}
                       <View style={styles.detailsGrid}>
                         
-                        {/* ACRES (If available) */}
+                        {/* 1. ACRES (Show if available) */}
                         {work.acres ? (
                           <View style={styles.detailItem}>
                             <View style={styles.leftPart}>
@@ -346,7 +335,7 @@ export default function FarmerHistory() {
                           </View>
                         ) : null}
 
-                        {/* TIME / SAALLU DYNAMIC */}
+                        {/* 2. DYNAMIC WORK MEASURE (Time vs Saallu) */}
                         {work.workType === "time" ? (
                           <View style={styles.detailItem}>
                             <View style={styles.leftPart}>
@@ -355,7 +344,7 @@ export default function FarmerHistory() {
                             </View>
                             <AppText style={styles.value}>{work.hrs || 0}h {work.mins || 0}m</AppText>
                           </View>
-                        ) : (
+                        ) : work.saalluCount ? (
                           <View style={styles.detailItem}>
                             <View style={styles.leftPart}>
                               <Ionicons name="list-outline" size={14} color="#6B7280" />
@@ -363,18 +352,23 @@ export default function FarmerHistory() {
                             </View>
                             <AppText style={styles.value}>{work.saalluCount || 0}</AppText>
                           </View>
-                        )}
+                        ) : null}
+                        {/* If it's pure ratePerAcre, we skip Saallu and Time, which is perfectly correct! */}
 
-                        {/* RATE */}
+                        {/* 3. DYNAMIC RATE */}
                         <View style={styles.detailItem}>
                           <View style={styles.leftPart}>
                             <Ionicons name="pricetag-outline" size={14} color="#6B7280" />
                             <AppText style={styles.label}>{language === "te" ? "ధర:" : "Rate:"}</AppText>
                           </View>
                           <AppText style={styles.value}>
-                            ₹ {work.workType === "time"
-                              ? `${Number(work.ratePerHour || 0).toLocaleString("en-IN")}${language === "te" ? " / గం" : " / hr"}`
-                              : `${Number(work.ratePerSaalu || 0).toLocaleString("en-IN")}${language === "te" ? " / సాలు" : " / saalu"}`}
+                            ₹ {
+                              work.workType === "time"
+                                ? `${Number(work.ratePerHour || 0).toLocaleString("en-IN")}${language === "te" ? " / గం" : " / hr"}`
+                                : work.ratePerAcre 
+                                  ? `${Number(work.ratePerAcre || 0).toLocaleString("en-IN")}${language === "te" ? " / ఎకరా" : " / acre"}`
+                                  : `${Number(work.ratePerSaalu || 0).toLocaleString("en-IN")}${language === "te" ? " / సాలు" : " / saalu"}`
+                            }
                           </AppText>
                         </View>
 
@@ -397,7 +391,7 @@ export default function FarmerHistory() {
                         </View>
                       </View>
 
-                      {/* FINAL + DELETE (🔥 LOGIC APPLIED HERE) */}
+                      {/* FINAL + DELETE */}
                       <View style={styles.bottomRow}>
                         <AppText style={[styles.finalAmount, isPaid && {color: "#16A34A"}]}>₹ {amount.toLocaleString("en-IN")}</AppText>
                         
@@ -500,28 +494,8 @@ export default function FarmerHistory() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F8FAFC" },  
-
-  // 🔥 NEW INFO BANNER STYLE
-  infoBanner: {
-    flexDirection: "row",
-    backgroundColor: "#DBEAFE", 
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#BFDBFE"
-  },
-  infoText: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
-    color: "#1E3A8A",
-    lineHeight: 22,
-    fontFamily: "Mandali"
-  },
-
+  infoBanner: { flexDirection: "row", backgroundColor: "#DBEAFE", padding: 12, marginHorizontal: 16, marginTop: 12, borderRadius: 10, alignItems: "center", borderWidth: 1, borderColor: "#BFDBFE" },
+  infoText: { flex: 1, marginLeft: 8, fontSize: 13, color: "#1E3A8A", lineHeight: 22, fontFamily: "Mandali" },
   cropCard: { backgroundColor: "#fff", borderRadius: 16, marginBottom: 12, overflow: "hidden", borderWidth: 1, borderColor: "#E5E7EB", marginHorizontal: 4 },
   cropHeader: { flexDirection: "row", justifyContent: "space-between", padding: 16, backgroundColor: "#F9FAFB" },
   cropTitle: { fontSize: 20, fontWeight: "600", color: "#111827" },
@@ -550,9 +524,9 @@ const styles = StyleSheet.create({
   modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 16, width: "80%", alignItems: "center", elevation: 10 },
   modalTitle: { marginTop: 10, fontSize: 16, fontWeight: "600", color: "#111827" },
   modalSub: { fontSize: 13, color: "#6B7280", marginTop: 6, textAlign: "center", lineHeight: 20 },
-  modalRow: { flexDirection: "row", marginTop: 20, gap: 12 }, // 🔥 PRO FIX: Changed gap from 30 to 12 for standard look
+  modalRow: { flexDirection: "row", marginTop: 20, gap: 12 }, 
   iconBg: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 10 },
-  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginBottom: 10 }, // Light green
+  iconBg1: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#DCFCE7", justifyContent: "center", alignItems: "center", marginBottom: 10 }, 
   cancelBtn: { flex: 1, padding: 12, backgroundColor: "#F3F4F6", borderRadius: 10, alignItems: "center" },
   deleteConfirmBtn: { flex: 1, padding: 12, backgroundColor: "#16A34A", borderRadius: 10, alignItems: "center" },
   deleteConfirmBtn1: { flex: 1, padding: 12, backgroundColor: "#DC2626", borderRadius: 10, alignItems: "center" }

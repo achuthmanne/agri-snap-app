@@ -382,8 +382,10 @@ export default function MestriAttendance() {
 
         {/* 🔥 GROUND LEVEL COUNTS */}
         <View style={{ marginTop: 10 }}>
+          {/* 🚀 AUTO TOTAL WORKERS COUNT ADDED HERE */}
           <AppText style={styles.sectionTitle} language={language}>
             {language === "te" ? "హాజరైన కూలీల సంఖ్య" : "Workers Count"}
+            {(morning + evening + full) > 0 ? ` (${morning + evening + full})` : ""}
           </AppText>
 
           {[
@@ -644,8 +646,8 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 15 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: "#111827", marginBottom: 15, marginLeft: 4 },
 
-  row: { marginTop: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff", padding: 15, borderRadius: 12, borderWidth: 1, borderColor: "#F3F4F6" },
-  label: { fontSize: 15, fontWeight: "600", color: "#374151" },
+  row: { marginTop: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#fff", padding: 15, borderRadius: 12,borderWidth: 1, borderColor: "#E5E7EB" },
+  label: { fontSize: 15, fontWeight: "600", color: "#374151" , },
   counter: { flexDirection: "row", alignItems: "center", gap: 20 },
   count: { fontSize: 20, fontWeight: "700", color: "#111827", width: 24, textAlign: 'center' },
 
