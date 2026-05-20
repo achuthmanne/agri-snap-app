@@ -1178,7 +1178,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false, 
     lineHeight: 24 
   },
-  grid:{ flexDirection:"row", flexWrap:"wrap", justifyContent:"flex-start", paddingHorizontal:20, paddingBottom: 60, marginBottom: 60, gap:14 },
+  grid:{ flexDirection:"row", flexWrap:"wrap", justifyContent:"flex-start", paddingHorizontal:20, paddingBottom: 30, marginBottom: 30, gap:14 },
   cardIcon:{ width:22, height:22, tintColor:"#2E7D32", resizeMode:"contain" },
   smartCard:{ flexDirection:"row", alignItems:"center", paddingVertical:12, paddingHorizontal:16, borderTopColor:"rgba(255,255,255,0.6)", borderRadius:20, marginRight:12, marginBottom:10, borderWidth:1, borderColor:"rgba(255,255,255,0.35)", shadowColor:"#000", shadowOpacity:0.12, shadowRadius:10, elevation:5 },
   smartChip:{ flexDirection:"row", alignItems:"center", backgroundColor:"#F8F9FA", paddingVertical:9, paddingHorizontal:14, borderRadius:20, minHeight: 36, marginRight:12, marginBottom:8, borderWidth:1, borderColor:"#E5E7EB" },

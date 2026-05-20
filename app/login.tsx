@@ -103,9 +103,11 @@ export default function LoginScreen() {
             </Pressable>
           </View>
 
-          <AppText style={styles.title} language={language}>Agrisnap</AppText>
+          <AppText style={styles.title} language={language}>Kisan Khata</AppText>
           <AppText style={styles.tagline} language={language}>
-            {language === "te" ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు" : "Our digital support for your farming"}
+           {language === "te" 
+            ? "ఆధునిక వ్యవసాయానికి డిజిటల్ ఖాతా." 
+            : "The Digital Ledger for Modern Agriculture."}
           </AppText>
 
           <Animated.View style={[styles.inputBox, borderStyle]}>

@@ -34,25 +34,23 @@ export default function FarmerLayout() {
   const [name, setName] = useState("...");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  // 🔥 గ్లిచ్ రాకుండా డ్రాయర్ విడ్త్ ని పూర్తిగా కవర్ చేయడానికి -320 పెట్టాను
   const drawerAnim = useRef(new Animated.Value(-320)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   
-  // 🔥 టోగుల్ స్విచ్ స్మూత్ గా మూవ్ అవ్వడానికి పక్కా నేటివ్ డ్రైవర్ సపోర్ట్ చేసే నోడ్
   const toggleTranslateX = useRef(new Animated.Value(language === "te" ? 24 : 2)).current;
 
-  /* ---------------- LANGUAGE TOGGLE ANIMATION (100% SMOOTH) ---------------- */
+  /* ---------------- LANGUAGE TOGGLE ANIMATION ---------------- */
   useEffect(() => {
     Animated.spring(toggleTranslateX, {
       toValue: language === "te" ? 24 : 2,
-      useNativeDriver: true, // 🔥 నేటివ్ డ్రైవర్ TRUE! దీనివల్ల ఇన్స్టా లాగా స్మూత్ గా వెళ్తుంది
+      useNativeDriver: true, 
       damping: 15,
       stiffness: 150,
       mass: 0.6
     }).start();
   }, [language]);
 
-  /* ---------------- DRAWER ANIMATION (STRICT REAL-WORLD CURVE) ---------------- */
+  /* ---------------- DRAWER ANIMATION ---------------- */
   useEffect(() => {
     if (drawerOpen) {
       Animated.parallel([
@@ -75,7 +73,7 @@ export default function FarmerLayout() {
         Animated.timing(drawerAnim, {
           toValue: -320,
           duration: 250,
-          easing: Easing.bezier(0.25, 0.1, 0.25, 1), // 🔥 ప్రొడクション బెజియర్ కర్వ్
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1), 
           useNativeDriver: true
         }),
         Animated.timing(overlayOpacity, {
@@ -130,7 +128,6 @@ export default function FarmerLayout() {
   const navigateFromDrawer = (route: string) => {
     closeDrawer(); 
     
-    // 🔥 గ్లిచ్ రాకుండా డ్రాయర్ పూర్తిగా వెనక్కి వెళ్ళాకే (320ms) నావిగేషన్ జరగాలి
     setTimeout(async () => {
       if (route === "rate") {
         const packageName = "com.achuth.agrisnap"; 
@@ -215,7 +212,7 @@ export default function FarmerLayout() {
               <Path d={`M0 0 H300 V40 Q150 100 0 40 Z`} fill="#fff" />
             </Svg>
       
-            <SafeAreaView style={{ flex: 1 }}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
       
               {/* TOP FIXED SECTION */}
               <View>
@@ -300,13 +297,13 @@ export default function FarmerLayout() {
                     <View
                       style={[
                         styles.toggleContainer,
-                        { backgroundColor: language === "te" ? "#DCFCE7" : "#E5E7EB" } // Clean instant color change
+                        { backgroundColor: language === "te" ? "#DCFCE7" : "#E5E7EB" } 
                       ]}
                     >
                       <Animated.View
                         style={[
                           styles.toggleCircle,
-                          { transform: [{ translateX: toggleTranslateX }] } // Pure Native Animation
+                          { transform: [{ translateX: toggleTranslateX }] } 
                         ]}
                       />
                     </View>
@@ -314,7 +311,7 @@ export default function FarmerLayout() {
                 </View>
               </View>
       
-              {/* ✅ YOUR ORIGINAL RESPONSIVE SCROLLVIEW */}
+              {/* ✅ RESPONSIVE SCROLLVIEW (Takes remaining space) */}
               <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20, gap: 10 }}
@@ -361,8 +358,10 @@ export default function FarmerLayout() {
                     {language === "te" ? "మాకు రేటింగ్ ఇవ్వండి" : "Rate Us"}
                   </AppText>
                 </TouchableOpacity>
-            
-                {/* Logout Button */}
+              </ScrollView>
+
+              {/* 🔥 PINNED LOGOUT BUTTON (Always at the bottom) */}
+              <View style={styles.bottomPinnedContainer}>
                 <TouchableOpacity
                   onPress={() => setShowLogoutModal(true)}
                   activeOpacity={0.85}
@@ -373,8 +372,8 @@ export default function FarmerLayout() {
                     {language === "te" ? "లాగౌట్" : "Logout"}
                   </AppText>
                 </TouchableOpacity>
+              </View>
 
-              </ScrollView>
             </SafeAreaView>
           </Animated.View>
         </TouchableOpacity>
@@ -414,7 +413,6 @@ export default function FarmerLayout() {
   );
 }
 
-/* ---------------- YOUR EXACT STYLES WITH UPDATED FIXED TOGGLE ---------------- */
 const styles = StyleSheet.create({
   drawerItem:{
     flexDirection:"row",
@@ -429,7 +427,6 @@ const styles = StyleSheet.create({
     fontWeight:"600",
     color:"#1F2937"
   },
-  // 🔥 FIXED PREMIUM TOGGLE STYLES
   toggleContainer: {
     width: 52,
     height: 28,
@@ -449,8 +446,18 @@ const styles = StyleSheet.create({
     shadowRadius: 1.5,
     elevation: 2
   },
+  
+  // 🔥 NEW PINNED CONTAINER STYLES
+  bottomPinnedContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 25, // iOS లో కింద నావిగేషన్ బార్ కవర్ అవ్వకుండా
+    borderTopWidth: 1,
+    borderColor: "#F1F5F9",
+    backgroundColor: "#fff",
+  },
   logoutBtn: {
-    marginTop: 20,
+    // marginTop తీసేశాను ఇక్కడినుండి
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#FCA5A5",
@@ -461,6 +468,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10
   },
+
   modalOverlay:{
     flex:1,
     backgroundColor:"rgba(0,0,0,0.7)",

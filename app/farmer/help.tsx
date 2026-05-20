@@ -43,7 +43,7 @@ export default function HelpSupport() {
     subtitle: language === "te" ? "మేము మీకు సహాయం చేస్తాము" : "We are here to help you",
     
     // Video Section
-    videoTitle: language === "te" ? "అగ్రిలాగ్ వాడే విధానం" : "How to use AgriLog",
+    videoTitle: language === "te" ? "కిసాన్ ఖాతా వాడే విధానం" : "How to use Kisan Khata",
     videoDesc: language === "te" ? "యాప్ ఎలా వాడాలో పూర్తి వివరాలు ఈ వీడియోలో చూడండి." : "Watch this video to learn how to use the app completely.",
     watchBtn: language === "te" ? "వీడియో చూడండి" : "Watch Video",
     
@@ -60,7 +60,7 @@ export default function HelpSupport() {
   const faqs = [
     {
       id: "1",
-      q: language === "te" ? "ఈ అగ్రిలాగ్ యాప్ ఎవరి కోసం?" : "Who is this AgriLog app for?",
+      q: language === "te" ? "ఈ కిసాన్ ఖాతా యాప్ ఎవరి కోసం?" : "Who is this Kisan Khata app for?",
       a: language === "te" 
         ? "ఈ యాప్ రైతులు కోసం ప్రత్యేకం. రోజువారీ కూలీల హాజరు, పంట ఖర్చులు, మరియు అమ్మకాల లెక్కలు సులభంగా వేసుకోవడానికి ఇది ఉపయోగపడుతుంది." 
         : "This app is strictly for farmers. It helps you easily track daily labor attendance, crop expenses, and sales records."
@@ -113,7 +113,7 @@ export default function HelpSupport() {
   const openWhatsApp = () => {
     // 🔥 బ్రో.. ఇక్కడ 91 పక్కన నీ ఒరిజినల్ వాట్సాప్ నంబర్ ఇవ్వు (Ex: "918121XXXXXX")
     const phoneNumber = "918121648629"; 
-    const message = language === "te" ? "హలో అగ్రిలాగ్ సపోర్ట్, నాకు ఒక సహాయం కావాలి." : "Hello AgriLog Support, I need some help.";
+    const message = language === "te" ? "హలో కిసాన్ ఖాతా సపోర్ట్, నాకు ఒక సహాయం కావాలి." : "Hello Kisan Khata Support, I need some help.";
     const url = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
     
     Linking.canOpenURL(url).then(supported => {

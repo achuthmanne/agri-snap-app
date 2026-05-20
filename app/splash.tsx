@@ -47,7 +47,10 @@ export default function SplashScreen() {
     titleOpacity.value = withDelay(500, withTiming(1, { duration: 1000 }));
     titleTranslate.value = withDelay(500, withTiming(0, { duration: 1000 }));
     titleScale.value = withDelay(500, withTiming(1, { duration: 1000, easing: Easing.out(Easing.exp) }));
-    underlineWidth.value = withDelay(1400, withTiming(150, { duration: 700 }));
+    
+    // 🔥 Underline width పెంచాను, ఎందుకంటే టైటిల్ కొంచెం పెద్దది కాబట్టి
+    underlineWidth.value = withDelay(1400, withTiming(180, { duration: 700 }));
+    
     taglineOpacity.value = withDelay(1700, withTiming(1, { duration: 800 }));
     taglineTranslate.value = withDelay(1700, withTiming(0, { duration: 800 }));
 
@@ -87,13 +90,23 @@ export default function SplashScreen() {
     <View style={styles.container}>
       <Animated.View style={[styles.topCurve, topCurveStyle]} />
       <Animated.View style={[styles.bottomCurve, bottomCurveStyle]} />
+      
+     {/* 🔥 THE BRAND NAME (ALWAYS IN ENGLISH FOR STRONG BRANDING) */}
       <Animated.View style={titleStyle}>
-        <AppText style={styles.title} language={language}>Agrisnap</AppText>
+        {/* ఇక్కడ language కి డైరెక్ట్ గా "en" ఇచ్చేసాను, సో ఫాంట్ కూడా ఇంగ్లీష్ దే అప్లై అవుతుంది */}
+        <AppText style={styles.title} language="en">
+          Kisan Khata
+        </AppText>
       </Animated.View>
+      
       <Animated.View style={[styles.underline, underlineStyle]} />
+      
+      {/* 🔥 THE PREMIUM PROFESSIONAL TAGLINE (BILINGUAL & RESPONSIVE) */}
       <Animated.View style={taglineStyle}>
         <AppText style={styles.tagline} language={language}>
-          {language === "te" ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడ్పాటు" : "Our digital support for your farming"}
+          {language === "te" 
+            ? "ఆధునిక వ్యవసాయానికి డిజిటల్ ఖాతా." 
+            : "The Digital Ledger for Modern Agriculture."}
         </AppText>
       </Animated.View>
     </View>
@@ -104,7 +117,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#1B5E20", justifyContent: "center", alignItems: "center" },
   title: { fontSize: 40, fontWeight: "800", color: "#FFFFFF", letterSpacing: 1.2 },
   underline: { height: 3, backgroundColor: "#E8F5E9", marginTop: 12, marginBottom: 20, borderRadius: 4 },
-  tagline: { fontSize: 16, color: "#E8F5E9", fontWeight: "500", textAlign: "center", marginTop: -8 },
+  tagline: { 
+    fontSize: 16, 
+    color: "#E8F5E9", 
+    fontWeight: "500", 
+    textAlign: "center", 
+    marginTop: -8,
+    paddingHorizontal: 20, // 🔥 ఎడ్జెస్ కి తగలకుండా నీట్ గా ఉండటానికి
+    lineHeight: 24, // టెక్స్ట్ క్లియర్ గా కనపడటానికి
+  },
   topCurve: { position: "absolute", top: -180, right: -140, width: width, height: width, backgroundColor: "#2E7D32", borderRadius: width, opacity: 0.25 },
   bottomCurve: { position: "absolute", bottom: -220, left: -160, width: width * 1.3, height: width * 1.3, backgroundColor: "#388E3C", borderRadius: width, opacity: 0.18 },
 });

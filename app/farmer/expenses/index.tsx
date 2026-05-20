@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
       alignItems: "center",
       marginBottom: 6
     },
-    catBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
+    catBoxValue: { fontSize: 14, fontWeight: "600", marginTop: 2 },
     categorySummary: { paddingLeft: 20, marginBottom: 20 },
     sectionTitle: { fontSize: 17, fontWeight: '600', color: '#1e293b', marginBottom: 15 },
     catScroll: { flexDirection: 'row' },

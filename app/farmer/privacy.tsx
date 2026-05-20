@@ -31,10 +31,10 @@ export default function PrivacyPolicy() {
     title: language === "te" ? "గోప్యత విధానం" : "Privacy Policy",
     subtitle: language === "te" ? "మీ డేటా భద్రతే మా ప్రాధాన్యత" : "Your data security is our priority",
     
-    introTitle: language === "te" ? "అగ్రిలాగ్ గోప్యత విధానం" : "AgriLog Privacy Policy",
+    introTitle: language === "te" ? "కిసాన్ ఖాతా గోప్యత విధానం" : "Kisan Khata Privacy Policy",
     introDesc: language === "te" 
-      ? "అగ్రిలాగ్ (AgriLog) యాప్ వాడే రైతులు మరియు యూజర్ల సమాచారాన్ని మేము ఎలా సేకరిస్తాము, ఎలా భద్రపరుస్తాము అనే వివరాలు కింద స్పష్టంగా ఇవ్వబడ్డాయి."
-      : "This policy explains how AgriLog collects, uses, and protects the personal and agricultural data of our farmers and users.",
+      ? "కిసాన్ ఖాతా యాప్ వాడే రైతులు మరియు యూజర్ల సమాచారాన్ని మేము ఎలా సేకరిస్తాము, ఎలా భద్రపరుస్తాము అనే వివరాలు కింద స్పష్టంగా ఇవ్వబడ్డాయి."
+      : "This policy explains how Kisan Khata collects, uses, and protects the personal and agricultural data of our farmers and users.",
     
     lastUpdated: language === "te" ? "చివరిగా అప్‌డేట్ చేసినది: మే 2026" : "Last Updated: May 2026",
     contactSupport: language === "te" ? "మమ్మల్ని సంప్రదించండి" : "Contact Support"
@@ -137,7 +137,7 @@ export default function PrivacyPolicy() {
           <TouchableOpacity style={styles.contactBtn} activeOpacity={0.8}>
             <Ionicons name="mail-outline" size={18} color="#4B5563" />
             <AppText style={styles.contactBtnText} language={language}>
-              agrilog.support@gmail.com
+              Kisan Khata.support@gmail.com
             </AppText>
           </TouchableOpacity>
         </View>

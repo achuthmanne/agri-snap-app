@@ -23,13 +23,13 @@ import {
 import { Menu, MenuOption, MenuOptions, MenuTrigger } from "react-native-popup-menu"; 
 import ShimmerPlaceholder from "react-native-shimmer-placeholder";
 
-// 🔥 REANIMATED IMPORTS FOR SMOOTH COUNT UP
+// 🔥 REANIMATED IMPORTS
 import Animated, { useSharedValue, useAnimatedProps, withTiming, Easing } from "react-native-reanimated";
 
 Animated.addWhitelistedNativeProps({ text: true, value: true });
 const AnimatedText = Animated.createAnimatedComponent(TextInput);
 
-// 🔥 PRO FIX 1: Reanimated UI Thread లో toLocaleString పనిచేయదు, కాబట్టి Custom Worklet రాయాలి
+// 🔥 PRO FIX 1: Format worklet
 const formatIndianCurrency = (val: number) => {
   'worklet';
   let numStr = Math.floor(val).toString();
@@ -49,7 +49,7 @@ export default function SalesScreen() {
 
   const [data, setData] = useState<any[]>([]);
   const [language, setLanguage] = useState<"te" | "en">("te");
-  const [loading, setLoading] = useState(true); // 🔥 Initial loading must be true
+  const [loading, setLoading] = useState(true); 
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalQty, setTotalQty] = useState(0);
   const [cropQty, setCropQty] = useState<any>({});
@@ -58,7 +58,6 @@ export default function SalesScreen() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [deleteVisible, setDeleteVisible] = useState(false);
 
-  // 🔥 ANIMATION STATE FOR TOTAL INCOME
   const animatedIncome = useSharedValue(0);
 
   useEffect(() => {
@@ -72,7 +71,7 @@ export default function SalesScreen() {
     const formatted = formatIndianCurrency(animatedIncome.value);
     return {
         text: `₹ ${formatted}`,
-        value: `₹ ${formatted}` // 🔥 Android crashes safety
+        value: `₹ ${formatted}` 
     } as any; 
   });
 
@@ -89,7 +88,6 @@ export default function SalesScreen() {
     });
   }, []);
 
-  // 🔥 PRO FIX 2: useFocusEffect prevents memory leaks when navigating away
   useFocusEffect(
     useCallback(() => {
       let unsubscribe: (() => void) | undefined;
@@ -179,7 +177,6 @@ export default function SalesScreen() {
     }, [])
   );
 
-  // 🔥 PRO FIX 3: Safe Delete Function
   const handleDelete = async () => {
     if (!selectedItem?.id) return;
     try {
@@ -355,12 +352,23 @@ export default function SalesScreen() {
           return (
             <View style={styles.card}>
               <View style={[styles.cardBar, { backgroundColor: color }]} />
+              
               <View style={styles.cardInfo}>
+                {/* 🔥 CROP NAME */}
                 <AppText style={styles.cardCrop}>
                   {item.crop}
                 </AppText>
+
+                {/* 🔥 DYNAMIC DESCRIPTION (WRAPS NICELY, NO OVERLAPPING) */}
+                {item.description ? (
+                  <AppText style={styles.cardDesc}>
+                    {item.description}
+                  </AppText>
+                ) : null}
+
+                {/* 🔥 QTY & DATE */}
                 <AppText style={styles.cardCat}>
-                  {item.quantity} × ₹{item.rate} | {date}
+                  {item.quantity} × ₹{item.rate}  |  {date}
                 </AppText>
               </View>
 
@@ -381,6 +389,7 @@ export default function SalesScreen() {
                         params: { 
                           editId: item.id,
                           crop: item.crop || "",
+                          desc: item.description || "", 
                           unit: item.unit || "",
                           qty: item.quantity?.toString() || "",
                           rate: item.rate?.toString() || ""
@@ -410,7 +419,6 @@ export default function SalesScreen() {
                     </MenuOption>
                   </MenuOptions>
                 </Menu>
-
               </View>
             </View>
           );
@@ -627,6 +635,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2
   },
+  cardInfo: { 
+    flex: 1, 
+    marginLeft: 10, 
+    marginRight: 12 // 🔥 Added Right Margin to avoid hitting the price
+  },
+  cardCrop: { 
+    fontSize: 18, 
+    fontWeight: "600", 
+    color: "#1F2937",
+    flexWrap: "wrap" 
+  },
+  cardDesc: { 
+    fontSize: 13, 
+    color: "#64748B", 
+    fontWeight: "500", 
+    marginTop: 2,
+    flexWrap: "wrap", // 🔥 Forces long text to break to next line
+    lineHeight: 18
+  },
+  cardCat: { 
+    fontSize: 12, 
+    color: "#9CA3AF", 
+    marginTop: 6,
+    fontWeight: "500"
+  },
   card: {
     marginHorizontal: 16,
     marginVertical: 6,
@@ -638,10 +671,7 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB"
   },
   cardBar: { width: 4, borderRadius: 2 },
-  cardInfo: { flex: 1, marginLeft: 10 },
-  cardCrop: { fontSize: 16, fontWeight: "600" },
-  cardCat: { fontSize: 12, color: "#6B7280" },
-  
+
   addBtn: { position: "absolute", bottom: 30, right: 20 },
   addGradient: {
     width: 60,

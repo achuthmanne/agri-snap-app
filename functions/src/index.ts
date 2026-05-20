@@ -6,21 +6,55 @@ import fetch from "node-fetch";
 
 admin.initializeApp();
 
+/* ---------------- HELPER: BATCH MESSAGING (PRODUCTION READY) ---------------- */
+// ఫైర్‌బేస్ ఒక్కసారి 500 టోకెన్స్ మాత్రమే పంపుతుంది. సో, బ్యాచ్ లుగా విడగొట్టాలి.
+const sendMulticastInBatches = async (tokens: string[], payload: any) => {
+  const chunkSize = 500;
+  for (let i = 0; i < tokens.length; i += chunkSize) {
+    const chunk = tokens.slice(i, i + chunkSize);
+    try {
+      const response = await admin.messaging().sendEachForMulticast({ ...payload, tokens: chunk });
+      
+      // అన్‌ఇన్‌స్టాల్ చేసిన యూజర్స్ టోకెన్స్ క్లీనప్ (Database Health)
+      if (response.failureCount > 0) {
+        const failedTokens: string[] = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const errCode = resp.error?.code;
+            if (errCode === 'messaging/invalid-registration-token' || errCode === 'messaging/registration-token-not-registered') {
+              failedTokens.push(chunk[idx]);
+            }
+          }
+        });
+        
+        // పాత టోకెన్స్ ని ఫైర్‌స్టోర్ నుంచి తీసేయడం (ఇది రేపు బిల్ల్ తగ్గించడానికి హెల్ప్ అవుతుంది)
+        if (failedTokens.length > 0) {
+           const usersSnap = await admin.firestore().collection("users").where("fcmToken", "in", failedTokens).get();
+           const batch = admin.firestore().batch();
+           usersSnap.docs.forEach(doc => batch.update(doc.ref, { fcmToken: admin.firestore.FieldValue.delete() }));
+           await batch.commit();
+        }
+      }
+    } catch (error) {
+      console.error("❌ Batch Send Error:", error);
+    }
+  }
+};
+
+
 /* ---------------- వాతావరణం (Weather) ఫీచర్స్ కోసం హెల్పర్స్ ---------------- */
 const getWeatherConfig = (main: string, lang: string) => {
   const m = main.toLowerCase();
 
-  // 1. THUNDERSTORM (ఉరుములు, మెరుపులు, పిడుగులు)
+  // 1. THUNDERSTORM
   if (m.includes("thunderstorm")) {
     if (m.includes("light")) return { icon: "thunderstorm-outline", color: "#6366F1", text: lang === "te" ? "ఉరుములతో కూడిన జల్లులు" : "Light Thunderstorm" };
     if (m.includes("heavy")) return { icon: "thunderstorm", color: "#4338CA", text: lang === "te" ? "భారీ పిడుగులతో వర్షం" : "Heavy Thunderstorm" };
     return { icon: "thunderstorm", color: "#4F46E5", text: lang === "te" ? "పిడుగులతో వర్షం" : "Thunderstorm" };
   }
 
-  // 2. RAIN & DRIZZLE (వర్షం - రకాలు)
-  if (m.includes("drizzle")) {
-    return { icon: "rainy-outline", color: "#60A5FA", text: lang === "te" ? "సన్నపు చిరుజల్లులు" : "Light Drizzle" };
-  }
+  // 2. RAIN & DRIZZLE
+  if (m.includes("drizzle")) return { icon: "rainy-outline", color: "#60A5FA", text: lang === "te" ? "సన్నపు చిరుజల్లులు" : "Light Drizzle" };
   if (m.includes("rain")) {
     if (m.includes("light")) return { icon: "rainy-outline", color: "#3B82F6", text: lang === "te" ? "తేలికపాటి వర్షం" : "Light Rain" };
     if (m.includes("heavy") || m.includes("extreme")) return { icon: "rainy", color: "#1D4ED8", text: lang === "te" ? "అతి భారీ వర్షం" : "Heavy Rain" };
@@ -28,7 +62,7 @@ const getWeatherConfig = (main: string, lang: string) => {
     return { icon: "rainy", color: "#2563EB", text: lang === "te" ? "వర్షం" : "Rain" };
   }
 
-  // 3. CLOUDS (మబ్బులు - రకాలు)
+  // 3. CLOUDS
   if (m.includes("clouds")) {
     if (m.includes("few") || m.includes("scattered")) return { icon: "partly-sunny", color: "#9CA3AF", text: lang === "te" ? "పాక్షికంగా మబ్బులు" : "Partly Cloudy" };
     if (m.includes("broken")) return { icon: "cloudy", color: "#6B7280", text: lang === "te" ? "ఎక్కువ మబ్బులు" : "Mostly Cloudy" };
@@ -36,12 +70,10 @@ const getWeatherConfig = (main: string, lang: string) => {
     return { icon: "cloudy", color: "#64748B", text: lang === "te" ? "మబ్బులు పట్టింది" : "Cloudy" };
   }
 
-  // 4. CLEAR / SUNNY (నిర్మలమైన ఎండ)
-  if (m.includes("clear")) {
-    return { icon: "sunny", color: "#F59E0B", text: lang === "te" ? "నిర్మలమైన ఎండ" : "Clear & Sunny" };
-  }
+  // 4. CLEAR / SUNNY
+  if (m.includes("clear")) return { icon: "sunny", color: "#F59E0B", text: lang === "te" ? "నిర్మలమైన ఎండ" : "Clear & Sunny" };
 
-  // 5. ATMOSPHERIC CONDITIONS (పొగమంచు, గాలి, దుమ్ము)
+  // 5. ATMOSPHERIC CONDITIONS
   if (m.includes("mist")) return { icon: "water-outline", color: "#94A3B8", text: lang === "te" ? "మసక బారింది" : "Mist" };
   if (m.includes("fog")) return { icon: "cloud-offline-outline", color: "#CBD5E1", text: lang === "te" ? "దట్టమైన పొగమంచు" : "Dense Fog" };
   if (m.includes("haze")) return { icon: "reorder-four-outline", color: "#D1D5DB", text: lang === "te" ? "పొగమంచు" : "Haze" };
@@ -49,67 +81,27 @@ const getWeatherConfig = (main: string, lang: string) => {
   if (m.includes("smoke")) return { icon: "flame-outline", color: "#6B7280", text: lang === "te" ? "పొగ పట్టింది" : "Smoke" };
   if (m.includes("squall") || m.includes("tornado")) return { icon: "warning", color: "#DC2626", text: lang === "te" ? "తుఫాను గాలి / సుడిగాలి" : "Squall/Tornado Warning" };
 
-  // 6. SNOW (ఒకవేళ చల్లటి ప్రాంతాలు అయితే)
+  // 6. SNOW
   if (m.includes("snow")) {
     if (m.includes("light")) return { icon: "snow-outline", color: "#BAE6FD", text: lang === "te" ? "తేలికపాటి మంచు" : "Light Snow" };
     return { icon: "snow", color: "#7DD3FC", text: lang === "te" ? "మంచు కురుస్తోంది" : "Snow" };
   }
 
-  // DEFAULT (ఏదీ మ్యాచ్ అవ్వకపోతే)
   return { icon: "partly-sunny", color: "#F59E0B", text: main.charAt(0).toUpperCase() + main.slice(1) };
 };
 
 const getAgriAdvice = (main: string, temp: number, windSpeed: number, humidity: number, lang: string) => {
   const m = main.toLowerCase();
-
-  // 1. Extreme Weather (Safety First - పిడుగులు, తుఫాను)
-  if (m.includes("thunderstorm") || m.includes("storm") || m.includes("tornado")) {
-    return lang === "te"
-      ? "⚠️ పిడుగులు/తుఫాను వచ్చే ప్రమాదం ఉంది. పొలం పనులు ఆపేసి సురక్షిత ప్రాంతంలో ఉండండి."
-      : "⚠️ Storm/Thunderstorm alert. Stop field work and stay in a safe place. Do not spray or irrigate.";
-  }
-
-  // 2. Rain / Drizzle (వర్షం - Chemical wash off)
-  if (m.includes("rain") || m.includes("drizzle") || m.includes("snow")) {
-    return lang === "te"
-      ? "🌧️ వర్షం పడే అవకాశం ఉంది. ఇప్పుడు మందులు కొడితే కడిగివేయబడతాయి, వాయిదా వేయండి."
-      : "🌧️ Rain expected. Postpone spraying fertilizers or pesticides as they will wash off.";
-  }
-
-  // 3. High Winds (గాలి - Chemical drift)
-  if (windSpeed > 15) {
-    return lang === "te"
-      ? "💨 గాలి వేగం ఎక్కువగా ఉంది. మందు కొడితే పక్క పొలాలకు లేదా మీ కళ్ళలో పడే ప్రమాదం ఉంది."
-      : "💨 High winds detected. Avoid spraying to prevent chemical drift to neighboring fields.";
-  }
-
-  // 4. High Temperature (ఎండ తీవ్రత - Evaporation & Crop Burn)
-  if (temp > 35) {
-    return lang === "te"
-      ? "🔥 ఎండ తీవ్రత ఎక్కువగా ఉంది. ఇప్పుడు మందు కొడితే ఆవిరైపోతుంది, ఉదయం లేదా సాయంత్రం పూట మాత్రమే పిచికారీ చేయండి."
-      : "🔥 High temperature. Spraying now may cause chemical burn or evaporate quickly. Spray only in morning or evening.";
-  }
-
-  // 5. High Humidity (గాలిలో తేమ - Fungal Disease Risk)
-  if (humidity > 85 && (m.includes("clouds") || m.includes("mist") || m.includes("haze"))) {
-    return lang === "te"
-      ? "☁️ గాలిలో తేమ చాలా ఎక్కువగా ఉంది. బూజు/ఫంగస్ తెగుళ్లు వచ్చే అవకాశం ఉంది, పైరును గమనిస్తూ ఉండండి."
-      : "☁️ High humidity and cloudy. High risk of fungal diseases. Monitor your crops closely.";
-  }
-
-  // 6. Cold / Dew (చలి - మంచు)
-  if (temp < 15) {
-    return lang === "te"
-      ? "❄️ చలి/మంచు ఎక్కువగా ఉంది. ఉదయం పూట ఆకుల మీద మంచు తగ్గాకే మందులు పిచికారీ చేయండి."
-      : "❄️ Cold weather. Wait for the morning dew to dry on leaves before spraying pesticides.";
-  }
-
-  // 7. Perfect Weather (పక్కా అనుకూలం)
-  return lang === "te"
-    ? "✅ వాతావరణం చాలా అనుకూలంగా ఉంది. ఎరువులు వేయడానికి, మందులు కొట్టడానికి లేదా కోతలకు ఇది సరైన సమయం."
-    : "✅ Perfect weather conditions. Excellent time for spraying, fertilizing, or harvesting.";
+  if (m.includes("thunderstorm") || m.includes("storm") || m.includes("tornado")) return lang === "te" ? "⚠️ పిడుగులు/తుఫాను వచ్చే ప్రమాదం ఉంది. పొలం పనులు ఆపేసి సురక్షిత ప్రాంతంలో ఉండండి." : "⚠️ Storm/Thunderstorm alert. Stop field work and stay in a safe place. Do not spray or irrigate.";
+  if (m.includes("rain") || m.includes("drizzle") || m.includes("snow")) return lang === "te" ? "🌧️ వర్షం పడే అవకాశం ఉంది. ఇప్పుడు మందులు కొడితే కడిగివేయబడతాయి, వాయిదా వేయండి." : "🌧️ Rain expected. Postpone spraying fertilizers or pesticides as they will wash off.";
+  if (windSpeed > 15) return lang === "te" ? "💨 గాలి వేగం ఎక్కువగా ఉంది. మందు కొడితే పక్క పొలాలకు లేదా మీ కళ్ళలో పడే ప్రమాదం ఉంది." : "💨 High winds detected. Avoid spraying to prevent chemical drift to neighboring fields.";
+  if (temp > 35) return lang === "te" ? "🔥 ఎండ తీవ్రత ఎక్కువగా ఉంది. ఇప్పుడు మందు కొడితే ఆవిరైపోతుంది, ఉదయం లేదా సాయంత్రం పూట మాత్రమే పిచికారీ చేయండి." : "🔥 High temperature. Spraying now may cause chemical burn or evaporate quickly. Spray only in morning or evening.";
+  if (humidity > 85 && (m.includes("clouds") || m.includes("mist") || m.includes("haze"))) return lang === "te" ? "☁️ గాలిలో తేమ చాలా ఎక్కువగా ఉంది. బూజు/ఫంగస్ తెగుళ్లు వచ్చే అవకాశం ఉంది, పైరును గమనిస్తూ ఉండండి." : "☁️ High humidity and cloudy. High risk of fungal diseases. Monitor your crops closely.";
+  if (temp < 15) return lang === "te" ? "❄️ చలి/మంచు ఎక్కువగా ఉంది. ఉదయం పూట ఆకుల మీద మంచు తగ్గాకే మందులు పిచికారీ చేయండి." : "❄️ Cold weather. Wait for the morning dew to dry on leaves before spraying pesticides.";
+  return lang === "te" ? "✅ వాతావరణం చాలా అనుకూలంగా ఉంది. ఎరువులు వేయడానికి, మందులు కొట్టడానికి లేదా కోతలకు ఇది సరైన సమయం." : "✅ Perfect weather conditions. Excellent time for spraying, fertilizing, or harvesting.";
 };
-/* ---------------- 1. ADVANCED WEATHER (NEW) ---------------- */
+
+/* ---------------- 1. ADVANCED WEATHER ---------------- */
 export const getAdvancedWeather = functions.https.onRequest(async (req, res) => {
   try {
     const lat = req.query.lat as string;
@@ -121,7 +113,6 @@ export const getAdvancedWeather = functions.https.onRequest(async (req, res) => 
       return;
     }
 
-   // 🔥 API Keys ని .env ఫైల్ నుంచి సేఫ్ గా తీసుకుంటున్నాం
     const OPENWEATHER_API_KEY = process.env.WEATHER_API_KEY || ""; 
     const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
 
@@ -155,8 +146,8 @@ export const getAdvancedWeather = functions.https.onRequest(async (req, res) => 
     const forecastData = await forecastRes.json();
 
     if (exactLocation === "Location" && currentData.name) {
-  exactLocation = currentData.name; // Google Maps ఫెయిల్ అయితే డీఫాల్ట్ గా OpenWeather ఊరి పేరు వాడుతుంది
-}
+      exactLocation = currentData.name; 
+    }
     const currentMain = currentData.weather[0].main;
     const currentConfig = getWeatherConfig(currentMain, lang);
     const windKmH = Math.round(currentData.wind.speed * 3.6);
@@ -170,11 +161,8 @@ export const getAdvancedWeather = functions.https.onRequest(async (req, res) => 
       wind: windKmH,
       pressure: currentData.main.pressure,
       visibility: (currentData.visibility / 1000).toFixed(1),
-      
-      // 🔥 కింద ఉన్న ఈ రెండు లైన్లను మాత్రమే రీప్లేస్ చెయ్ 
       advice: getAgriAdvice(currentMain, currentData.main.temp, windKmH, currentData.main.humidity, lang),
       isGood: !["rain", "storm", "thunderstorm", "drizzle"].includes(currentMain.toLowerCase()) && windKmH < 15 && currentData.main.temp <= 35,
-      
       uv: 6,
       rainChance: forecastData.list[0]?.pop ? Math.round(forecastData.list[0].pop * 100) : 0
     };
@@ -216,7 +204,7 @@ export const getAdvancedWeather = functions.https.onRequest(async (req, res) => 
   }
 });
 
-/* ---------------- 2. BASIC WEATHER (OLD) ---------------- */
+/* ---------------- 2. BASIC WEATHER ---------------- */
 export const getWeather = functions.https.onRequest(async (req, res) => {
   try {
     const lat = req.query.lat || "17.3850";
@@ -228,7 +216,6 @@ export const getWeather = functions.https.onRequest(async (req, res) => {
     try {
       data = JSON.parse(text);
     } catch {
-      console.log("Invalid response:", text);
       res.status(500).json({ error: "Invalid API response" });
       return; 
     }
@@ -246,9 +233,7 @@ export const getWeather = functions.https.onRequest(async (req, res) => {
 /* ---------------- 3. GET PRICES ---------------- */
 export const getPrices = functions.https.onRequest(async (req, res) => {
   try {
-    
     const DATA_GOV_API_KEY = process.env.DATA_GOV_API_KEY || "579b464db66ec23bdd0000012deb5555117e4ebe4ffd6df74e6ae0d8";
-
     const AP_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Andhra Pradesh&limit=100`;
     const TS_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Telangana&limit=100`;
     
@@ -264,13 +249,10 @@ export const getPrices = functions.https.onRequest(async (req, res) => {
 });
 
 
-/* ---------------- 3.5 ADVANCED PRICES (NEW - FOR MARKET SCREEN) ---------------- */
+/* ---------------- 3.5 ADVANCED PRICES ---------------- */
 export const getAdvancedPrices = functions.https.onRequest(async (req, res) => {
   try {
-    // 🔥 data.gov.in API కీ ని .env నుంచి తీసుకుంటున్నాం
     const DATA_GOV_API_KEY = process.env.DATA_GOV_API_KEY || "579b464db66ec23bdd0000012deb5555117e4ebe4ffd6df74e6ae0d8";
-    
-    // ఆంధ్రా మరియు తెలంగాణ కోసం పూర్తి డేటా (100 లిమిట్ తో) తెచ్చుకుంటున్నాం
     const AP_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Andhra Pradesh&limit=100`;
     const TS_API = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${DATA_GOV_API_KEY}&format=json&filters[state]=Telangana&limit=100`;
     
@@ -279,18 +261,13 @@ export const getAdvancedPrices = functions.https.onRequest(async (req, res) => {
     const apData = await apRes.json();
     const tsData = await tsRes.json();
     
-    // రెండు రాష్ట్రాల డేటాని కలుపుతున్నాం (slice తీసేశాం)
     const combinedRecords = [...(apData.records || []), ...(tsData.records || [])];
-
-    // లేటెస్ట్ డేట్ ప్రకారం సార్ట్ చేస్తున్నాం
     const sorted = combinedRecords.sort(
       (a: any, b: any) => new Date(b.arrival_date).getTime() - new Date(a.arrival_date).getTime()
     );
 
-    // మార్కెట్ మరియు పంట పేరు బట్టి గ్రూప్ చేస్తున్నాం (నిన్నటి/ఈరోజుటి రేట్లు పోల్చడానికి)
     const grouped: any = {};
     sorted.forEach((item: any) => {
-      // ఒకే మార్కెట్, ఒకే పంట (ఉదా: Guntur - Cotton) ని కీ గా వాడుతున్నాం
       const key = `${item.market}-${item.commodity}`; 
       if (!grouped[key]) {
         grouped[key] = [];
@@ -298,7 +275,6 @@ export const getAdvancedPrices = functions.https.onRequest(async (req, res) => {
       grouped[key].push(item);
     });
 
-    // ఫైనల్ లిస్ట్ తయారు చేస్తున్నాం
     const finalPrices = Object.keys(grouped).map((key) => {
       const items = grouped[key];
       return {
@@ -307,9 +283,8 @@ export const getAdvancedPrices = functions.https.onRequest(async (req, res) => {
         commodity: items[0].commodity,
         min_price: items[0].min_price,
         max_price: items[0].max_price,
-        modal_price: items[0].modal_price, // ఈరోజు రేటు
+        modal_price: items[0].modal_price,
         arrival_date: items[0].arrival_date,
-        // ఒకవేళ పాత డేటా ఉంటే దాన్ని prevPrice గా పంపుతున్నాం
         prevPrice: items[1]?.modal_price || items[0].modal_price 
       };
     });
@@ -321,7 +296,7 @@ export const getAdvancedPrices = functions.https.onRequest(async (req, res) => {
   }
 });
 
-/* ---------------- 4. PUSH NOTIFICATION ---------------- */
+/* ---------------- 4. PUSH NOTIFICATION (PRODUCTION READY) ---------------- */
 export const pushNotification = onDocumentCreated(
   "notifications/{id}",
   async (event) => {
@@ -364,17 +339,15 @@ export const pushNotification = onDocumentCreated(
     }
 
     console.log("✅ Sending to tokens:", tokens.length);
-    console.log("🔥 New notification triggered:", data.title);
     
-    try {
-      await admin.messaging().sendEachForMulticast({
-        tokens,
+    // 🔥 New Logic: Batched Sending (Safe for >500 users)
+    const payload = {
         notification: {
-          title: data.title || "AgriLog",
+          title: data.title || "Kisan Khata", // 🔥 BRAND NAME UPDATED
           body: data.message || "",
         },
         android: {
-          priority: "high",
+          priority: "high" as const,
           notification: { channelId: "default", sound: "default" },
         },
         apns: {
@@ -383,14 +356,13 @@ export const pushNotification = onDocumentCreated(
         data: {
           screen: "notifications",
         },
-      });
-    } catch (e) {
-      console.log("❌ pushNotification error:", e);
-    }
+    };
+    
+    await sendMulticastInBatches(tokens, payload);
   }
 );
 
-/* ---------------- 5. INACTIVE NOTIFICATIONS ---------------- */
+/* ---------------- 5. INACTIVE NOTIFICATIONS (PRODUCTION READY) ---------------- */
 export const sendInactiveNotifications = onSchedule({
   schedule: "0 9 * * *",
   timeZone: "Asia/Kolkata"
@@ -411,7 +383,7 @@ export const sendInactiveNotifications = onSchedule({
       if (daysInactive >= 5 && daysInactive < 7) {
         selectedMsg = {
           title: "👋 రైతు సోదరా, బాగున్నారా?",
-          body: "చాలా రోజులయ్యింది AgriSnap తెరిచి! మీ వాతావరణం మరియు మార్కెట్ ధరలు ఒకసారి చూడండి.",
+          body: "చాలా రోజులయ్యింది Kisan Khata తెరిచి! మీ వాతావరణం మరియు మార్కెట్ ధరలు ఒకసారి చూడండి.", // 🔥 BRAND NAME UPDATED
           screen: "weather"
         };
       } else if (daysInactive >= 7 && daysInactive < 10) {
@@ -423,15 +395,15 @@ export const sendInactiveNotifications = onSchedule({
       } else if (daysInactive >= 10 && (daysInactive - 10) % 3 === 0) {
         const cycle = Math.floor((daysInactive - 10) / 3);
         const rotation = [
-          { t: "👥 కూలీల హాజరు వేయండి", b: "ఈరోజు మీ పొలం పనులకు వచ్చిన కూలీల అటెండెన్స్ AgriSnapలో మార్క్ చేయడం మర్చిపోకండి.", s: "attendance" },
+          { t: "👥 కూలీల హాజరు వేయండి", b: "ఈరోజు మీ పొలం పనులకు వచ్చిన కూలీల అటెండెన్స్ Kisan Khata లో మార్క్ చేయడం మర్చిపోకండి.", s: "attendance" }, // 🔥 BRAND NAME UPDATED
           { t: "💰 పంట అమ్మకాల వివరాలు", b: "మీరు ఈరోజు అమ్మిన పంట వివరాలను, వచ్చిన ఆదాయాన్ని వెంటనే యాప్‌లో నమోదు చేయండి.", s: "sales" },
-          { t: "📒 సాగు ఖర్చుల లెక్క", b: "విత్తనాలు, మందులు మరియు ఇతర పెట్టుబడి ఖర్చులను Expenses సెక్షన్‌లో నోట్ చేసుకోండి.", s: "expenses" },
+          { t: "📒 సాగు ఖర్చుల లెక్క", b: "విత్తనాలు, మందులు మరియు ఇతర పెట్టుబడి ఖర్చులను డిజిటల్ ఖాతాలో నోట్ చేసుకోండి.", s: "expenses" },
           { t: "📰 నేటి వ్యవసాయ వార్తలు", b: "ప్రభుత్వ నిర్ణయాలు మరియు ఆధునిక సాగు పద్ధతుల గురించి తాజా వార్తలు ఇక్కడ చదవండి.", s: "(tabs)/news" },
-          { t: "🚜 ట్రాక్టర్ కావాలా?", b: "దున్నడానికి లేదా ఇతర పనుల కోసం యంత్రాలు కావాలంటే AgriConnectలో ఇప్పుడే బుక్ చేయండి.", s: "bookings" },
+          { t: "🚜 ట్రాక్టర్ కావాలా?", b: "దున్నడానికి లేదా ఇతర పనుల కోసం యంత్రాలు కావాలంటే Kisan Khata లో ఇప్పుడే సెర్చ్ చేయండి.", s: "bookings" }, // 🔥 BRAND NAME UPDATED
           { t: "🌦️ వాతావరణ సమాచారం", b: "వచ్చే మూడు రోజుల్లో మీ ప్రాంతంలో వాతావరణం ఎలా ఉండబోతుందో ఇప్పుడే తెలుసుకోండి.", s: "weather" },
           { t: "📈 మార్కెట్ ధరల అప్డేట్", b: "మీ జిల్లాలోని మార్కెట్ యార్డులలో వివిధ పంటలకు ఉన్న తాజా ధరలను చెక్ చేయండి.", s: "market" },
           { t: "🌾 మీ పంట సారాంశం", b: "ఈ సీజన్ సాగులో మీ పెట్టుబడి, ఆదాయం మరియు లాభాల రిపోర్టును ఒకసారి చూడండి.", s: "summary" },
-          { t: "💡 రైతులకు కొత్త పథకాలు", b: "ప్రభుత్వం అందిస్తున్న కొత్త సబ్సిడీలు మరియు పథకాల వివరాలు AgriSnapలో సిద్ధంగా ఉన్నాయి.", s: "schemes" },
+          { t: "💡 రైతులకు కొత్త పథకాలు", b: "ప్రభుత్వం అందిస్తున్న కొత్త సబ్సిడీలు మరియు పథకాల వివరాలు Kisan Khata లో సిద్ధంగా ఉన్నాయి.", s: "schemes" }, // 🔥 BRAND NAME UPDATED
           { t: "💸 బాకీల వివరాలు", b: "మీరు ఇతరులకు ఇవ్వాల్సిన లేదా మీకు రావాల్సిన పేమెంట్స్ ఒకసారి సరిచూసుకోండి.", s: "payments" },
           { t: "🗺️ పొలాల నిర్వహణ", b: "మీ వివిధ పొలాల్లో జరుగుతున్న పనుల వివరాలను ఎప్పటికప్పుడు అప్డేట్ చేయండి.", s: "fields" },
         ];
@@ -463,15 +435,16 @@ export const sendInactiveNotifications = onSchedule({
         });
 
       } catch (error: any) {
-        if (error.code === "messaging/registration-token-not-registered") {
-          await admin.firestore().collection("users").doc(doc.id).update({ fcmToken: null });
+        // 🔥 Invalid Token Cleanup
+        if (error.code === "messaging/registration-token-not-registered" || error.code === "messaging/invalid-registration-token") {
+          await admin.firestore().collection("users").doc(doc.id).update({ fcmToken: admin.firestore.FieldValue.delete() });
         }
       }
     } 
   } 
 );
 
-/* ---------------- 6. NEW SCHEME NOTIFICATION (AP/TS FILTERED) ---------------- */
+/* ---------------- 6. NEW SCHEME NOTIFICATION (PRODUCTION READY) ---------------- */
 export const notifyNewScheme = onDocumentCreated(
   "schemes/{schemeId}",
   async (event) => {
@@ -481,13 +454,11 @@ export const notifyNewScheme = onDocumentCreated(
     const scheme = snap.data();
     const schemeId = event.params.schemeId;
 
-    // స్కీమ్ యొక్క రాష్ట్రం మరియు పేరు
-    const schemeState = scheme.state; // "AP", "TS", or "BOTH"
+    const schemeState = scheme.state; 
     const title = scheme.title || "కొత్త ప్రభుత్వ పథకం";
     
     let tokens: string[] = [];
     
-    // యూజర్స్ డేటాబేస్ నుండి టోకెన్స్ తెచ్చుకోవడం
     const usersSnap = await admin.firestore().collection("users").get();
     
     usersSnap.forEach((doc) => {
@@ -496,22 +467,16 @@ export const notifyNewScheme = onDocumentCreated(
       const token = userData.fcmToken;
 
       if (token) {
-        // 1. స్కీమ్ 'BOTH' అయితే అందరికీ వెళ్ళాలి
         if (schemeState === "BOTH") {
           tokens.push(token);
-        } 
-        // 2. స్కీమ్ 'AP' అయితే కేవలం AP రైతులకే వెళ్ళాలి
-        else if (schemeState === "AP" && userState === "AP") {
+        } else if (schemeState === "AP" && userState === "AP") {
           tokens.push(token);
-        } 
-        // 3. స్కీమ్ 'TS' అయితే కేవలం TS రైతులకే వెళ్ళాలి
-        else if (schemeState === "TS" && userState === "TS") {
+        } else if (schemeState === "TS" && userState === "TS") {
           tokens.push(token);
         }
       }
     });
 
-    // డూప్లికేట్ టోకెన్స్ లేకుండా ఫిల్టర్ చేయడం
     tokens = [...new Set(tokens)];
     
     if (tokens.length === 0) {
@@ -521,29 +486,21 @@ export const notifyNewScheme = onDocumentCreated(
 
     console.log(`✅ Sending Scheme Notification to ${tokens.length} users in ${schemeState}`);
 
-    try {
-      await admin.messaging().sendEachForMulticast({
-        tokens,
+    // 🔥 Batched Sending
+    const payload = {
         notification: {
           title: "🎉 కొత్త ప్రభుత్వ పథకం!",
-          body: `${title} - అర్హతలు, కావాల్సిన పత్రాలు మరియు దరఖాస్తు విధానం కోసం ఇప్పుడే AgriSnap లో చూడండి.`,
+          body: `${title} - అర్హతలు, కావాల్సిన పత్రాలు మరియు దరఖాస్తు విధానం కోసం ఇప్పుడే Kisan Khata లో చూడండి.`, // 🔥 BRAND NAME UPDATED
         },
         android: {
-          priority: "high",
-          notification: { 
-            channelId: "default", 
-            sound: "default"
-          },
+          priority: "high" as const,
+          notification: { channelId: "default", sound: "default" },
         },
         data: {
-          // నోటిఫికేషన్ క్లిక్ చేయగానే డైరెక్ట్ గా ఆ స్కీమ్ డీటెయిల్స్ స్క్రీన్ కి వెళ్లేలా
           screen: `/farmer/schemes/${schemeId}`, 
         },
-      });
-      console.log("✅ Scheme Notification Sent Successfully");
-    } catch (e) {
-      console.error("❌ Error sending scheme notification:", e);
-    }
+    };
+    
+    await sendMulticastInBatches(tokens, payload);
   }
 );
-

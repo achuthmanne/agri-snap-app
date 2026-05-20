@@ -30,12 +30,13 @@ const getStr = (val: string | string[] | undefined) => (Array.isArray(val) ? val
 export default function AddSale() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const isScreenFocused = useIsFocused(); // 🔥 Lifecycle Fixes
+  const isScreenFocused = useIsFocused(); 
 
   const editId = getStr(params.editId);
 
-  // 🔥 INSTANT DATA LOAD FROM PARAMS
+  // 🔥 DATA LOAD FROM PARAMS
   const [crop, setCrop] = useState(getStr(params.crop));
+  const [description, setDescription] = useState(getStr(params.desc) || ""); // 🔥 NEW: Grade/Type
   const [quantity, setQuantity] = useState(getStr(params.qty));
   const [unit, setUnit] = useState(getStr(params.unit) || "kg");
   const [rate, setRate] = useState(getStr(params.rate));
@@ -47,7 +48,7 @@ export default function AddSale() {
   const [activeInput, setActiveInput] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({}); 
   const [isListening, setIsListening] = useState(false);
-  const [voiceTarget, setVoiceTarget] = useState<"crop" | null>(null);
+  const [voiceTarget, setVoiceTarget] = useState<"crop" | "desc" | null>(null); // 🔥 UPDATED: Added desc
   
   const [userCrops, setUserCrops] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,6 +65,7 @@ export default function AddSale() {
 
   const qtyRef = useRef<TextInput>(null);
   const rateRef = useRef<TextInput>(null);
+  const descRef = useRef<TextInput>(null); // 🔥 ఇక్కడ యాడ్ చెయ్
 
   useEffect(() => {
     AsyncStorage.getItem("APP_LANG").then((l) => {
@@ -93,12 +95,15 @@ export default function AddSale() {
     loadUserCrops();
   }, []);
 
-  const startVoice = async () => {
+  // 🔥 UPDATED VOICE FUNCTION (Supports both Crop Search and Description)
+  const startVoice = async (target: "crop" | "desc") => {
     try {
-      ExpoSpeechRecognitionModule.stop(); // Safe restart
+      Keyboard.dismiss(); // Hide keyboard while speaking
+      ExpoSpeechRecognitionModule.stop(); 
       const res = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!res.granted) return;
-      setVoiceTarget("crop");
+      
+      setVoiceTarget(target);
       setIsListening(true);
       ExpoSpeechRecognitionModule.start({ lang: language === "te" ? "te-IN" : "en-US", interimResults: true });
     } catch (e) { console.log(e); }
@@ -107,15 +112,23 @@ export default function AddSale() {
   useSpeechRecognitionEvent("result", (event) => {
     if (!isListening) return;
     const text = event.results?.[0]?.transcript;
-    // 🔥 Punctuation bug fix
-    if (text && voiceTarget === "crop" && modalType === "crop") {
-      setSearchText(text.replace(/[.,?!]/g, "").trim());
+    
+    if (text) {
+      const cleanText = text.replace(/[.,?!]/g, "").trim();
+      if (voiceTarget === "crop" && modalType === "crop") {
+        setSearchText(cleanText);
+      } else if (voiceTarget === "desc") {
+        setDescription(cleanText);
+      }
     }
   });
 
-  useSpeechRecognitionEvent("end", () => setIsListening(false));
+  useSpeechRecognitionEvent("end", () => {
+    setIsListening(false);
+    setVoiceTarget(null);
+  });
 
-  // 🔥 Cleanup listener to prevent memory leaks
+  // Cleanup listener
   useEffect(() => {
     if (!isScreenFocused) {
       ExpoSpeechRecognitionModule.stop();
@@ -126,7 +139,6 @@ export default function AddSale() {
     };
   }, [isScreenFocused]);
 
-  // 🔥 Safe Calculation
   const total = (Number(quantity) || 0) * (Number(rate) || 0);
 
   const filteredCrops = userCrops.filter(c =>
@@ -134,7 +146,7 @@ export default function AddSale() {
   );
 
   const handleSave = async () => {
-    Keyboard.dismiss(); // 🔥 Close keyboard on save
+    Keyboard.dismiss(); 
     if (loading) return;
 
     const newErrors: any = {};
@@ -159,6 +171,7 @@ export default function AddSale() {
 
       const data = {
         crop: crop.trim(),
+        description: description.trim(), // 🔥 Saved to DB
         quantity: Number(quantity),
         unit,
         rate: Number(rate),
@@ -218,8 +231,8 @@ export default function AddSale() {
           <Ionicons name="bulb" size={18} color="#059669" />
           <AppText style={styles.cropHintText} language={language}>
             {language === "te"
-              ? "సూచన: ప్రధాన పంట పేరునే ఎంచుకోండి (ఉదా: వరి తాలు అమ్మినా 'వరి' అని ఎంచుకోండి)."
-              : "Tip: Select the main crop name even for variants (e.g., select 'Paddy' for Paddy Thalu)."}
+              ? "సూచన: ప్రధాన పంట పేరునే ఎంచుకోండి (ఉదా: తాలు మిర్చి అమ్మినా 'మిర్చి' అని ఎంచుకోండి)."
+              : "Tip: Select the main crop name (e.g., select 'Chilli' even for Chilli Thalu/Waste)."}
           </AppText>
         </View>
 
@@ -312,6 +325,46 @@ export default function AddSale() {
         </TouchableOpacity>
         {errors.rate && <AppText style={styles.errorText} language={language}>{errors.rate}</AppText>}
 
+       {/* 📝 GRADE / DESCRIPTION BOX (WITH MIC & KEYBOARD) 🔥 */}
+        <TouchableOpacity 
+          activeOpacity={1}
+          onPress={() => {
+            setActiveInput("desc");
+            setUnitOpen(false);
+            setTimeout(() => descRef.current?.focus(), 50); // 🔥 కీబోర్డ్ ఓపెన్ అవ్వడానికి
+          }}
+          style={[styles.inputBox, { marginTop: errors.rate ? 10 : 16 }, activeInput === "desc" && styles.inputFocused]}
+        >
+          <Ionicons name="pricetag-outline" size={20} color={description ? "#16A34A" : "#9CA3AF"} />
+          <View style={styles.inputWrapper}>
+            {!description && activeInput !== "desc" && (
+              <AppText style={styles.placeholder}>
+                {language === "te" ? "రకం / గ్రేడ్ (ఉదా: తాలు, ఏరుపత్తి)" : "Grade / Type (e.g., Thalu)"}
+              </AppText>
+            )}
+            <TextInput
+              ref={descRef} // 🔥 కీబోర్డ్ రిఫరెన్స్ యాడ్ చేశాం
+              value={description}
+              cursorColor="#16A34A"
+              selectionColor="#16A34A40"
+              onChangeText={(txt) => setDescription(txt)}
+              style={[styles.input, { display: (description || activeInput === "desc") ? "flex" : "none", paddingRight: 40 }]}
+              onFocus={() => { setActiveInput("desc"); setUnitOpen(false); }}
+              onBlur={() => setActiveInput(null)}
+            />
+          </View>
+          {/* 🔥 MIC BUTTON FOR DESCRIPTION */}
+          <TouchableOpacity 
+            onPress={() => startVoice("desc")} 
+          >
+            <Ionicons 
+              name={voiceTarget === "desc" && isListening ? "mic" : "mic-outline"} 
+              size={22} 
+              color={voiceTarget === "desc" && isListening ? "#EF4444" : "#9CA3AF"} 
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+
         {/* 💎 TOTAL BOX */}
         <View style={styles.totalBox}>
           <AppText style={styles.totalLabel} language={language}>{language === "te" ? "మొత్తం రాబడి" : "Total Revenue"}</AppText>
@@ -332,7 +385,7 @@ export default function AddSale() {
       {/* 🟢 LOADER */}
       <AgriLoader visible={loading} type={editId ? "updating" : "saving"} language={language} />
 
-      {/* 🌾 MODAL */}
+      {/* 🌾 CROP SEARCH MODAL */}
       <Modal visible={modalType === "crop"} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -349,19 +402,19 @@ export default function AddSale() {
                 value={searchText}
                 cursorColor="#16A34A"
                 selectionColor="#16A34A40"
-                placeholderTextColor={"black"}
+                placeholderTextColor={"#9CA3AF"}
                 onChangeText={setSearchText}
                 placeholder={language === "te" ? "పంట పేరు టైప్ చేయండి..." : "Search crop..."}
                 style={[styles.searchInput, { fontFamily: 'Mandali' }]}
               />
-              <TouchableOpacity onPress={startVoice} style={{ marginLeft: 8, padding: 6, borderRadius: 10, backgroundColor: "#eaedf2" }}>
-                <Ionicons name={isListening ? "mic" : "mic-outline"} size={24} color={isListening ? "#EF4444" : "#16A34A"} />
+              <TouchableOpacity onPress={() => startVoice("crop")} style={{ marginLeft: 8, padding: 6, borderRadius: 10, backgroundColor: "#eaedf2" }}>
+                <Ionicons name={voiceTarget === "crop" && isListening ? "mic" : "mic-outline"} size={24} color={voiceTarget === "crop" && isListening ? "#EF4444" : "#16A34A"} />
               </TouchableOpacity>
             </View>
 
             <FlatList
               data={filteredCrops}
-              keyboardShouldPersistTaps="handled" // 🔥 Important fix
+              keyboardShouldPersistTaps="handled" 
               ListEmptyComponent={() => {
                   if (modalType === "crop") {
                       return (

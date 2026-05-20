@@ -21,7 +21,7 @@ const { width } = Dimensions.get("window");
 
 export default function AboutUs() {
   const [language, setLanguage] = useState<"te" | "en">("te");
-  const APP_VERSION = "1.1.0"; 
+  const APP_VERSION = "1.2.0"; 
 
   useEffect(() => {
     const loadLang = async () => {
@@ -34,13 +34,13 @@ export default function AboutUs() {
   // 🔥 CUSTOM TRANSLATIONS & MISSION
   const t = {
     title: language === "te" ? "మా గురించి" : "About Us",
-    subtitle: language === "te" ? "అగ్రిలాగ్ వివరాలు" : "Know about AgriLog",
-    appName: "AgriLog",
-    tagline: language === "te" ? "మీ వ్యవసాయానికి మా డిజిటల్ తోడు" : "Your Digital Companion for Agriculture",
+    subtitle: language === "te" ? "కిసాన్ ఖాతా వివరాలు" : "Know about Kisan Khata",
+    appName: "Kisan Katha",
+    tagline: language === "te" ? "ఆధునిక వ్యవసాయానికి డిజిటల్ ఖాతా." : "The Digital Ledger for Modern Agriculture.",
     version: language === "te" ? `వెర్షన్ ${APP_VERSION}` : `Version ${APP_VERSION}`,
     missionTitle: language === "te" ? "మా లక్ష్యం" : "Our Mission",
     missionDesc: language === "te" 
-      ? "రైతులు ఇకపై పుస్తకాలలో లెక్కలు రాసుకోవాల్సిన అవసరం లేకుండా, వారి ఖర్చులు, ఆదాయం, కూలీల హాజరు, ట్రాక్టర్లు మరియు యంత్రాల లెక్కలను సులభంగా తమ ఫోన్‌లోనే నమోదు చేసుకునేలా చేయడమే మా లక్ష్యం. ఎక్కడ ఎంత ఖర్చు అవుతోంది, ఎంత లాభం లేదా నష్టం వస్తోంది అనే పూర్తి వివరాలను వారి కళ్ళముందు ఉంచి, ఆర్థిక స్పష్టత కల్పించడమే ఈ అగ్రిలాగ్ ప్రధాన ఉద్దేశ్యం." 
+      ? "రైతులు ఇకపై పుస్తకాలలో లెక్కలు రాసుకోవాల్సిన అవసరం లేకుండా, వారి ఖర్చులు, ఆదాయం, కూలీల హాజరు, ట్రాక్టర్లు మరియు యంత్రాల లెక్కలను సులభంగా తమ ఫోన్‌లోనే నమోదు చేసుకునేలా చేయడమే మా లక్ష్యం. ఎక్కడ ఎంత ఖర్చు అవుతోంది, ఎంత లాభం లేదా నష్టం వస్తోంది అనే పూర్తి వివరాలను వారి కళ్ళముందు ఉంచి, ఆర్థిక స్పష్టత కల్పించడమే ఈ కిసాన్ ఖాతా ప్రధాన ఉద్దేశ్యం." 
       : "Our mission is to replace traditional paper notebooks with a simple digital platform. We enable farmers to easily track labor attendance, machinery usage, daily expenses, and crop sales. By providing a clear, real-time summary of income, expenses, and overall profit or loss, we aim to give farmers complete financial clarity.",
     featuresTitle: language === "te" ? "ముఖ్య సేవలు" : "Key Features",
     devCredit: language === "te" ? "రూపకల్పన: అచ్యుత్ మన్నె" : "Developed by Achuth Manne",
@@ -84,7 +84,7 @@ export default function AboutUs() {
         <View style={styles.logoSection}>
           <View style={styles.logoWrapper}>
             <Image 
-              source={require('../../assets/images/logo.jpeg')} 
+              source={require('../../assets/images/logo.png')} 
               style={styles.logoImage} 
               resizeMode="cover"
             />
