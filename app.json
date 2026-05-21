@@ -20,11 +20,9 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
+     "adaptiveIcon": {
         "backgroundColor": "#FFFFFF", 
-        "foregroundImage": "./assets/images/logo.png", 
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/logo.png"
       },
       "package": "com.achuth.agrisnap",
       "googleServicesFile": "./google-services.json",
