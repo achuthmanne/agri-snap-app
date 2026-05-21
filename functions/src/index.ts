@@ -475,7 +475,7 @@ export const notifyNewScheme = onDocumentCreated(
           tokens.push(token);
         } else if (schemeState === "AP" && userState === "AP") {
           tokens.push(token);
-        } else if (schemeState === "TS" && userState === "TS") {
+        } else if (schemeState === "TS" && (userState === "TS" || userState === "TELANGANA")) {
           tokens.push(token);
         }
       }
