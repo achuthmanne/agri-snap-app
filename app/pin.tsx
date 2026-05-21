@@ -142,6 +142,7 @@ export default function PinScreen() {
           inputs.current[0]?.focus();
         } else {
           await AsyncStorage.setItem("USER_PHONE", String(phone));
+          await AsyncStorage.setItem("USER_ROLE", String(role));
           if (data?.name) {
             await AsyncStorage.setItem("USER_NAME", data.name);
           }
@@ -198,6 +199,7 @@ export default function PinScreen() {
             showAlert(language === "te" ? "పిన్ సెట్ చేయబడింది" : "PIN Set Successfully", "success");
             setTimeout(async () => {
                 await AsyncStorage.setItem("USER_PHONE", String(phone));
+                await AsyncStorage.setItem("USER_ROLE", String(role));
                 router.replace(role === "FARMER" ? "/farmer/(tabs)" : "/(tabs)");
             }, 1500);
         } else {
