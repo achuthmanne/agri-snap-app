@@ -21,7 +21,7 @@ const { width } = Dimensions.get("window");
 
 export default function AboutUs() {
   const [language, setLanguage] = useState<"te" | "en">("te");
-  const APP_VERSION = "1.2.0"; 
+  const APP_VERSION = "1.1.0"; 
 
   useEffect(() => {
     const loadLang = async () => {
@@ -35,7 +35,7 @@ export default function AboutUs() {
   const t = {
     title: language === "te" ? "మా గురించి" : "About Us",
     subtitle: language === "te" ? "కిసాన్ ఖాతా వివరాలు" : "Know about Kisan Khata",
-    appName: "Kisan Katha",
+    appName: "Kisan Khata",
     tagline: language === "te" ? "ఆధునిక వ్యవసాయానికి డిజిటల్ ఖాతా." : "The Digital Ledger for Modern Agriculture.",
     version: language === "te" ? `వెర్షన్ ${APP_VERSION}` : `Version ${APP_VERSION}`,
     missionTitle: language === "te" ? "మా లక్ష్యం" : "Our Mission",
