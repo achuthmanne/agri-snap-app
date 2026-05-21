@@ -351,7 +351,6 @@ export const pushNotification = onDocumentCreated(
         notification: { 
             channelId: "default", 
             sound: "default",
-            icon: "ic_launcher", 
             color: "#FFFFFF" 
         },
     },
