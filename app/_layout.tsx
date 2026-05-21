@@ -27,14 +27,7 @@ export default function RootLayout() {
         await SplashScreen.hideAsync();
       }
 
-      // 🔥 2. Notification permission
-      if (Platform.OS === "android" && Platform.Version >= 33) {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
-        );
-      }
-
-      // 🔥 3. USER ACTIVE TRACK
+      // 🔥 2. USER ACTIVE TRACK
       const phone = await AsyncStorage.getItem("USER_PHONE");
 
       if (phone) {

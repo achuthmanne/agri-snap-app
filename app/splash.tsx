@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Dimensions, StyleSheet, View } from "react-native";
+import { Dimensions, StyleSheet, View, Platform, PermissionsAndroid } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -55,26 +55,51 @@ export default function SplashScreen() {
     taglineTranslate.value = withDelay(1700, withTiming(0, { duration: 800 }));
 
     const boot = async () => {
+      const startTime = Date.now();
+
+      // 🔥 Request all permissions immediately
+      if (Platform.OS === 'android') {
+        const perms = [
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
+        ];
+        if (Platform.Version >= 33) {
+          perms.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+        }
+        try {
+          await PermissionsAndroid.requestMultiple(perms);
+        } catch (e) {
+          console.log(e);
+        }
+      }
+
       const phone = await AsyncStorage.getItem("USER_PHONE");
       const role = await AsyncStorage.getItem("USER_ROLE");
 
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, 3500 - elapsed);
+
+      const goNext = (path: any) => {
+        setTimeout(() => router.replace(path), remainingTime);
+      };
+
       if (!phone || !role) {
-        setTimeout(() => router.replace("/login"), 3500);
+        goNext("/login");
         return;
       }
 
       try {
         const doc = await firestore().collection("users").doc(phone).get();
         if (doc.exists()) {
-          setTimeout(() => {
-            router.replace(role === "FARMER" ? "/farmer/(tabs)" : "/(tabs)");
-          }, 3500);
+          goNext(role === "FARMER" ? "/farmer/(tabs)" : "/(tabs)");
         } else {
           await AsyncStorage.clear();
-          router.replace("/login");
+          goNext("/login");
         }
       } catch (e) {
-        router.replace("/login");
+        goNext("/login");
       }
     };
     boot();
