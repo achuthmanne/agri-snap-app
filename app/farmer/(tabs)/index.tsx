@@ -55,87 +55,78 @@ const translations = {
 };
 
 /* 🔥 PAYTM STYLE FLAWLESS SKELETON (100% EXACT REPLICA) 🔥 */
-const DashboardSkeleton = ({ width }: { width: number }) => (
-  <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7F6" }}>
-    <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
-    
-    <LinearGradient colors={["#1B5E20", "#1B5E20"]} style={{ position: "absolute", top: 0, width: "100%", zIndex: 50, paddingTop: 60, paddingHorizontal: 20, paddingBottom: 10 }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 50, height: 50, borderRadius: 25, marginRight: 10 }} />
-          <View>
-            <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 100, height: 14, borderRadius: 4, marginBottom: 8 }} />
-            <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 140, height: 22, borderRadius: 4 }} />
-          </View>
-        </View>
-        <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.06)"]} style={{ width: 42, height: 42, borderRadius: 12 }} />
-      </View>
-    </LinearGradient>
+const DashboardSkeleton = ({ width }: { width: number }) => {
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
 
-    <View style={{ flex: 1, paddingTop: 110 }}>
-      <View>
-        <LinearGradient colors={["#1B5E20","#1B5E20"]} style={{ paddingTop: 40, paddingBottom: 5, paddingHorizontal: 20, justifyContent: "center" }}>
-          <View style={{ alignItems: "center", justifyContent: "center" }}>
-            <ShimmerPlaceholder 
-              LinearGradient={LinearGradient} 
-              duration={1200}
-              shimmerColors={["rgba(255,255,255,0.1)", "rgba(255,255,255,0.18)", "rgba(255,255,255,0.1)"]} 
-              style={{ width: width - 40, height: 120, borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }} 
-            />
-          </View>
-          <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 8 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.8)", marginHorizontal: 4 }} />
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.4)", marginHorizontal: 4 }} />
-          </View>
-        </LinearGradient>
-        
-        <Svg width={width + 40} height={40} viewBox={`0 0 ${width + 40} 40`} style={{ marginTop: -1, alignSelf: "center", marginLeft: -20 }}>
-          <Path d={`M0 0 H${width + 40} V20 Q${(width + 40)/2} 60 0 20 Z`} fill="#1B5E20" />
-        </Svg>
-      </View>
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true })
+      ])
+    ).start();
+  }, [pulseAnim]);
 
-      <ShimmerPlaceholder 
-        LinearGradient={LinearGradient} 
-        duration={1200}
-        shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} 
-        style={{ width: width - 40, height: 74, borderRadius: 20, marginHorizontal: 20, marginTop: 10, borderWidth: 1, borderColor: "#E5E7EB" }} 
-      />
-
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 8 }}>
-        <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 140, height: 22, borderRadius: 6 }} />
-        <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 60, height: 24, borderRadius: 14 }} />
-      </View>
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F6F7F6" }}>
+      <StatusBar barStyle="light-content" backgroundColor="#1B5E20" />
       
-      <View style={{ flexDirection: "row", paddingLeft: 20, paddingTop: 12, gap: 12 }}>
-        {[1, 2, 3].map((i) => (
-          <ShimmerPlaceholder 
-            key={i} 
-            LinearGradient={LinearGradient} 
-            duration={1200}
-            shimmerColors={["#F8F9FA", "#FFFFFF", "#F8F9FA"]} 
-            style={{ width: 120, height: 38, borderRadius: 20, borderWidth: 1, borderColor: "#E5E7EB" }} 
-          />
-        ))}
-      </View>
+      <LinearGradient colors={["#1B5E20", "#1B5E20"]} style={{ position: "absolute", top: 0, width: "100%", zIndex: 50, paddingTop: 60, paddingHorizontal: 20, paddingBottom: 10 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Animated.View style={{ width: 50, height: 50, borderRadius: 25, marginRight: 10, backgroundColor: "rgba(255,255,255,0.12)", opacity: pulseAnim }} />
+            <View>
+              <Animated.View style={{ width: 100, height: 14, borderRadius: 4, marginBottom: 8, backgroundColor: "rgba(255,255,255,0.12)", opacity: pulseAnim }} />
+              <Animated.View style={{ width: 140, height: 22, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.12)", opacity: pulseAnim }} />
+            </View>
+          </View>
+          <Animated.View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.12)", opacity: pulseAnim }} />
+        </View>
+      </LinearGradient>
 
-      <View style={{ flexDirection: "row", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 15, gap: 8 }}>
-        <ShimmerPlaceholder LinearGradient={LinearGradient} duration={1200} shimmerColors={["#E5E7EB", "#F3F4F6", "#E5E7EB"]} style={{ width: 110, height: 22, borderRadius: 6 }} />
-      </View>
+      <View style={{ flex: 1, paddingTop: 110 }}>
+        <View>
+          <LinearGradient colors={["#1B5E20","#1B5E20"]} style={{ paddingTop: 40, paddingBottom: 5, paddingHorizontal: 20, justifyContent: "center" }}>
+            <View style={{ alignItems: "center", justifyContent: "center" }}>
+              <Animated.View style={{ width: width - 40, height: 120, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.1)", opacity: pulseAnim, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }} />
+            </View>
+            <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 8 }}>
+              <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.8)", marginHorizontal: 4, opacity: pulseAnim }} />
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.4)", marginHorizontal: 4 }} />
+            </View>
+          </LinearGradient>
+          
+          <Svg width={width + 40} height={40} viewBox={`0 0 ${width + 40} 40`} style={{ marginTop: -1, alignSelf: "center", marginLeft: -20 }}>
+            <Path d={`M0 0 H${width + 40} V20 Q${(width + 40)/2} 60 0 20 Z`} fill="#1B5E20" />
+          </Svg>
+        </View>
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", paddingHorizontal: 20, gap: 14 }}>
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <ShimmerPlaceholder 
-            key={i} 
-            LinearGradient={LinearGradient} 
-            duration={1200}
-            shimmerColors={["#F8FAF9", "#FFFFFF", "#F8FAF9"]} 
-            style={{ width: (width - 70) / 3, height: 120, borderRadius: 18, borderWidth: 1, borderColor: "#E5E7EB" }} 
-          />
-        ))}
+        <Animated.View style={{ width: width - 40, height: 74, borderRadius: 20, marginHorizontal: 20, marginTop: 10, backgroundColor: "#E5E7EB", opacity: pulseAnim }} />
+
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 8 }}>
+          <Animated.View style={{ width: 140, height: 22, borderRadius: 6, backgroundColor: "#E5E7EB", opacity: pulseAnim }} />
+          <Animated.View style={{ width: 60, height: 24, borderRadius: 14, backgroundColor: "#E5E7EB", opacity: pulseAnim }} />
+        </View>
+        
+        <View style={{ flexDirection: "row", paddingLeft: 20, paddingTop: 12, gap: 12 }}>
+          {[1, 2, 3].map((i) => (
+            <Animated.View key={i} style={{ width: 120, height: 38, borderRadius: 20, backgroundColor: "#E5E7EB", opacity: pulseAnim }} />
+          ))}
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", marginHorizontal: 20, marginTop: 25, marginBottom: 15, gap: 8 }}>
+          <Animated.View style={{ width: 110, height: 22, borderRadius: 6, backgroundColor: "#E5E7EB", opacity: pulseAnim }} />
+        </View>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", paddingHorizontal: 20, gap: 14 }}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Animated.View key={i} style={{ width: (width - 70) / 3, height: 120, borderRadius: 18, backgroundColor: "#E5E7EB", opacity: pulseAnim }} />
+          ))}
+        </View>
       </View>
-    </View>
-  </SafeAreaView>
-);
+    </SafeAreaView>
+  );
+};
 
 export default function Dashboard() {
   const router = useRouter();
@@ -215,68 +206,70 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  // 🔥 PRO FIX: Safe Firebase Snapshot Listener
-  useEffect(() => {
-    let isMounted = true;
+  // 🔥 PRO FIX: Safe Firebase Snapshot Listener with useFocusEffect for instant sync
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
+      let unsubscribeFunc: any;
 
-    const fetchNotifications = async () => {
-      const phone = await AsyncStorage.getItem("USER_PHONE");
-      if (!phone || !isMounted) return;
+      const fetchNotifications = async () => {
+        const phone = await AsyncStorage.getItem("USER_PHONE");
+        if (!phone || !isMounted) return;
 
-      const unsub = firestore()
-        .collection("notifications")
-        .onSnapshot(async snap => {
-          if (!isMounted) return;
-          
-          try {
-            const userDoc = await firestore().collection("users").doc(phone).get();
-            const userState = userDoc.data()?.state;
+        const unsub = firestore()
+          .collection("notifications")
+          .onSnapshot(async snap => {
+            if (!isMounted) return;
             
-            const hiddenSnap = await firestore().collection("users").doc(phone).collection("hiddenNotifications").get();
-            const hiddenIds = hiddenSnap.docs.map(d => d.id);
-
-            const seenSnap = await firestore().collection("users").doc(phone).collection("seenNotifications").get();
-            const seenIds = seenSnap.docs.map(d => d.id);
-
-            let count = 0;
-            const now = new Date();
-            const normalize = (s:any) => (s || "").trim().toLowerCase();
-            
-            snap.forEach(doc => {
-              const data = doc.data();
-              if (hiddenIds.includes(doc.id)) return;
+            try {
+              const userDoc = await firestore().collection("users").doc(phone).get();
+              const userState = userDoc.data()?.state;
               
-              let deleteTime = null;
-              if (data.deleteAt && typeof data.deleteAt.toDate === "function") {
-                deleteTime = data.deleteAt.toDate();
-              }
-              if (deleteTime && now > deleteTime) return;
+              const hiddenSnap = await firestore().collection("users").doc(phone).collection("hiddenNotifications").get();
+              const hiddenIds = hiddenSnap.docs.map(d => d.id);
 
-              if (data.userId === "all") {}
-              else if (data.state) { if (normalize(data.state) !== normalize(userState)) return; }
-              else if (data.userId) { if (data.userId !== phone) return; }
-              else { return; }
+              const seenSnap = await firestore().collection("users").doc(phone).collection("seenNotifications").get();
+              const seenIds = seenSnap.docs.map(d => d.id);
 
-              if (!seenIds.includes(doc.id)) { count++; }
-            });
-            
-            if (isMounted) setNotifCount(count);
-          } catch (e) {
-            console.log("Notification fetch error", e);
-          }
-        });
+              let count = 0;
+              const now = new Date();
+              const normalize = (s:any) => (s || "").trim().toLowerCase();
+              
+              snap.forEach(doc => {
+                const data = doc.data();
+                if (hiddenIds.includes(doc.id)) return;
+                
+                let deleteTime = null;
+                if (data.deleteAt && typeof data.deleteAt.toDate === "function") {
+                  deleteTime = data.deleteAt.toDate();
+                }
+                if (deleteTime && now > deleteTime) return;
 
-      return unsub;
-    };
+                if (data.userId === "all") {}
+                else if (data.state) { if (normalize(data.state) !== normalize(userState)) return; }
+                else if (data.userId) { if (data.userId !== phone) return; }
+                else { return; }
 
-    let unsubscribeFunc: any;
-    fetchNotifications().then(unsub => unsubscribeFunc = unsub);
+                if (!seenIds.includes(doc.id)) { count++; }
+              });
+              
+              if (isMounted) setNotifCount(count);
+            } catch (e) {
+              console.log("Notification fetch error", e);
+            }
+          });
 
-    return () => {
-      isMounted = false;
-      if (unsubscribeFunc) unsubscribeFunc();
-    };
-  }, []);
+        return unsub;
+      };
+
+      fetchNotifications().then(unsub => { unsubscribeFunc = unsub; });
+
+      return () => {
+        isMounted = false;
+        if (unsubscribeFunc) unsubscribeFunc();
+      };
+    }, [])
+  );
 
   useEffect(() => {
     setDrawer(false);
