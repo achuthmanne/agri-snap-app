@@ -352,7 +352,7 @@ export const pushNotification = onDocumentCreated(
             channelId: "default", 
             sound: "default",
             icon: "notification_icon", // 🔥 ఇక్కడ ic_launcher తీసేసి ఇది పెట్టు
-            color: "#ffff" 
+            color: "#FFFFFF" 
         },
     },
         apns: {
