@@ -347,9 +347,15 @@ export const pushNotification = onDocumentCreated(
           body: data.message || "",
         },
         android: {
-          priority: "high" as const,
-          notification: { channelId: "default", sound: "default" },
+        priority: "high" as const,
+        notification: { 
+            channelId: "default", 
+            sound: "default",
+            // ఇక్కడ 'ic_launcher' అని ఇస్తే అది mipmap ఫోల్డర్ లోని నీ కొత్త లోగోని పట్టుకుంటుంది
+            icon: "ic_launcher", 
+            color: "#1B5E20" 
         },
+    },
         apns: {
           payload: { aps: { sound: "default" } },
         },
